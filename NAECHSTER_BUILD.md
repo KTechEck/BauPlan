@@ -316,3 +316,12 @@ Erledigt Build 5 bisher: version.dart, Kniestock-Abschnitte, Schrägen Wandansic
 - BUILD 6 ERSTELLT 09.11. 02:17 (sauber neu), 200 Tests grün, Commit a6190a4: Sperrflächen (FbhEinstellung.sperren, flaecheOhneSperren mit Insel-Aussparung
   zur nächsten Seite, Schnecke um Sperren; Zeichnen per zwei Klicks / aus Geräten; Kreuzungs-Hinweis verlegeplanKreuzungen), gebündelte Anbindeleitungen
   (anbindeleitungenBuendeln in heizkreise_dialog.dart, Knopf im HV-Editor), Skizzenfelder weiß hinterlegt. iOS wartet auf GitHub-Repo von Tim.
+
+## Build 7 (09.11. 22:47) – iPhone-App nach Lastenheft
+Tim 09.11.: Er wollte NICHT das ganze Programm aufs iPhone. Umgesetzt laut Lastenheft Abschnitt 14 (Austausch bis zum NAS über den OneDrive-Projektordner, Tim: „Ja bitte“):
+- PC: lib/data/austausch.dart – planstand/planstand.json (Lesekopie: Geschosse, Wände, Öffnungen, Räume, Objekte, Gewerke, Status, Einkaufsliste),
+  geschrieben 3 s nach jeder Änderung und beim Schließen; eingang/*.json (+ .jpg) alle 30 s übernommen (Foto→Medium+Marker+Objekt, Status, Messwert/Material/Notiz
+  → Tagebuch + objekt.eigenschaften.erfassungen, Einkauf → Kostenposition geliefert/geplant), danach nach eingang/_archiv. In Tests keine Timer (FLUTTER_TEST).
+- iPhone: lib/mobil/ (ordner.dart: KanalOrdner über nativen Kanal „bauspur/ordner“ in ios/Runner/AppDelegate.swift mit Security-Scoped-Bookmark + NSFileCoordinator,
+  Puffer offline, MobilEinstellungen; planstand.dart; mobil_app.dart: Erfassen/Grundriss+Bohr-Check/Einkauf/Mehr). main.dart startet auf iOS nur MobilApp.
+- Swift-Teil ist hier nicht kompilierbar → erster Cloud-Build zeigt, ob er durchläuft. Commit 11ab16f, Push macht Tim (Push von hier wird blockiert).
