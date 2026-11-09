@@ -1,0 +1,34 @@
+# BauSpur als iPhone/iPad-App bauen (ohne Mac, ohne Apple-Entwicklerkonto).
+# Ergebnis: unsignierte BauSpur.ipa als Download unter "Actions" -> Lauf -> Artifacts.
+# Signieren und Installieren am Windows-PC mit Sideloadly und kostenloser Apple-ID
+# (gilt 7 Tage, dann erneut mit Sideloadly aufspielen).
+name: iOS-App bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+      - name: IPA packen
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry BauSpur.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BauSpur-ipa
+          path: BauSpur.ipa
+          retention-days: 30

@@ -1,0 +1,26 @@
+name: bauspur
+description: "BauSpur – Planung und Dokumentation der Gebäudesanierung."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqlite3: ^3.0.0
+  uuid: ^4.5.1
+  path: ^1.9.0
+  path_provider: ^2.1.4
+  file_selector: ^1.0.3
+  pdf: ^3.13.1
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
