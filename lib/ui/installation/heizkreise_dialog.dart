@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -95,8 +96,15 @@ class _HeizkreiseDialogState extends State<_HeizkreiseDialog> {
 
   FbhEinstellung get _e => FbhEinstellung.ausJson({'va_mm': _abstand, 'rand_mm': _rand, 'muster': _muster.name});
 
-  List<(List<Punkt>, Map<String, Object?>)> _vorschlag(Raum r) =>
-      heizkreiseVorschlagen(r.umriss!, _e, ziel: widget.verteiler, maxLaenge: _maxM * 1000.0);
+  List<(List<Punkt>, Map<String, Object?>)> _vorschlag(Raum r) {
+    final sperren = [
+      for (final o in _sperren(r))
+        aufstellflaeche(o.punkte.first, ((o.eigenschaften['masse'] as List)[0] as num).toDouble(), ((o.eigenschaften['masse'] as List)[1] as num).toDouble(),
+            (o.eigenschaften['drehung'] as num?) ?? 0),
+    ];
+    return heizkreiseVorschlagen(r.umriss!, _e, ziel: widget.verteiler, maxLaenge: _maxM * 1000.0,
+        basis: sperren.isEmpty ? const {} : {'sperren': sperrenJson(sperren)});
+  }
 
   @override
   void initState() {
@@ -167,7 +175,7 @@ class _HeizkreiseDialogState extends State<_HeizkreiseDialog> {
                   title: Text('${r.name}  ·  ${(polygonFlaeche(r.umriss!).abs() / 1e6).toStringAsFixed(1).replaceAll('.', ',')} m²'),
                   subtitle: Text([
                     if (da.isNotEmpty) 'hat schon ${da.length} Kreis${da.length == 1 ? '' : 'e'}',
-                    for (final x in _sperren(r)) 'Sperrfläche: ${x.kennung} (Kreis aussparen)',
+                    for (final x in _sperren(r)) 'Sperrfläche: ${x.kennung} (wird ausgespart)',
                     if (kreise.isNotEmpty)
                       '${kreise.length} Kreis${kreise.length == 1 ? '' : 'e'}: ${[
                         for (final k in kreise) m(rohrlaenge(k.$1, FbhEinstellung.ausJson(k.$2)))
@@ -197,4 +205,64 @@ class _HeizkreiseDialogState extends State<_HeizkreiseDialog> {
           },
         ),
       );
+}
+
+/// Anbindeleitungen (VL/RL) für mehrere Heizkreise gebündelt zum Verteiler
+/// zeichnen: rechtwinklig, durch die Tür des Raums, parallel im Abstand von
+/// 2 × Rohrbreite nebeneinander (je Kreis ein eigenes Paar), am Verteiler auf
+/// die Abgänge verteilt. Vorhandene Anbindeleitungen der Kreise werden ersetzt.
+/// Gibt die Anzahl gezeichneter Leitungen zurück.
+int anbindeleitungenBuendeln(ProjectStore store, String geschossId, List<Objekt> kreise, Objekt verteiler, {ObjektStatus status = ObjektStatus.geplant}) {
+  final typen = store.objekttypen();
+  final hr = typen.where((t) => t.kuerzel == 'HR').firstOrNull;
+  if (hr == null || verteiler.punkte.isEmpty) return 0;
+  final waende = {for (final w in store.waende(geschossId)) w.id: w};
+  final raeume = store.raeume(geschossId);
+  final tueren = <Durchgang>[
+    for (final oe in store.oeffnungen(geschossId))
+      if (oe.art == OeffnungsArt.tuer && waende[oe.wandId] != null)
+        () {
+          final w = waende[oe.wandId]!;
+          final a = Punkt(w.x1.toDouble(), w.y1.toDouble()), b = Punkt(w.x2.toDouble(), w.y2.toDouble());
+          final r = (b - a) * (1 / math.max(1, (b - a).laenge));
+          return (mitte: a + r * (oe.abstand + oe.breite / 2), richtung: r, dicke: w.dicke.toDouble());
+        }(),
+  ];
+  final hv = verteiler.punkte.first;
+  // alte Anbindeleitungen dieser Kreise entfernen
+  final ids = {for (final k in kreise) k.id};
+  for (final o in store.objekte(geschossId)) {
+    if (o.typId == hr.id && ids.contains(o.eigenschaften['heizkreis'])) store.objektLoeschen(o.id);
+  }
+  // nach Weg zum Verteiler sortieren: nahe Kreise innen im Bündel
+  double weg(Objekt k) => k.punkte.map((q) => (q.x - hv.x).abs() + (q.y - hv.y).abs()).reduce(math.min);
+  final sortiert = [...kreise]..sort((a, b) => weg(a).compareTo(weg(b)));
+  const rohr = 20.0, abstand = 2 * rohr;
+  var n = 0;
+  for (final (i, hk) in sortiert.indexed) {
+    final z = verlegeplan(hk.punkte, FbhEinstellung.ausJson(hk.eigenschaften));
+    if (z.anschlussVl == null || z.anschlussRl == null) continue;
+    final raum = raeume.where((r) => r.id == hk.raumId).firstOrNull?.umriss ??
+        raeume.where((r) => r.umriss != null && r.umriss!.length >= 3 && punktInPolygon(hk.punkte.first, r.umriss!)).firstOrNull?.umriss;
+    var summe = 0.0;
+    final neu = <String>[];
+    for (final (ende, art, seite) in [(z.anschlussVl!, 'VL', 0), (z.anschlussRl!, 'RL', 1)]) {
+      final versatz = (2 * i + seite) * abstand - abstand * sortiert.length;
+      final ziel = hv + Punkt(versatz, 0);
+      final w = anbindeweg(ende, ziel, raum: raum, tueren: tueren, versatz: versatz);
+      if (w.length < 2) continue;
+      final id = store.objektAnlegen(geschossId: geschossId, typ: hr, punkte: w, raumId: hk.raumId, lage: 'im Estrich', status: status);
+      store.objektAendern(id, {'eigenschaften': jsonEncode({'leitung': art, 'heizkreis': hk.id, 'verteiler': verteiler.id, 'breite_mm': rohr})});
+      neu.add(id);
+      for (var k = 0; k + 1 < w.length; k++) {
+        summe += (w[k + 1] - w[k]).laenge;
+      }
+    }
+    if (neu.isEmpty) continue;
+    n += neu.length;
+    store.objektAendern(hk.id, {
+      'eigenschaften': jsonEncode({...hk.eigenschaften, 'zuleitung_mm': (summe / neu.length).round(), 'anbindung': neu.first, 'verteiler': verteiler.id}),
+    });
+  }
+  return n;
 }

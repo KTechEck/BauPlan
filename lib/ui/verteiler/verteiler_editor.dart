@@ -305,9 +305,23 @@ class _VerteilerEditorState extends State<VerteilerEditor> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Row(children: [
+                      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                         Text('Belegung der Abgänge', style: Theme.of(context).textTheme.titleMedium),
-                        const Spacer(),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            final belegte = [for (final k in kreise) if (belegt.contains(k.id)) k];
+                            if (belegte.isEmpty) {
+                              zeigeHinweis(context, 'Erst Heizkreise auf Abgänge legen.');
+                              return;
+                            }
+                            final n = anbindeleitungenBuendeln(_s.store!, v.geschossId, belegte, v);
+                            _s.geaendert();
+                            zeigeHinweis(context, '$n Anbindeleitungen gebündelt gezeichnet (${belegte.length} Kreise).');
+                          },
+                          icon: const Icon(Icons.alt_route, size: 18),
+                          label: const Text('Anbindeleitungen bündeln'),
+                        ),
+                        const SizedBox(width: 8),
                         OutlinedButton.icon(
                           onPressed: () => _nachRaeumen(v, d, kreise, raeume, belegt),
                           icon: const Icon(Icons.meeting_room_outlined, size: 18),

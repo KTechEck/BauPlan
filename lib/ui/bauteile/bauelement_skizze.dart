@@ -207,6 +207,8 @@ class BauelementSkizze extends StatelessWidget {
           style: const TextStyle(fontSize: 13),
           decoration: InputDecoration(
             isDense: true,
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.92),
             labelText: label(key),
             suffixText: istText ? null : (f?.einheit ?? 'mm'),
             hintText: f?.hilfe.isEmpty ?? true ? null : f!.hilfe,

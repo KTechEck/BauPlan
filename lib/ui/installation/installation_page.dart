@@ -92,6 +92,8 @@ class _InstallationPageState extends State<InstallationPage> {
   bool _setzen = true;
   bool _ganzerRaum = false; // Fläche = ganzer Raum per Klick
   String? _zugangFuer; // Heizkreis, dessen Zugang mit dem nächsten Klick gesetzt wird
+  String? _sperrFuer; // Heizkreis, für den eine Sperrfläche (zwei Ecken) gezeichnet wird
+  Offset? _sperrStart;
   final Set<String> _mehr = {}; // Mehrfachauswahl (Umschalt/Strg-Klick, Rahmen)
   List<Objekt> _ablage = const []; // Strg+C
   double _einfuegeVersatz = 0;
@@ -662,6 +664,29 @@ class _InstallationPageState extends State<InstallationPage> {
     if (_s.geschossId == null) return;
     final d = _laden();
     final welt = _zuWelt(bildschirm);
+    if (_sperrFuer != null) {
+      final p = Offset((welt.dx / 10).round() * 10.0, (welt.dy / 10).round() * 10.0);
+      if (_sperrStart == null) {
+        setState(() => _sperrStart = p);
+        return;
+      }
+      final hk = d.objekte.where((o) => o.id == _sperrFuer).firstOrNull;
+      final a = _sperrStart!;
+      setState(() {
+        _sperrFuer = null;
+        _sperrStart = null;
+      });
+      if (hk != null && (a - p).distance > 50) {
+        final neu = [
+          ...FbhEinstellung.ausJson(hk.eigenschaften).sperren,
+          [Punkt(a.dx, a.dy), Punkt(p.dx, a.dy), Punkt(p.dx, p.dy), Punkt(a.dx, p.dy)],
+        ];
+        final alt = _s.store!.objektAendern(hk.id, {'eigenschaften': jsonEncode({...hk.eigenschaften, 'sperren': sperrenJson(neu)})});
+        _rueckgaengig.add(() => _s.store!.objektAendern(hk.id, alt));
+        _s.geaendert();
+      }
+      return;
+    }
     if (_zugangFuer != null) {
       final hk = d.objekte.where((o) => o.id == _zugangFuer).firstOrNull;
       setState(() {
@@ -888,6 +913,8 @@ class _InstallationPageState extends State<InstallationPage> {
       setState(() {
         _entwurf.clear();
         _zugangFuer = null;
+        _sperrFuer = null;
+        _sperrStart = null;
         _mehr.clear();
         _auswahl = null;
       });
@@ -1638,6 +1665,58 @@ class _InstallationPageState extends State<InstallationPage> {
           ),
         ),
       ]),
+      const SizedBox(height: 12),
+      Text('Sperrflächen (${e.sperren.length})', style: Theme.of(context).textTheme.titleSmall),
+      const Text('Darunter wird kein Rohr verlegt (Küchenzeile, Dusche, Wanne, Gerät). Das Rohr läuft um sie herum.',
+          style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      Wrap(spacing: 6, runSpacing: 4, children: [
+        _sperrFuer == o.id
+            ? OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _sperrFuer = null;
+                  _sperrStart = null;
+                }),
+                icon: const Icon(Icons.close, size: 18),
+                label: Text(_sperrStart == null ? 'Erste Ecke klicken … (abbrechen)' : 'Gegenüberliegende Ecke klicken …'),
+              )
+            : OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _sperrFuer = o.id;
+                  _sperrStart = null;
+                }),
+                icon: const Icon(Icons.crop_square, size: 18),
+                label: const Text('Sperrfläche zeichnen'),
+              ),
+        OutlinedButton.icon(
+          onPressed: () {
+            // Geräte mit Aufstellfläche im Kreis übernehmen
+            final neu = [
+              for (final x in d.objekte)
+                if (x.id != o.id && x.punkte.length == 1 && x.eigenschaften['masse'] is List && x.eigenschaften['montage'] != 'Wand' &&
+                    punktInPolygon(x.punkte.first, o.punkte))
+                  aufstellflaeche(x.punkte.first, ((x.eigenschaften['masse'] as List)[0] as num).toDouble(),
+                      ((x.eigenschaften['masse'] as List)[1] as num).toDouble(), (x.eigenschaften['drehung'] as num?) ?? 0),
+            ];
+            if (neu.isEmpty) {
+              zeigeHinweis(context, 'Keine Geräte mit Aufstellfläche in diesem Heizkreis.');
+              return;
+            }
+            setzen('sperren', sperrenJson([...e.sperren, ...neu]));
+          },
+          icon: const Icon(Icons.kitchen_outlined, size: 18),
+          label: const Text('Aus Geräten übernehmen'),
+        ),
+        if (e.sperren.isNotEmpty)
+          TextButton.icon(
+            onPressed: () => setzen('sperren', <Object>[]),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Alle entfernen'),
+          ),
+      ]),
+      if (verlegeplanKreuzungen(verlegeplan(o.punkte, e)) > 0)
+        const Text('Achtung: Das Rohr kreuzt sich – Zugang an eine andere Stelle legen.', style: TextStyle(fontSize: 12, color: Color(0xFFB91C1C))),
+      if (e.sperren.isNotEmpty && e.muster != Verlegemuster.schnecke)
+        const Text('Mit Sperrflächen wird schneckenförmig verlegt.', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
       const SizedBox(height: 12),
       Text('Rohr und System (läuft in die Besorgungsliste)', style: Theme.of(context).textTheme.titleSmall),
       for (final (k, m, einheit) in fbhBedarf(o.punkte, o.eigenschaften))
@@ -2585,7 +2664,18 @@ class ObjektPainter extends CustomPainter {
             ..color = farbe);
           if (typ?.kuerzel == 'HK' && massstab > 0.02) {
             // Vorlauf rot, Rücklauf blau – Anschlusspunkte am Rohranfang
-            final plan = verlegeplan(o.punkte, FbhEinstellung.ausJson(o.eigenschaften));
+            final fe = FbhEinstellung.ausJson(o.eigenschaften);
+            for (final sp in fe.sperren) {
+              final pfad = Path()..addPolygon([for (final q in sp) _s(Offset(q.x, q.y))], true);
+              canvas.drawPath(pfad, Paint()..color = const Color(0x55868E96));
+              canvas.drawPath(pfad, Paint()
+                ..style = PaintingStyle.stroke
+                ..color = const Color(0xFF495057));
+              final r = pfad.getBounds();
+              canvas.drawLine(r.topLeft, r.bottomRight, Paint()..color = const Color(0x88495057));
+              canvas.drawLine(r.topRight, r.bottomLeft, Paint()..color = const Color(0x88495057));
+            }
+            final plan = verlegeplan(o.punkte, fe);
             for (final (zug, f) in [(plan.vl, const Color(0xFFE03131)), (plan.rl, const Color(0xFF1C7ED6))]) {
               if (zug.length < 2) continue;
               canvas.drawPath(

@@ -306,3 +306,10 @@ Erledigt Build 5 bisher: version.dart, Kniestock-Abschnitte, Schrägen Wandansic
   Zusätzlich: Mehrfachrahmen mit freien Plätzen (Rahmengröße, Fang auf freie Plätze), 3D-Geschoss (lib/ui/floorplan/geschoss_3d.dart, Knopf view_in_ar in
   Grundriss und Installation, Verlegeebenen als Flächen), WDVS-Klebemörtel im Wandaufbau, Sperrflächen-Hinweis im HK-Vorschlag, Wände beim Öffnen ausrichten.
   OFFEN Build 6: HK-Kreise wirklich um Sperrflächen herum verlegen, Anbindeleitungen aller Kreise gebündelt in einem Schritt, Skizzen-Feinschliff (Felder nicht über Linien).
+
+## Build 6 (Tim 09.11. 01:57: „mit Build 6 anfangen und auch die App bauen“)
+- iOS: main.dart ohne window_manager auf Mobil, start_page: Projekte im App-Dokumente-Ordner, ios/ per flutter create (Org de.bauspur, Dateifreigabe),
+  .github/workflows/ios.yml (macos-15, Flutter 3.47.9, build ios --no-codesign → BauSpur.ipa als Artifact). Git-Repo lokal (main, 2 Commits).
+  WARTET auf Tim: privates GitHub-Repo „bauspur“ anlegen + Link; dann git remote add origin … && git push -u origin main (Anmeldefenster bei Tim).
+  Danach Tim: Sideloadly + iTunes (Win32), IPA aufspielen mit Apple-ID, alle 7 Tage neu.
+- Offen Build 6: HK um Sperrflächen, Anbindeleitungen gebündelt, Skizzen-Feinschliff.

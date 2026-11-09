@@ -21,7 +21,11 @@ class FbhEinstellung {
     this.zugang = 0,
     this.randzone = 0,
     this.abstandRand = 100,
+    this.sperren = const [],
   });
+
+  /// Sperrflächen (Umrisse in mm), unter denen kein Rohr liegt – z. B. Küchenzeile, Dusche, Technikgerät.
+  final List<List<Punkt>> sperren;
 
   final int abstand; // Verlegeabstand VA in mm
   final int rand; // Randabstand zur Wand in mm
@@ -39,6 +43,10 @@ class FbhEinstellung {
         zugang: (m['zugang'] as num?)?.toDouble() ?? 0,
         randzone: (m['randzone_mm'] as num?)?.toInt() ?? 0,
         abstandRand: (m['va_rand_mm'] as num?)?.toInt() ?? 100,
+        sperren: [
+          for (final k in (m['sperren'] as List? ?? const []))
+            [for (final q in (k as List)) Punkt(((q as List)[0] as num).toDouble(), (q[1] as num).toDouble())],
+        ],
       );
 }
 
@@ -139,9 +147,15 @@ class _Ring {
   }
 }
 
-_Ring? _ringBei(List<Punkt> innen, double d, double vorherFlaeche) {
-  final r = d <= 0 ? innen : polygonNachInnen(innen, d);
+_Ring? _ringBei(List<Punkt> innen, double d, double vorherFlaeche, {List<List<Punkt>> sperren = const [], double rand = 0}) {
+  var r = d <= 0 ? innen : polygonNachInnen(innen, d);
   if (r.length < 3) return null;
+  // Sperrflächen: um den gleichen Versatz vergrößert aussparen (Ring läuft um sie herum)
+  if (sperren.isNotEmpty) {
+    if (polygonFlaeche(r) <= 1e4) return null;
+    r = flaecheOhneSperren(r, sperren, rand: rand + d);
+    if (r.length < 3) return null;
+  }
   final f = polygonFlaeche(r);
   if (f <= 1e4 || f > vorherFlaeche + 1) return null; // kleiner als 1 dm² oder umgeklappt
   return _Ring(r);
@@ -159,6 +173,8 @@ Verlegeplan verlegeplan(List<Punkt> umriss, FbhEinstellung e) {
   final innen = polygonNachInnen(basis, e.rand.toDouble());
   if (innen.length < 3 || polygonFlaeche(innen) <= 0) return const Verlegeplan([], []);
   final zugang = heizkreisZugang(basis, e.zugang, abstand: 0).mitte;
+  // Mit Sperrflächen wird schneckenförmig um sie herum verlegt (Mäander-Reihen ließen sich nicht in einem Zug führen).
+  if (e.sperren.isNotEmpty) return _schnecke(innen, zugang, e);
   return switch (e.muster) {
     Verlegemuster.schnecke => _schnecke(innen, zugang, e),
     Verlegemuster.maeander => _maeander(innen, zugang, e, doppelt: false),
@@ -173,13 +189,19 @@ Verlegeplan _schnecke(List<Punkt> innen, Punkt zugang, FbhEinstellung e) {
   var oA = 0.0;
   var flaeche = polygonFlaeche(innen) + 1;
   Punkt? endeA, endeB;
+  var startA = zugang;
   for (var j = 0; j < 300; j++) {
     final va = _va(e, oA);
-    final ringA = _ringBei(innen, oA, flaeche);
-    final ringB = ringA == null ? null : _ringBei(innen, oA + va, polygonFlaeche(ringA.p) + 1);
+    final ringA = _ringBei(innen, oA, flaeche, sperren: e.sperren, rand: e.rand.toDouble());
+    final ringB = ringA == null ? null : _ringBei(innen, oA + va, polygonFlaeche(ringA.p) + 1, sperren: e.sperren, rand: e.rand.toDouble());
     if (ringA == null || ringB == null) break;
     final w = math.min(2 * va, ringB.laenge / 4);
-    final sA = ringA.projektion(zugang), sB = ringB.projektion(zugang);
+    // Startpunkt nahe am Start der vorigen Runde (folgt dem Zugang auch in verwinkelten Flächen)
+    final sA = ringA.projektion(startA), sB = ringB.projektion(ringA.bei(sA));
+    // zerfällt die Restfläche (z. B. zwischen zwei Sperrflächen), hier aufhören statt quer zu springen
+    if (endeA != null && (ringA.bei(sA) - endeA).laenge > 3.5 * va) break;
+    if (endeB != null && (ringB.bei(sB) - endeB).laenge > 3.5 * va) break;
+    startA = ringB.bei(sB);
     // ohne Übergang ins Nächste: diese Runde bis kurz vor den Start
     final teilA = ringA.abschnitt(sA, sA + ringA.laenge - w);
     final teilB = ringB.abschnitt(sB, sB + ringB.laenge - w);
@@ -191,6 +213,28 @@ Verlegeplan _schnecke(List<Punkt> innen, Punkt zugang, FbhEinstellung e) {
     oA += 2 * va;
   }
   if (a.isEmpty || endeA == null || endeB == null) return const Verlegeplan([], []);
+  // Liegt das Ende des Rücklaufs weit weg (verwinkelte Restfläche), den Rücklauf
+  // an der Stelle kürzen, die dem Ende des Vorlaufs am nächsten ist.
+  if ((endeB - endeA).laenge > 2.5 * e.abstand && b.length >= 2) {
+    var best = double.infinity, bi = b.length - 1;
+    Punkt bp = b.last;
+    for (var i = math.max(0, b.length - 60); i + 1 < b.length; i++) {
+      final p0 = b[i], d = b[i + 1] - p0;
+      final l2 = d.skalar(d);
+      final t = l2 < 1e-9 ? 0.0 : ((endeA - p0).skalar(d) / l2).clamp(0.0, 1.0);
+      final q = p0 + d * t;
+      final ab = (q - endeA).laenge;
+      if (ab < best) {
+        best = ab;
+        bi = i;
+        bp = q;
+      }
+    }
+    b
+      ..removeRange(bi + 1, b.length)
+      ..add(bp);
+    endeB = bp;
+  }
   // Umkehr in der Mitte: Vorlauf geht in den Rücklauf über
   final vl = [...a, endeB];
   final rl = b.reversed.toList();
@@ -546,3 +590,202 @@ List<Punkt> anbindeweg(Punkt start, Punkt ziel, {List<Punkt>? raum, List<Durchga
   }
   return bester ?? _bereinigen(_rechtwinklig(start, ziel));
 }
+
+/// Fläche ohne Sperrflächen (mit Randabstand [rand]) als einfacher, rechtwinklig
+/// gerasterter Umriss: Rasterzellen im Umriss und außerhalb der Sperren bleiben;
+/// eingeschlossene Sperren werden über einen schmalen Schlitz mit dem Rand
+/// verbunden, damit das Rohr in einem Zug um sie herum läuft.
+List<Punkt> flaecheOhneSperren(List<Punkt> umriss, List<List<Punkt>> sperren, {double rand = 100, double raster = 50}) {
+  if (umriss.length < 3) return umriss;
+  final xs = umriss.map((p) => p.x), ys = umriss.map((p) => p.y);
+  final x0 = xs.reduce(math.min), y0 = ys.reduce(math.min);
+  final nx = ((xs.reduce(math.max) - x0) / raster).ceil(), ny = ((ys.reduce(math.max) - y0) / raster).ceil();
+  if (nx <= 0 || ny <= 0 || nx * ny > 400000) return umriss;
+
+  final drin = List.generate(ny, (_) => List.filled(nx, false));
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      final q = Punkt(x0 + (i + 0.5) * raster, y0 + (j + 0.5) * raster);
+      if (!punktInPolygon(q, umriss)) continue;
+      var frei = true;
+      for (final sp in sperren) {
+        if (sp.length < 3) continue;
+        // rechteckig vergrößert (Sperrflächen sind meist rechteckig: Küchenzeile, Dusche, Gerät)
+        final sx = sp.map((p) => p.x), sy = sp.map((p) => p.y);
+        if (q.x > sx.reduce(math.min) - rand && q.x < sx.reduce(math.max) + rand && q.y > sy.reduce(math.min) - rand && q.y < sy.reduce(math.max) + rand) {
+          frei = false;
+          break;
+        }
+      }
+      drin[j][i] = frei;
+    }
+  }
+  // größte zusammenhängende Fläche behalten
+  final comp = List.generate(ny, (_) => List.filled(nx, -1));
+  var besteId = -1, besteN = 0, id = 0;
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      if (!drin[j][i] || comp[j][i] >= 0) continue;
+      var n = 0;
+      final stapel = [(i, j)];
+      comp[j][i] = id;
+      while (stapel.isNotEmpty) {
+        final (a, b) = stapel.removeLast();
+        n++;
+        for (final (da, db) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+          final c = a + da, d = b + db;
+          if (c < 0 || d < 0 || c >= nx || d >= ny || !drin[d][c] || comp[d][c] >= 0) continue;
+          comp[d][c] = id;
+          stapel.add((c, d));
+        }
+      }
+      if (n > besteN) {
+        besteN = n;
+        besteId = id;
+      }
+      id++;
+    }
+  }
+  if (besteId < 0) return umriss;
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      drin[j][i] = comp[j][i] == besteId;
+    }
+  }
+  // Löcher (leere Zellen, die nicht mit außen verbunden sind) per Schlitz nach links öffnen
+  final aussen = List.generate(ny, (_) => List.filled(nx, false));
+  final st = <(int, int)>[];
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      if ((i == 0 || j == 0 || i == nx - 1 || j == ny - 1) && !drin[j][i]) {
+        aussen[j][i] = true;
+        st.add((i, j));
+      }
+    }
+  }
+  while (st.isNotEmpty) {
+    final (a, b) = st.removeLast();
+    for (final (da, db) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+      final c = a + da, d = b + db;
+      if (c < 0 || d < 0 || c >= nx || d >= ny || drin[d][c] || aussen[d][c]) continue;
+      aussen[d][c] = true;
+      st.add((c, d));
+    }
+  }
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      if (drin[j][i] || aussen[j][i]) continue;
+      // Loch gefunden: ganze Lochfläche sammeln
+      final loch = <(int, int)>[];
+      final f = [(i, j)];
+      aussen[j][i] = true;
+      while (f.isNotEmpty) {
+        final (a, b) = f.removeLast();
+        loch.add((a, b));
+        for (final (da, db) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+          final c = a + da, d = b + db;
+          if (c < 0 || d < 0 || c >= nx || d >= ny || drin[d][c] || aussen[d][c]) continue;
+          aussen[d][c] = true;
+          f.add((c, d));
+        }
+      }
+      // Insel bis zur nächsten Seite aussparen (volle Breite bzw. Höhe der Insel):
+      // so entsteht eine Einbuchtung, um die das Rohr in einem Zug herum läuft.
+      final i0 = loch.map((c) => c.$1).reduce(math.min), i1 = loch.map((c) => c.$1).reduce(math.max);
+      final j0 = loch.map((c) => c.$2).reduce(math.min), j1 = loch.map((c) => c.$2).reduce(math.max);
+      int weit(int di, int dj) {
+        var n = 0;
+        var ci = di < 0 ? i0 - 1 : (di > 0 ? i1 + 1 : (i0 + i1) ~/ 2);
+        var cj = dj < 0 ? j0 - 1 : (dj > 0 ? j1 + 1 : (j0 + j1) ~/ 2);
+        while (ci >= 0 && cj >= 0 && ci < nx && cj < ny && drin[cj][ci]) {
+          n++;
+          ci += di;
+          cj += dj;
+        }
+        return n;
+      }
+      final richtungen = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+      final (di, dj) = richtungen.reduce((a, b) => weit(a.$1, a.$2) <= weit(b.$1, b.$2) ? a : b);
+      void frei(int a, int b) {
+        if (a < 0 || b < 0 || a >= nx || b >= ny) return;
+        drin[b][a] = false;
+        aussen[b][a] = true;
+      }
+      if (di != 0) {
+        for (var b = j0; b <= j1; b++) {
+          for (var a = di < 0 ? i0 - 1 : i1 + 1; a >= 0 && a < nx && drin[b][a]; a += di) {
+            frei(a, b);
+          }
+        }
+      } else {
+        for (var a = i0; a <= i1; a++) {
+          for (var b = dj < 0 ? j0 - 1 : j1 + 1; b >= 0 && b < ny && drin[b][a]; b += dj) {
+            frei(a, b);
+          }
+        }
+      }
+    }
+  }
+  // Randkanten sammeln (Fläche links der Kante, Bildschirmkoordinaten)
+  final naechste = <(int, int), (int, int)>{};
+  bool z(int i, int j) => i >= 0 && j >= 0 && i < nx && j < ny && drin[j][i];
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      if (!drin[j][i]) continue;
+      if (!z(i, j - 1)) naechste[(i, j)] = (i + 1, j); // oben: nach rechts
+      if (!z(i + 1, j)) naechste[(i + 1, j)] = (i + 1, j + 1); // rechts: nach unten
+      if (!z(i, j + 1)) naechste[(i + 1, j + 1)] = (i, j + 1); // unten: nach links
+      if (!z(i - 1, j)) naechste[(i, j + 1)] = (i, j); // links: nach oben
+    }
+  }
+  if (naechste.isEmpty) return umriss;
+  final start = naechste.keys.first;
+  final ring = <(int, int)>[start];
+  var cur = naechste[start]!;
+  var schutz = 0;
+  while (cur != start && schutz++ < 1000000) {
+    ring.add(cur);
+    final n = naechste[cur];
+    if (n == null) break;
+    cur = n;
+  }
+  // kollineare Punkte weglassen
+  final pts = <Punkt>[];
+  for (var k = 0; k < ring.length; k++) {
+    final a = ring[(k - 1 + ring.length) % ring.length], b = ring[k], c = ring[(k + 1) % ring.length];
+    final kreuz = (b.$1 - a.$1) * (c.$2 - b.$2) - (b.$2 - a.$2) * (c.$1 - b.$1);
+    if (kreuz != 0) pts.add(Punkt(x0 + b.$1 * raster, y0 + b.$2 * raster));
+  }
+  if (pts.length < 3) return umriss;
+  return polygonFlaeche(pts) < 0 ? pts.reversed.toList() : pts;
+}
+
+/// Kreuzt sich das Rohr (Vorlauf → Umkehr → Rücklauf)? Für Hinweise in der Oberfläche.
+int verlegeplanKreuzungen(Verlegeplan p) {
+  final z = [...p.vl, ...p.rl];
+  bool schneiden(Punkt a, Punkt b, Punkt c, Punkt d) {
+    double k(Punkt o, Punkt p, Punkt q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
+    final d1 = k(c, d, a), d2 = k(c, d, b), d3 = k(a, b, c), d4 = k(a, b, d);
+    return ((d1 > 1e-6 && d2 < -1e-6) || (d1 < -1e-6 && d2 > 1e-6)) && ((d3 > 1e-6 && d4 < -1e-6) || (d3 < -1e-6 && d4 > 1e-6));
+  }
+  var n = 0;
+  for (var i = 0; i + 1 < z.length; i++) {
+    for (var j = i + 2; j + 1 < z.length; j++) {
+      if (schneiden(z[i], z[i + 1], z[j], z[j + 1])) n++;
+    }
+  }
+  return n;
+}
+
+/// Aufstellfläche eines Geräts (Mitte, Breite b, Tiefe t, Drehung in Grad) als Umriss.
+List<Punkt> aufstellflaeche(Punkt mitte, double b, double t, num drehungGrad) {
+  final w = drehungGrad * math.pi / 180;
+  final c = math.cos(w), s = math.sin(w);
+  Punkt p(double u, double v) => Punkt(mitte.x + u * c - v * s, mitte.y + u * s + v * c);
+  return [p(-b / 2, -t / 2), p(b / 2, -t / 2), p(b / 2, t / 2), p(-b / 2, t / 2)];
+}
+
+List<List<double>> _alsJson(List<Punkt> l) => [for (final q in l) [q.x.roundToDouble(), q.y.roundToDouble()]];
+
+/// Sperrflächen als JSON für die Eigenschaften eines Heizkreises.
+List<List<List<double>>> sperrenJson(List<List<Punkt>> l) => [for (final k in l) _alsJson(k)];
