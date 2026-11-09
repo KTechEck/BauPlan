@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UniformTypeIdentifiers
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -12,5 +13,123 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "BauSpurOrdner") {
+      OrdnerPlugin.register(with: registrar)
+    }
+  }
+}
+
+/// Projektordner (z. B. im OneDrive) einmal wählen und dauerhaft merken
+/// (Security-Scoped Bookmark). Lesen und Schreiben über NSFileCoordinator,
+/// damit Dateien von OneDrive & Co. bei Bedarf geladen werden.
+class OrdnerPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
+  private var wartend: FlutterResult?
+  private let schluessel = "bauspurOrdnerLesezeichen"
+
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let kanal = FlutterMethodChannel(name: "bauspur/ordner", binaryMessenger: registrar.messenger())
+    let instanz = OrdnerPlugin()
+    registrar.addMethodCallDelegate(instanz, channel: kanal)
+  }
+
+  private func ordner() -> URL? {
+    guard let daten = UserDefaults.standard.data(forKey: schluessel) else { return nil }
+    var veraltet = false
+    guard let url = try? URL(resolvingBookmarkData: daten, options: [], relativeTo: nil, bookmarkDataIsStale: &veraltet) else { return nil }
+    if veraltet, url.startAccessingSecurityScopedResource() {
+      if let neu = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+        UserDefaults.standard.set(neu, forKey: schluessel)
+      }
+      url.stopAccessingSecurityScopedResource()
+    }
+    return url
+  }
+
+  private func mitZugriff<T>(_ url: URL, _ arbeit: () -> T) -> T {
+    let ok = url.startAccessingSecurityScopedResource()
+    defer { if ok { url.stopAccessingSecurityScopedResource() } }
+    return arbeit()
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    switch call.method {
+    case "waehlen":
+      let auswahl = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder])
+      auswahl.delegate = self
+      auswahl.allowsMultipleSelection = false
+      wartend = result
+      oberstes()?.present(auswahl, animated: true)
+    case "name":
+      result(ordner()?.lastPathComponent)
+    case "lesen":
+      guard let basis = ordner(), let pfad = args["pfad"] as? String else { result(nil); return }
+      let daten: Data? = mitZugriff(basis) {
+        var aus: Data?
+        var fehler: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: basis.appendingPathComponent(pfad), options: [], error: &fehler) { url in
+          aus = try? Data(contentsOf: url)
+        }
+        return aus
+      }
+      result(daten.map { FlutterStandardTypedData(bytes: $0) })
+    case "schreiben":
+      guard let basis = ordner(), let pfad = args["pfad"] as? String, let inhalt = args["daten"] as? FlutterStandardTypedData else {
+        result(false); return
+      }
+      let ok: Bool = mitZugriff(basis) {
+        var erfolg = false
+        var fehler: NSError?
+        let ziel = basis.appendingPathComponent(pfad)
+        NSFileCoordinator().coordinate(writingItemAt: ziel, options: .forReplacing, error: &fehler) { url in
+          do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try inhalt.data.write(to: url, options: .atomic)
+            erfolg = true
+          } catch {
+            erfolg = false
+          }
+        }
+        return erfolg && fehler == nil
+      }
+      result(ok)
+    case "liste":
+      guard let basis = ordner() else { result([String]()); return }
+      let pfad = args["pfad"] as? String ?? ""
+      let namen: [String] = mitZugriff(basis) {
+        (try? FileManager.default.contentsOfDirectory(atPath: basis.appendingPathComponent(pfad).path)) ?? []
+      }
+      result(namen)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard let url = urls.first else { wartend?(nil); wartend = nil; return }
+    let ok = url.startAccessingSecurityScopedResource()
+    defer { if ok { url.stopAccessingSecurityScopedResource() } }
+    if let daten = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+      UserDefaults.standard.set(daten, forKey: schluessel)
+      wartend?(url.lastPathComponent)
+    } else {
+      wartend?(nil)
+    }
+    wartend = nil
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    wartend?(nil)
+    wartend = nil
+  }
+
+  private func oberstes() -> UIViewController? {
+    let fenster = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
+    var vc = fenster?.rootViewController
+    while let p = vc?.presentedViewController { vc = p }
+    return vc
   }
 }

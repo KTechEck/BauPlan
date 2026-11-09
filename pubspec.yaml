@@ -16,6 +16,7 @@ dependencies:
   file_selector: ^1.0.3
   pdf: ^3.13.1
   window_manager: ^0.5.1
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:

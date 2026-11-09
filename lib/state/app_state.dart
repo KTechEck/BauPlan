@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../data/app_settings.dart';
+import '../data/austausch.dart';
 import '../data/bauelement_bibliothek.dart';
 import '../data/project_store.dart';
 
@@ -52,9 +54,51 @@ class AppState extends ChangeNotifier {
   /// Erhöht sich bei jeder Datenänderung, damit Ansichten neu laden.
   int revision = 0;
 
+  Timer? _planstandTimer, _eingangTimer;
+
+  /// Letzte Meldung aus dem App-Eingang (für die Glocke/Statuszeile).
+  String? eingangMeldung;
+
+  /// Planstand für die App ablegen (verzögert, damit viele kleine Änderungen nur einmal schreiben).
+  /// In Widget-Tests keine Hintergrund-Timer (der Austausch hat eigene Tests).
+  static final bool _imTest = Platform.environment.containsKey('FLUTTER_TEST');
+
+  void _planstandVormerken() {
+    if (_imTest) return;
+    _planstandTimer?.cancel();
+    _planstandTimer = Timer(const Duration(seconds: 3), () {
+      final st = store;
+      if (st == null) return;
+      try {
+        planstandSchreiben(st);
+      } catch (_) {}
+    });
+  }
+
+  /// Neue Erfassungen der App übernehmen (beim Öffnen und alle 30 s).
+  void eingangPruefen() {
+    final st = store;
+    if (st == null) return;
+    try {
+      final r = eingangUebernehmen(st);
+      if (r.uebernommen > 0 || r.fehler > 0) {
+        eingangMeldung = '${r.uebernommen} Erfassung(en) aus der App übernommen${r.fehler > 0 ? ', ${r.fehler} fehlerhaft' : ''}';
+        geaendert();
+      }
+    } catch (_) {}
+  }
+
   void projektOeffnen(ProjectStore s) {
     store?.schliessen();
     store = s;
+    _eingangTimer?.cancel();
+    if (!_imTest) {
+      _eingangTimer = Timer.periodic(const Duration(seconds: 30), (_) => eingangPruefen());
+      Timer.run(() {
+        eingangPruefen();
+        _planstandVormerken();
+      });
+    }
     settings.merkeProjekt(s.ordner);
     final geb = s.gebaeude();
     geschossId = geb.isEmpty ? null : s.geschosse(geb.first.id).firstOrNull?.id;
@@ -64,6 +108,14 @@ class AppState extends ChangeNotifier {
   }
 
   void projektSchliessen() {
+    _eingangTimer?.cancel();
+    _planstandTimer?.cancel();
+    final st = store;
+    if (st != null) {
+      try {
+        planstandSchreiben(st);
+      } catch (_) {}
+    }
     store?.schliessen();
     store = null;
     geschossId = null;
@@ -90,6 +142,7 @@ class AppState extends ChangeNotifier {
   /// Nach jeder Änderung an Projektdaten aufrufen.
   void geaendert() {
     revision++;
+    _planstandVormerken();
     notifyListeners();
   }
 }

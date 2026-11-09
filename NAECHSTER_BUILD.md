@@ -313,3 +313,6 @@ Erledigt Build 5 bisher: version.dart, Kniestock-Abschnitte, Schrägen Wandansic
   WARTET auf Tim: privates GitHub-Repo „bauspur“ anlegen + Link; dann git remote add origin … && git push -u origin main (Anmeldefenster bei Tim).
   Danach Tim: Sideloadly + iTunes (Win32), IPA aufspielen mit Apple-ID, alle 7 Tage neu.
 - Offen Build 6: HK um Sperrflächen, Anbindeleitungen gebündelt, Skizzen-Feinschliff.
+- BUILD 6 ERSTELLT 09.11. 02:17 (sauber neu), 200 Tests grün, Commit a6190a4: Sperrflächen (FbhEinstellung.sperren, flaecheOhneSperren mit Insel-Aussparung
+  zur nächsten Seite, Schnecke um Sperren; Zeichnen per zwei Klicks / aus Geräten; Kreuzungs-Hinweis verlegeplanKreuzungen), gebündelte Anbindeleitungen
+  (anbindeleitungenBuendeln in heizkreise_dialog.dart, Knopf im HV-Editor), Skizzenfelder weiß hinterlegt. iOS wartet auf GitHub-Repo von Tim.

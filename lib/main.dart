@@ -5,10 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
+import 'mobil/mobil_app.dart';
+import 'mobil/ordner.dart';
 import 'data/app_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // iPhone/iPad: nur das Baustellen-Werkzeug (Erfassen + Nachschlagen), nicht das ganze Programm
+  if (Platform.isIOS || Platform.isAndroid) {
+    runApp(MobilApp(ordner: KanalOrdner(), einstellungen: await MobilEinstellungen.laden(), puffer: await Puffer.laden()));
+    return;
+  }
   final settings = await AppSettings.laden();
   // Fenstersteuerung nur auf dem PC (iPhone/iPad haben keine Fenster)
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
