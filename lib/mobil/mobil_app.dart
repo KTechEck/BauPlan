@@ -191,10 +191,11 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
           const SizedBox(height: 12),
           Text(
             _ordnerName == null
-                ? 'Wähle in der Dateien-App den Projektordner im OneDrive (z. B. „Wohnhaus“). '
+                ? 'Wähle in iCloud Drive den Austauschordner des Projekts (z. B. „BauSpur › Wohnhaus“). '
+                    'Am PC stellst du ihn unter Einstellungen › Allgemein ein. Ordner in OneDrive lässt das iPhone hier nicht zu. '
                     'Die App liest daraus nur den Planstand und legt Erfassungen im Unterordner „eingang“ ab.'
                 : 'Öffne das Projekt einmal in BauSpur am PC – dann liegt der Planstand im Ordner und erscheint hier. '
-                    'Bei OneDrive kann das Übertragen einen Moment dauern.',
+                    'iCloud braucht für das Übertragen manchmal einen Moment.',
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),

@@ -8,6 +8,10 @@ import 'sensoren_page.dart';
 import 'assistent/ki_einstellungen.dart';
 import 'bauphysik/bauphysik_page.dart' show heizlastParameter, systemTemperaturen;
 import 'widgets.dart';
+import 'dart:io';
+import 'package:file_selector/file_selector.dart';
+import 'package:path/path.dart' as p;
+import '../data/austausch.dart';
 import 'package:flutter/services.dart';
 
 enum _Bereich { allgemein, darstellung, ki, klima, gewerke, materialien, wandtypen, sensoren }
@@ -131,6 +135,67 @@ class _SettingsPageState extends State<SettingsPage> {
             ]),
           ),
         ),
+        if (state.store != null) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Builder(builder: (context) {
+                final store = state.store!;
+                final eigen = store.einstellung<String>('austausch_ordner');
+                final icloud = iCloudDriveOrdner();
+                Future<void> setzen(String? pfad) async {
+                  store.einstellungSetzen('austausch_ordner', pfad);
+                  if (pfad != null) {
+                    for (final u in const ['planstand', 'eingang', 'eingang/_archiv']) {
+                      Directory(p.join(pfad, u)).createSync(recursive: true);
+                    }
+                  }
+                  planstandSchreiben(store);
+                  state.geaendert();
+                  setState(() {});
+                }
+
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Austausch mit der iPhone-App (dieses Projekt)', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text('Ordner: ${austauschOrdner(store)}', style: const TextStyle(fontSize: 13)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Das iPhone kann Ordner nur in iCloud Drive auswählen (OneDrive & Co. sind dort ausgegraut). '
+                    'Lege den Austausch deshalb in iCloud Drive (iCloud für Windows) und wähle denselben Ordner in der App.',
+                    style: TextStyle(fontSize: 12, color: BsFarben.textLeise),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    if (icloud != null)
+                      FilledButton.icon(
+                        onPressed: () => setzen(p.join(icloud, 'BauSpur', p.basename(store.ordner))),
+                        icon: const Icon(Icons.cloud_outlined, size: 18),
+                        label: Text('iCloud Drive\\BauSpur\\${p.basename(store.ordner)}'),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final d = await getDirectoryPath(confirmButtonText: 'Als Austauschordner verwenden');
+                        if (d != null) await setzen(d);
+                      },
+                      icon: const Icon(Icons.folder_open_outlined, size: 18),
+                      label: const Text('Ordner wählen …'),
+                    ),
+                    if (eigen != null)
+                      TextButton(onPressed: () => setzen(null), child: const Text('Zurück auf den Projektordner')),
+                  ]),
+                  if (icloud == null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text('iCloud Drive wurde auf diesem PC nicht gefunden: in „iCloud für Windows“ iCloud Drive einschalten.',
+                          style: TextStyle(fontSize: 12, color: Color(0xFFB45309))),
+                    ),
+                ]);
+              }),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -17,6 +17,25 @@ import 'project_store.dart';
 const planstandDatei = 'planstand/planstand.json';
 const planstandVersion = 1;
 
+/// Ordner für den Austausch mit der App. Vorgabe: der Projektordner. Weil die
+/// iPhone-Dateiauswahl Ordner nur in iCloud Drive (und „Auf meinem iPhone“)
+/// zulässt – OneDrive & Co. sind dort ausgegraut –, lässt sich ein eigener
+/// Austauschordner wählen, z. B. iCloud Drive\BauSpur\Wohnhaus (iCloud für Windows).
+String austauschOrdner(ProjectStore store) {
+  final eigen = store.einstellung<String>('austausch_ordner');
+  return eigen == null || eigen.trim().isEmpty ? store.ordner : eigen;
+}
+
+/// Übliche Lage von iCloud Drive unter Windows (iCloud für Windows), sonst null.
+String? iCloudDriveOrdner() {
+  final home = Platform.environment['USERPROFILE'];
+  if (home == null) return null;
+  for (final kandidat in [p.join(home, 'iCloudDrive'), p.join(home, 'iCloud Drive')]) {
+    if (Directory(kandidat).existsSync()) return kandidat;
+  }
+  return null;
+}
+
 /// Lesekopie des Projekts für die App.
 Map<String, dynamic> planstandErzeugen(ProjectStore store) {
   final typen = {for (final t in store.objekttypen()) t.id: t};
@@ -96,7 +115,7 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
 
 /// Lesekopie schreiben (atomar: erst .tmp, dann umbenennen).
 void planstandSchreiben(ProjectStore store) {
-  final ziel = File(p.join(store.ordner, planstandDatei));
+  final ziel = File(p.join(austauschOrdner(store), planstandDatei));
   ziel.parent.createSync(recursive: true);
   final tmp = File('${ziel.path}.tmp');
   tmp.writeAsStringSync(const JsonEncoder.withIndent(' ').convert(planstandErzeugen(store)));
@@ -109,7 +128,7 @@ typedef EingangErgebnis = ({int uebernommen, int fehler, List<String> hinweise})
 
 /// Neue Erfassungen aus `eingang/` übernehmen und archivieren.
 EingangErgebnis eingangUebernehmen(ProjectStore store) {
-  final ordner = Directory(p.join(store.ordner, 'eingang'));
+  final ordner = Directory(p.join(austauschOrdner(store), 'eingang'));
   if (!ordner.existsSync()) return (uebernommen: 0, fehler: 0, hinweise: const []);
   final archiv = Directory(p.join(ordner.path, '_archiv'))..createSync(recursive: true);
   var n = 0, f = 0;
