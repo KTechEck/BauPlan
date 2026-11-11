@@ -12,6 +12,9 @@ abstract class ProjektOrdner {
   Future<String?> waehlen();
   Future<Uint8List?> lesen(String pfad);
   Future<bool> schreiben(String pfad, List<int> daten);
+
+  /// Was die App im Ordner sieht (zur Fehlersuche).
+  Future<String> info();
 }
 
 /// iPhone/iPad: Ordner über die Dateien-App gewählt, dauerhaft gemerkt (nativer Kanal).
@@ -30,6 +33,9 @@ class KanalOrdner implements ProjektOrdner {
   @override
   Future<bool> schreiben(String pfad, List<int> daten) async =>
       await _k.invokeMethod<bool>('schreiben', {'pfad': pfad, 'daten': Uint8List.fromList(daten)}) ?? false;
+
+  @override
+  Future<String> info() async => await _k.invokeMethod<String>('info') ?? '';
 }
 
 /// Für Tests und den PC: ein normaler Ordner.
@@ -57,6 +63,17 @@ class LokalOrdner implements ProjektOrdner {
     f.parent.createSync(recursive: true);
     f.writeAsBytesSync(daten);
     return true;
+  }
+
+  @override
+  Future<String> info() async {
+    if (pfad == null) return 'kein Ordner gewählt';
+    final d = Directory(pfad!);
+    return [
+      'Ordner: $pfad',
+      for (final u in ['', 'planstand', 'eingang'])
+        '${u.isEmpty ? '/' : u}: ${Directory(p.join(d.path, u)).existsSync() ? Directory(p.join(d.path, u)).listSync().map((e) => p.basename(e.path)).join(', ') : '(fehlt)'}',
+    ].join('\n');
   }
 }
 

@@ -64,15 +64,20 @@ class OrdnerPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
       result(ordner()?.lastPathComponent)
     case "lesen":
       guard let basis = ordner(), let pfad = args["pfad"] as? String else { result(nil); return }
-      let daten: Data? = mitZugriff(basis) {
-        var aus: Data?
-        var fehler: NSError?
-        NSFileCoordinator().coordinate(readingItemAt: basis.appendingPathComponent(pfad), options: [], error: &fehler) { url in
-          aus = try? Data(contentsOf: url)
+      // im Hintergrund, weil das Nachladen aus iCloud einige Sekunden dauern kann
+      DispatchQueue.global(qos: .userInitiated).async {
+        let daten: Data? = self.mitZugriff(basis) {
+          let ziel = basis.appendingPathComponent(pfad)
+          self.ausICloudLaden(ziel)
+          var aus: Data?
+          var fehler: NSError?
+          NSFileCoordinator().coordinate(readingItemAt: ziel, options: [], error: &fehler) { url in
+            aus = try? Data(contentsOf: url)
+          }
+          return aus
         }
-        return aus
+        DispatchQueue.main.async { result(daten.map { FlutterStandardTypedData(bytes: $0) }) }
       }
-      result(daten.map { FlutterStandardTypedData(bytes: $0) })
     case "schreiben":
       guard let basis = ordner(), let pfad = args["pfad"] as? String, let inhalt = args["daten"] as? FlutterStandardTypedData else {
         result(false); return
@@ -100,6 +105,19 @@ class OrdnerPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
         (try? FileManager.default.contentsOfDirectory(atPath: basis.appendingPathComponent(pfad).path)) ?? []
       }
       result(namen)
+    case "info":
+      // Diagnose: was sieht die App im Ordner (inkl. noch nicht geladener iCloud-Platzhalter)?
+      guard let basis = ordner() else { result("kein Ordner gewählt"); return }
+      let text: String = mitZugriff(basis) {
+        let fm = FileManager.default
+        var zeilen = ["Ordner: \(basis.path)"]
+        for unter in ["", "planstand", "eingang"] {
+          let inhalt = (try? fm.contentsOfDirectory(atPath: basis.appendingPathComponent(unter).path)) ?? []
+          zeilen.append("\(unter.isEmpty ? "/" : unter): \(inhalt.isEmpty ? "(leer oder nicht lesbar)" : inhalt.joined(separator: ", "))")
+        }
+        return zeilen.joined(separator: "\n")
+      }
+      result(text)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -121,6 +139,23 @@ class OrdnerPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
     wartend?(nil)
     wartend = nil
+  }
+
+  /// iCloud legt nicht geladene Dateien als Platzhalter „.name.icloud“ ab:
+  /// Laden anstoßen und bis zu 20 s warten, bis die Datei da ist.
+  private func ausICloudLaden(_ url: URL) {
+    let fm = FileManager.default
+    let platzhalter = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).icloud")
+    let istUbiquitaer = (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]).isUbiquitousItem) ?? false
+    if fm.fileExists(atPath: url.path) && !istUbiquitaer { return }
+    try? fm.startDownloadingUbiquitousItem(at: url)
+    for _ in 0..<40 {
+      if let s = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus, s == .current {
+        return
+      }
+      if fm.fileExists(atPath: url.path) && !fm.fileExists(atPath: platzhalter.path) && !istUbiquitaer { return }
+      Thread.sleep(forTimeInterval: 0.5)
+    }
   }
 
   private func oberstes() -> UIViewController? {

@@ -203,6 +203,19 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
           if (_ordnerName != null) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(onPressed: _laden, icon: const Icon(Icons.refresh), label: const Text('Erneut versuchen')),
+            const SizedBox(height: 24),
+            Text('Was die App im Ordner sieht', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 6),
+            FutureBuilder<String>(
+              future: widget.ordner.info().catchError((Object e) => 'Fehler: $e'),
+              builder: (_, s) => SelectableText(s.data ?? '…', style: const TextStyle(fontSize: 12, fontFamily: 'Courier')),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Erwartet wird „planstand: planstand.json“. Steht dort „.planstand.json.icloud“, lädt iCloud die Datei gerade – kurz warten und erneut versuchen. '
+              'Fehlt „planstand“ ganz, wurde ein anderer Ordner gewählt als am PC eingestellt.',
+              style: TextStyle(fontSize: 12, color: BsFarben.textLeise),
+            ),
           ],
         ]),
       );
