@@ -366,3 +366,10 @@ Rauchmelder/Brandschutz, fehlende Bibliothek-Einstellungen, Anschlusspositionen,
   Wandansicht PC nutzt sie als Andockpunkte. Besorgungsliste nach Händler gruppiert, Link öffnen, abhaken (Bestand).
 - Pakete neu: qr, mobile_scanner, url_launcher. 217 Tests grün; Bilder: test/mobil_bild_test.dart, test/pc_bild_test.dart (BAUSPUR_BILD).
 - Hinweis Sichtprüfung: Bildschirm war bei Tims Abwesenheit eingefroren (Uhr stand), Fensterfotos blieben weiß; Start über den Dienst geprüft (/bauspur meldet Build 11).
+
+## Gesammelt für Build 12 (Tim 12.11. 21:55 – nicht sofort umsetzen)
+- [ ] Aufmaß: Raum diagonal messen, daraus die Winkel bestimmen (Raum ist nicht rechtwinklig).
+- [ ] Aufmaß in der Höhe / in den Wandansichten: Dachschrägen messen, auch ungleiche Schrägen auf beiden Raumseiten,
+      Räume mit Schräge UND waagrechter Decke (Kniestock, Schrägenhöhe, Deckenhöhe).
+- [ ] Sparrendecke und Dachsparren aufmessen (Lage, Abstand, Querschnitt), möglichst über das ganze Geschoss – am PC und in der App.
+- [ ] In der App auch Steckdosen, Türen und andere Objekte aufmessen (Position ab Ecke, Höhe, Maße) → am PC übernehmen.
