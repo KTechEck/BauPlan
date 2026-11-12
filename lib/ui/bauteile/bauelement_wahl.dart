@@ -14,6 +14,7 @@ List<BauelementKategorie> kategorienFuerKuerzel(String kuerzel) => switch (kuerz
       'WC' || 'WT' || 'DU' || 'BW' || 'SP' || 'WM' => const [BauelementKategorie.sanitaer],
       'VB' || 'VH' => const [BauelementKategorie.verbinder],
       'AV' => const [BauelementKategorie.armatur],
+      'RW' || 'WR' || 'CM' || 'FL' || 'BA' || 'BK' || 'SI' || 'BW' => const [BauelementKategorie.brandschutz],
       _ => const [],
     };
 
@@ -98,6 +99,7 @@ IconData kategorieSymbol(BauelementKategorie k) => switch (k) {
       BauelementKategorie.elektro => Icons.power_outlined,
       BauelementKategorie.leuchte => Icons.lightbulb_outline,
       BauelementKategorie.sensor => Icons.sensors,
+      BauelementKategorie.brandschutz => Icons.fire_extinguisher,
       BauelementKategorie.schrankgeraet => Icons.electrical_services,
       BauelementKategorie.technik => Icons.heat_pump_outlined,
       BauelementKategorie.heizkoerper => Icons.local_fire_department_outlined,

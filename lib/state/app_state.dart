@@ -10,6 +10,7 @@ import '../data/app_settings.dart';
 import '../data/austausch.dart';
 import '../data/bauelement_bibliothek.dart';
 import '../data/project_store.dart';
+import '../ui/bauteile/einkauf_dialog.dart' show besorgungFuerApp;
 
 enum Modul {
   projekt('Projekt'),
@@ -35,6 +36,9 @@ enum Modul {
 class AppState extends ChangeNotifier {
   AppState(this.settings) {
     if (!_imTest) Timer.run(speicherAnwenden);
+    // Planstand für die App: Besorgungsliste und Geräte aus der Bibliothek mitgeben
+    zusatzEinkauf = (_) => besorgungFuerApp(this);
+    bauelementLesen = (st, id) => bibliothek.fuerProjekt(st, id)?.toJson();
   }
 
   final AppSettings settings;

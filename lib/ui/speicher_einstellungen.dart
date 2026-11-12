@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../app/qr_bild.dart';
 import '../app/theme.dart';
 import '../core/speicher.dart';
 import '../data/austausch.dart';
@@ -249,6 +250,17 @@ class _SpeicherEinstellungenState extends State<SpeicherEinstellungenAnsicht> {
                 ]),
               ),
               const SizedBox(width: 16),
+              if (state.dienst.laeuft && s.code.isNotEmpty && _adressen.isNotEmpty) ...[
+                Tooltip(
+                  message: 'In der App „Mit QR-Code koppeln“ tippen und diesen Code scannen.',
+                  child: QrBild(kopplungsText(
+                    adressen: [for (final a in _adressen) s.port == bauspurPort ? a : '$a:${s.port}'],
+                    code: s.code,
+                    name: Platform.localHostname,
+                  ), groesse: 150),
+                ),
+                const SizedBox(width: 16),
+              ],
               Expanded(
                 child: Text(
                   state.dienst.laeuft

@@ -10,6 +10,7 @@ import '../../app/theme.dart';
 import '../../core/height.dart';
 import '../../core/raumerkennung.dart';
 import '../../core/anschluesse.dart';
+import '../../core/geraeteanschluesse.dart';
 import '../../core/leitungsnetz.dart';
 import '../../core/verteiler.dart';
 import '../../core/wandmasse.dart';
@@ -202,6 +203,14 @@ class _WandansichtPageState extends State<WandansichtPage> {
       if (t == null) continue;
       for (final a in anschluesse(t.kuerzel, o.eigenschaften)) {
         _andock.add((xz: Offset(x + a.dx, z + a.dz), text: '${o.kennung} ${a.name}', bezug: {'objekt': o.id, 'anschluss': a.name}));
+      }
+      // Anschlüsse aus der Bibliothek (Lage am Gerät; Objektpunkt = Gerätemitte)
+      final bel = widget.state.bibliothek.fuerProjekt(store, o.eigenschaften['bauelement'] as String?);
+      if (bel != null) {
+        final b = bel.zahl('breite') ?? bel.zahl('baulaenge') ?? 0, hh = bel.zahl('hoehe') ?? bel.zahl('bauhoehe') ?? 0;
+        for (final a in geraeteAnschluesse(bel.daten)) {
+          _andock.add((xz: Offset(x + a.x - b / 2, z + a.y - hh / 2), text: '${o.kennung} ${a.anzeige}${a.groesse.isEmpty ? '' : ' ${a.groesse}'}', bezug: {'objekt': o.id, 'anschluss': a.anzeige}));
+        }
       }
     }
     final hierIds = {for (final (o, _) in _zuege) o.id};

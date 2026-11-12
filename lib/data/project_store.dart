@@ -159,6 +159,7 @@ class ProjectStore {
           _objekttypErgaenzen('HZ', 'VH', 'Verbindungselement Heizung (Fitting, Halter …)', 'punkt');
           _objekttypErgaenzen('SA', 'AV', 'Armatur / Absperrventil', 'punkt');
         }
+        if (version == 17) _gewerkErgaenzen('BS');
         version++;
         db.userVersion = version;
         db.execute('COMMIT');
@@ -176,6 +177,22 @@ class ProjectStore {
               [neueId(), name, kategorie, farbe, einheit]);
         }
       }
+    }
+  }
+
+  /// Neues Gewerk aus dem Startbestand in bestehenden Projekten ergänzen
+  /// (samt Objekttypen; fehlende Typen werden nachgetragen).
+  void _gewerkErgaenzen(String kuerzel) {
+    final v = gewerkVorlagen.where((g) => g.kuerzel == kuerzel).firstOrNull;
+    // neues Projekt: Gewerke kommen gleich aus dem Startbestand
+    if (v == null || db.select('SELECT 1 FROM gewerk LIMIT 1').isEmpty) return;
+    if (db.select('SELECT 1 FROM gewerk WHERE kuerzel = ?', [kuerzel]).isEmpty) {
+      final n = (db.select('SELECT COUNT(*) AS n FROM gewerk').first['n'] as int?) ?? 0;
+      db.execute('INSERT INTO gewerk (id, name, kuerzel, farbe, linie, reihenfolge, sichtbar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [neueId(), v.name, v.kuerzel, v.farbe, v.linie, n, v.sichtbar ? 1 : 0]);
+    }
+    for (final t in v.typen) {
+      _objekttypErgaenzen(kuerzel, t.$1, t.$2, t.$3);
     }
   }
 

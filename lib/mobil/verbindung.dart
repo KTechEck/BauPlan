@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/theme.dart';
 import '../core/speicher.dart';
 import 'ordner.dart';
+import 'qr_scannen.dart';
 
 /// Verbindung der App zum Projekt: sucht BauSpur am PC von selbst im WLAN
 /// (einmal Kopplungscode eingeben, fertig). Unter „Erweitert“ lassen sich die
@@ -71,6 +72,19 @@ class _VerbindungSeiteState extends State<VerbindungSeite> {
   }
 
   /// Adresse und Code am PC prüfen und bei Erfolg übernehmen.
+  /// QR-Code vom PC scannen und nacheinander dessen Adressen versuchen.
+  Future<void> _qrKoppeln() async {
+    final k = await Navigator.of(context).push<({List<String> adressen, String code, String name})>(
+        MaterialPageRoute(builder: (_) => const QrScannenSeite()));
+    if (k == null || !mounted) return;
+    for (final a in k.adressen) {
+      _adresse.text = a;
+      _code.text = k.code;
+      if (await _pcVerbinden(a, k.code, name: k.name.isEmpty ? null : k.name)) return;
+      if (!mounted) return;
+    }
+  }
+
   Future<bool> _pcVerbinden(String adresse, String code, {String? name}) async {
     setState(() {
       _arbeitet = true;
@@ -197,6 +211,14 @@ class _VerbindungSeiteState extends State<VerbindungSeite> {
           const Text('Steht die Verbindung, aber es erscheint kein Plan: das Projekt am PC einmal öffnen.', textAlign: TextAlign.center, style: leise),
         ],
         const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _arbeitet ? null : _qrKoppeln,
+          icon: const Icon(Icons.qr_code_scanner),
+          label: const Text('Mit QR-Code koppeln'),
+        ),
+        const SizedBox(height: 4),
+        const Text('QR-Code steht am PC unter Einstellungen › Speicher und Abgleich.', textAlign: TextAlign.center, style: leise),
+        const SizedBox(height: 12),
         if (_meldung != null)
           Card(
             color: const Color(0xFFFFF7ED),

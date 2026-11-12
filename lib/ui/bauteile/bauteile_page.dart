@@ -16,7 +16,9 @@ import '../../state/app_state.dart';
 import '../bibliothek.dart' show MaterialienAnsicht, WandtypenAnsicht;
 import '../sensoren_page.dart' show SensorenAnsicht;
 import '../widgets.dart';
+import 'anschluss_editor.dart';
 import 'bauelement_skizze.dart';
+import '../../core/geraeteanschluesse.dart';
 import 'bauelement_wahl.dart';
 import 'einkauf_dialog.dart';
 
@@ -489,6 +491,20 @@ class _BauteilePageState extends State<BauteilePage> {
             },
           ),
         ),
+        for (final (k, label, breite) in const [('haendler', 'Händler (Einkaufsliste)', 250.0), ('link', 'Händler-Link', 516.0)])
+          SizedBox(
+            width: breite,
+            child: SpeicherFeld(
+              key: ValueKey('${e.id}-$k'),
+              initialValue: '${e.daten[k] ?? ''}',
+              decoration: InputDecoration(labelText: label, hintText: k == 'link' ? 'https://…' : 'z. B. Bauhaus, Elektro-Großhandel'),
+              onFieldSubmitted: (v) {
+                final d = {...e.daten};
+                v.trim().isEmpty ? d.remove(k) : d[k] = v.trim();
+                _speichern(e.mit(daten: d));
+              },
+            ),
+          ),
       ]),
       if (_projektAbweichend(e))
         Container(
@@ -523,6 +539,10 @@ class _BauteilePageState extends State<BauteilePage> {
         for (final f in e.kategorie.felder)
           if (!skizzenFelder(e.kategorie).contains(f.schluessel)) feld(f),
       ]),
+      if (kategorieMitAnschluessen(e.kategorie)) ...[
+        const SizedBox(height: 20),
+        AnschlussEditor(element: e, setzen: (d) => _speichern(e.mit(daten: d))),
+      ],
       const SizedBox(height: 20),
       Text('Datenblatt', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 8),

@@ -22,6 +22,7 @@ enum BauelementGruppe {
   gebaeudehuelle('Gebäudehülle'),
   elektro('Elektro'),
   schaltschrank('Schaltschrank'),
+  brandschutz('Brandschutz'),
   haustechnik('Haustechnik'),
   material('Material'),
   werkzeug('Werkzeug'),
@@ -40,6 +41,7 @@ enum BauelementKategorie {
   elektro('Schalter / Steckdose / Elektro', BauelementGruppe.elektro, _elektro),
   leuchte('Leuchte', BauelementGruppe.elektro, _leuchte),
   sensor('Sensor / Melder', BauelementGruppe.elektro, _sensorFelder),
+  brandschutz('Rauchmelder / Brandschutz', BauelementGruppe.brandschutz, _brandschutz),
   schrankgeraet('Schaltschrankgerät', BauelementGruppe.schaltschrank, _schrankgeraet),
   technik('Technikgerät (Heizung, Speicher, Lüftung …)', BauelementGruppe.haustechnik, _technik),
   heizkoerper('Heizkörper / Heizfläche', BauelementGruppe.haustechnik, _heizkoerper),
@@ -170,6 +172,9 @@ const _elektro = [
   FeldDef('ip', 'Schutzart', typ: FeldTyp.text, hilfe: 'z. B. IP20, IP44'),
   FeldDef('nennstrom', 'Nennstrom', einheit: 'A'),
   FeldDef('leistung', 'Leistung / Last', einheit: 'W'),
+  FeldDef('rahmen_breite', 'Rahmen außen', einheit: 'mm', hilfe: 'Abdeckrahmen 1-fach, z. B. 80'),
+  FeldDef('knx', 'KNX-Tasterschnittstelle / Busankoppler', typ: FeldTyp.jaNein),
+  ..._masse,
 ];
 
 const _leuchte = [
@@ -193,6 +198,40 @@ const _sensorFelder = [
   FeldDef('montagehoehe', 'Montagehöhe max.', einheit: 'mm'),
   FeldDef('einbautiefe', 'Einbautiefe', einheit: 'mm'),
   FeldDef('ip', 'Schutzart', typ: FeldTyp.text),
+  FeldDef('versorgung', 'Versorgung', typ: FeldTyp.auswahl, optionen: ['Bus', '230 V', '24 V', 'Batterie', '10-Jahres-Batterie', 'PoE']),
+  FeldDef('leistung', 'Leistungsaufnahme', einheit: 'W'),
+  ..._masse,
+];
+
+const _brandschutz = [
+  FeldDef('bs_art', 'Art', typ: FeldTyp.auswahl, optionen: [
+    'Rauchwarnmelder',
+    'Wärmemelder',
+    'Kohlenmonoxid-Melder (CO)',
+    'Kombimelder Rauch/Wärme',
+    'Gasmelder',
+    'Feuerlöscher',
+    'Löschdecke',
+    'Brandschutzabschottung (Rohr/Kabel)',
+    'Brandschutzklappe',
+    'Brandschutzmanschette',
+    'Sicherheitsleuchte / Fluchtweg',
+    'Feuerschutzabschluss (Tür/Klappe)',
+  ]),
+  FeldDef('norm', 'Norm / Zulassung', typ: FeldTyp.text, hilfe: 'z. B. DIN EN 14604, Q-Label, abZ Z-19.53-…'),
+  FeldDef('vernetzung', 'Vernetzung', typ: FeldTyp.auswahl, optionen: ['keine', 'Funk', 'Draht', 'KNX', 'Zigbee', 'Matter / Thread']),
+  FeldDef('versorgung', 'Versorgung', typ: FeldTyp.auswahl, optionen: ['10-Jahres-Batterie', 'Batterie wechselbar', '230 V mit Akku', 'Bus']),
+  FeldDef('lebensdauer', 'Lebensdauer / Austausch', einheit: 'Jahre'),
+  FeldDef('wartung', 'Wartungsintervall', einheit: 'Monate', hilfe: 'Rauchmelder: 12 (DIN 14676)'),
+  FeldDef('montageort', 'Montage', typ: FeldTyp.auswahl, optionen: ['Decke Raummitte', 'Decke', 'Wand', 'Boden', 'in Wand/Decke (Durchführung)']),
+  FeldDef('abstand_wand', 'Mindestabstand Wand/Unterzug', einheit: 'mm', hilfe: 'Rauchmelder: 500'),
+  FeldDef('ueberwachung', 'Überwachungsfläche max.', einheit: 'm²', hilfe: 'Rauchmelder: 60 m²'),
+  FeldDef('feuerwiderstand', 'Feuerwiderstand', typ: FeldTyp.auswahl, optionen: ['–', 'EI 30', 'EI 60', 'EI 90', 'EI 120', 'F30', 'F60', 'F90', 'K30', 'K90', 'T30', 'T90']),
+  FeldDef('loeschmittel', 'Löschmittel', typ: FeldTyp.auswahl, optionen: ['–', 'Schaum', 'Pulver ABC', 'Wasser', 'CO2', 'Fettbrand (F)']),
+  FeldDef('loescheinheiten', 'Löschmitteleinheiten', einheit: 'LE'),
+  FeldDef('max_belegung', 'max. Belegung / Durchmesser', typ: FeldTyp.text, hilfe: 'z. B. Rohr bis DN 110, Kabelbündel bis 100 mm'),
+  FeldDef('lautstaerke', 'Alarmlautstärke', einheit: 'dB'),
+  ..._masse,
 ];
 
 const _schrankgeraet = [

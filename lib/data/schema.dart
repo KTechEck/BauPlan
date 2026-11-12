@@ -391,4 +391,6 @@ const List<List<String>> migrationen = [
   ],
   // Version 17 – Objekttypen für Verbindungselemente (Fittings, Halter) und Armaturen (Startbestand in _migrieren)
   [],
+  // Version 18 – Gewerk Brandschutz mit Rauchwarnmeldern, Feuerlöschern, Abschottungen … (Startbestand in _migrieren)
+  [],
 ];

@@ -61,10 +61,23 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('KG', 'Klimagerät', 'punkt'),
     ('KL', 'Kältemittel- / Kondensatleitung', 'linie'),
   ]),
+  GewerkVorlage('BS', 'Brandschutz', 0xFFC92A2A, 'solid', true, brandschutzTypen),
   GewerkVorlage('AL', 'Allgemein', 0xFF6B7178, 'solid', true, [
     ('MP', 'Messpunkt / Warnhinweis', 'punkt'),
     ('WD', 'Wanddurchbruch / Kernbohrung', 'punkt'),
   ]),
+];
+
+/// Objekttypen des Gewerks Brandschutz (Migration 18 ergänzt sie in alten Projekten).
+const brandschutzTypen = <(String, String, String)>[
+  ('RW', 'Rauchwarnmelder', 'punkt'),
+  ('WR', 'Wärmemelder', 'punkt'),
+  ('CM', 'CO-Melder / Gasmelder', 'punkt'),
+  ('FL', 'Feuerlöscher / Löschdecke', 'punkt'),
+  ('BA', 'Brandschutzabschottung (Durchführung)', 'punkt'),
+  ('BK', 'Brandschutzklappe', 'punkt'),
+  ('SI', 'Sicherheitsleuchte / Fluchtweg', 'punkt'),
+  ('BW', 'Brandwand / Brandabschnitt', 'linie'),
 ];
 
 /// Startbestand der Materialbibliothek (Name, Kategorie, Farbe, Einheit).

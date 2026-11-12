@@ -211,6 +211,15 @@ class MobilEinstellungen {
   int fotoQualitaet = 80;
   String? geschoss, raum, gewerk;
 
+  /// Selbst aufgenommene Maße (Schlüssel → wert, zeit), bis der PC sie übernommen hat.
+  Map<String, Map<String, dynamic>> aufmass = {};
+
+  /// Einkaufszeilen, die auf dem Handy abgehakt wurden (bis der Planstand nachzieht).
+  Set<String> abgehakt = {};
+
+  /// Ansicht der Einkaufs-/Materialliste (haendler, herkunft, kategorie, raum).
+  String einkaufAnsicht = 'haendler';
+
   /// Verbindung zum Speicher: art (pc/webdav), adresse, code, pc_name, auto, url, benutzer, passwort, unsicher, projekt.
   Map<String, dynamic> verbindung = {};
 
@@ -225,13 +234,16 @@ class MobilEinstellungen {
       s.raum = m['raum'] as String?;
       s.gewerk = m['gewerk'] as String?;
       s.verbindung = Map<String, dynamic>.from(m['verbindung'] as Map? ?? const {});
+      s.aufmass = {for (final e in (m['aufmass'] as Map? ?? const {}).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map)};
+      s.abgehakt = {for (final x in (m['abgehakt'] as List? ?? const [])) '$x'};
+      s.einkaufAnsicht = m['einkauf_ansicht'] as String? ?? 'haendler';
     } catch (_) {}
     return s;
   }
 
   void speichern() {
     try {
-      _datei?.writeAsStringSync(jsonEncode({'benutzer': benutzer, 'foto': fotoQualitaet, 'geschoss': geschoss, 'raum': raum, 'gewerk': gewerk, 'verbindung': verbindung}));
+      _datei?.writeAsStringSync(jsonEncode({'benutzer': benutzer, 'foto': fotoQualitaet, 'geschoss': geschoss, 'raum': raum, 'gewerk': gewerk, 'verbindung': verbindung, 'aufmass': aufmass, 'abgehakt': abgehakt.toList(), 'einkauf_ansicht': einkaufAnsicht}));
     } catch (_) {}
   }
 }

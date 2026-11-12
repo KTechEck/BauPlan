@@ -12,6 +12,8 @@ import 'package:path/path.dart' as p;
 
 import '../../app/symbole.dart';
 import '../../app/theme.dart';
+import '../../core/aufmass.dart';
+import '../../core/brandschutz.dart';
 import '../../core/dach.dart' show wohnflaeche;
 import '../../core/dxf.dart';
 import '../../core/raumerkennung.dart';
@@ -28,6 +30,7 @@ import '../tastenkuerzel.dart';
 import '../../core/bauelemente.dart';
 import '../bauteile/bauelement_wahl.dart';
 import '../widgets.dart';
+import 'aufmass_dialog.dart';
 import 'dach_dialog.dart';
 import 'geschoss_3d.dart';
 import 'einbaudetail_page.dart';
@@ -2634,6 +2637,14 @@ class _FloorplanPageState extends State<FloorplanPage> {
           ),
           IconButton(tooltip: 'Alles zeigen', onPressed: _einpassen, icon: const Icon(Sym.allesZeigen)),
           IconButton(tooltip: '3D-Ansicht des Geschosses', onPressed: () => geschoss3dZeigen(context, _s), icon: const Icon(Icons.view_in_ar)),
+          Builder(builder: (context) {
+            final n = aufmassOffen(_s.store!);
+            return IconButton(
+              tooltip: n == 0 ? 'Aufmaß (Maße von der Baustelle)' : '$n Maß(e) vom Handy prüfen und übernehmen',
+              onPressed: () => aufmassDialogZeigen(context, _s),
+              icon: Badge(isLabelVisible: n > 0, label: Text('$n'), child: const Icon(Icons.straighten)),
+            );
+          }),
           IconButton(
             tooltip: 'Rückgängig (Strg+Z)',
             onPressed: _rueckgaengig.isEmpty ? null : _rueckgaengigMachen,
@@ -3419,6 +3430,33 @@ class _FloorplanPageState extends State<FloorplanPage> {
     );
   }
 
+  /// Zeigt, ob und was auf der Baustelle gemessen wurde (Aufmaß vom Handy).
+  Widget _aufmassZeile(String id) {
+    final store = _s.store!;
+    final gemessen = aufmassGemessen(store)[id];
+    final offen = aufmassListe(store).where((a) => a['status'] == 'offen' && a['id_ziel'] == id).length;
+    if (gemessen == null && offen == 0) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Text('Noch nicht vor Ort gemessen (grob gezeichnet).', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+        if (gemessen != null)
+          Text('Gemessen: ${gemessen.entries.map((e) => '${e.key.replaceAll('_', ' ')} ${mmText((e.value as num).toDouble())}').join(', ')}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF2F9E44))),
+        if (offen > 0)
+          TextButton.icon(
+            onPressed: () => aufmassDialogZeigen(context, _s),
+            icon: const Icon(Icons.straighten, size: 16),
+            label: Text('$offen Aufmaß vom Handy prüfen'),
+          ),
+      ]),
+    );
+  }
+
   Widget _hinweis(String text) => Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(8)),
@@ -3533,6 +3571,19 @@ class _FloorplanPageState extends State<FloorplanPage> {
         ]),
         const SizedBox(height: 12),
         ..._laengeAendern(w, plan),
+        _aufmassZeile(w.id),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey('fw-${w.id}-${wandFeuerwiderstand(store)[w.id]}'),
+          initialValue: wandFeuerwiderstand(store)[w.id] ?? '–',
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Brandschutz (Feuerwiderstand)', isDense: true),
+          items: [for (final k in feuerwiderstandsKlassen) DropdownMenuItem(value: k, child: Text(k))],
+          onChanged: (v) {
+            wandFeuerwiderstandSetzen(store, [w.id], v);
+            _s.geaendert();
+          },
+        ),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 4, children: [
           OutlinedButton.icon(

@@ -346,3 +346,23 @@ Tim wählte Entwurf H „Bauplan-Linie“ (dunkelblau #0F2A43 mit Planraster, or
 BauSpurLogo in widgets.dart nutzt es (Kopfleiste, Startseite). Symbole erzeugen: BAUSPUR_LOGO=<Ordner> flutter test test/logo_test.dart,
 dann python tools/logo_einbauen.py <Ordner> (schreibt windows/runner/resources/app_icon.ico, iOS AppIcon, assets/logo/bauspur_logo.png).
 209 Tests grün. Im Programm geprüft: Symbol der exe, Fenstertitel „Build 10“, Logo in Kopfleiste und Startseite.
+
+## Build 11 (12.11. 21:45) – Baustellen-App, Aufmaß, Brandschutz, Anschlüsse
+Tim 12.11. (nach Test Build 10 + iPhone): App zu schwach; QR-Kopplung, Wandansicht/Bohrhilfe, Maße anzeigen und bearbeiten
+(PC grob zeichnen → Handy misst → PC übernimmt), Messwert im Foto, Material anders anzeigen, Einkaufsliste nach Lastenheft,
+Rauchmelder/Brandschutz, fehlende Bibliothek-Einstellungen, Anschlusspositionen, iPhone ≠ iPad.
+- Aufmaß: lib/core/aufmass.dart (wandMasse inkl. Raumstücke je Wandseite, aufmassAblegen/Anwenden/Planwert; Einstellungen `aufmass`, `aufmass_gemessen`;
+  Ziele wand/oeffnung/raum/bemassung/raumseite – Teilstück einer langen Wand wirkt wie Bemaßung, Innenwand wandert). PC: lib/ui/floorplan/aufmass_dialog.dart,
+  Lineal-Knopf mit Zähler in der Grundriss-Leiste, Wand-Eigenschaften zeigen „gemessen/grob“.
+- Planstand Version 2 (austausch.dart): Wandseiten li/re/gr, Räume rl/rr + Stücke sl/sr, Höhen (h, hs über FFB), Öffnungen mit Höhe/Brüstung, Bemaßungen,
+  Raumhöhe, offene Aufmaße, Aufgaben, Einkaufsliste nach Lastenheft (Kosten + Besorgungsliste über Hook `zusatzEinkauf`, Geräte über `bauelementLesen`).
+  Eingang neu: aufmass, aufgabe, einkauf mit element (Bestand), Foto-Markierungen.
+- App neu gegliedert: lib/mobil/kontext.dart (MobilKontext, iPhone/iPad-Weiche mobilGeraet), seiten/erfassen|plan|wandansicht|aufmass|einkauf|mehr.dart,
+  foto_markieren.dart, qr_scannen.dart (mobile_scanner). iPhone: Erfassen/Plan/Räume/Einkauf/Mehr; iPad: NavigationRail, Plan + Räume nebeneinander (eigene iPad-Oberfläche folgt).
+- QR: lib/app/qr_bild.dart (Paket qr, bauspur://koppeln?a=…&c=…&n=…), am PC in Speicher und Abgleich, App „Mit QR-Code koppeln“.
+- Brandschutz: Gewerk BS (Migration 18, `_gewerkErgaenzen`), Typen RW/WR/CM/FL/BA/BK/SI/BW, lib/core/brandschutz.dart (Feuerwiderstand je Wand in
+  Einstellung `brandschutz_waende`, Prüfregeln Rauchwarnmelder/Abstand/60 m²/Durchbruch ohne Abschottung), Bibliothek-Kategorie „Rauchmelder / Brandschutz“.
+- Bibliothek: Händler + Händler-Link je Element, Maße für Elektro/Sensor, Anschlüsse mit Lage (lib/core/geraeteanschluesse.dart, lib/ui/bauteile/anschluss_editor.dart),
+  Wandansicht PC nutzt sie als Andockpunkte. Besorgungsliste nach Händler gruppiert, Link öffnen, abhaken (Bestand).
+- Pakete neu: qr, mobile_scanner, url_launcher. 217 Tests grün; Bilder: test/mobil_bild_test.dart, test/pc_bild_test.dart (BAUSPUR_BILD).
+- Hinweis Sichtprüfung: Bildschirm war bei Tims Abwesenheit eingefroren (Uhr stand), Fensterfotos blieben weiß; Start über den Dienst geprüft (/bauspur meldet Build 11).

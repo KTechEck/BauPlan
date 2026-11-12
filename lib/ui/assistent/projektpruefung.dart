@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../../core/brandschutz.dart';
 import '../../core/fbh.dart';
 import '../../core/height.dart';
 import '../../core/ki.dart';
@@ -42,8 +43,10 @@ List<PruefHinweis> projektPruefen(ProjectStore store, Regelwerte r) {
           text: '${g.kuerzel}: ${ohneRaum.length} Objekt(e) ohne Raum (${ohneRaum.take(4).map((o) => o.kennung).join(', ')}${ohneRaum.length > 4 ? ' …' : ''}).',
           objektId: ohneRaum.first.id));
     }
+    // Brandschutz: Rauchwarnmelder (Landesbauordnungen, DIN 14676)
+    h.addAll(brandschutzPruefen(store, g, raeume, objekte, typen));
     // Fußbodenheizung
-    final verteiler = [for (final o in objekte) if (typen[o.typId]?.kuerzel == 'HV') o];
+    final verteiler =[for (final o in objekte) if (typen[o.typId]?.kuerzel == 'HV') o];
     final zugeordnet = {
       for (final v in verteiler)
         for (final k in VerteilerDaten.ausJson(v.eigenschaften).kreise)

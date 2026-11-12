@@ -4,9 +4,13 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../core/auswertung.dart';
+import '../core/aufmass.dart';
+import '../core/brandschutz.dart';
+import '../core/height.dart';
 import '../core/raumerkennung.dart';
 import 'models.dart';
 import 'project_store.dart';
+import 'tagebuch_models.dart';
 
 /// Austausch PC ↔ App (Lastenheft Abschnitt 2 und 14):
 /// - Der PC legt bei jedem Speichern eine Lesekopie `planstand/planstand.json` ab
@@ -15,7 +19,7 @@ import 'project_store.dart';
 ///   (`<zeit>_<id>.json`, bei Fotos dazu `<zeit>_<id>.jpg`) und nie in die Datenbank.
 /// - Der PC übernimmt den Eingang und verschiebt die Dateien nach `eingang/_archiv`.
 const planstandDatei = 'planstand/planstand.json';
-const planstandVersion = 1;
+const planstandVersion = 2;
 
 /// Netzwerkordner (NAS, Netzwerkrechner) für den Austausch – gesetzt vom
 /// Programm, wenn die Speicherart „Heimnetz“ gewählt und der Ordner erreichbar
@@ -29,69 +33,101 @@ String austauschOrdner(ProjectStore store) {
   return netz == null || netz.isEmpty ? store.ordner : p.join(netz, p.basename(store.ordner));
 }
 
-/// Lesekopie des Projekts für die App.
+/// Zusätzliche Einkaufszeilen (Besorgungsliste aus der Bibliothek) – gesetzt
+/// vom Programm (AppState), in Tests leer.
+List<Map<String, dynamic>> Function(ProjectStore store)? zusatzEinkauf;
+
+/// Bauelement aus Projekt oder Bibliothek als JSON – gesetzt vom Programm.
+Map<String, dynamic>? Function(ProjectStore store, String id)? bauelementLesen;
+
+/// Lesekopie des Projekts für die App (Version 2: Maße, Höhen, Wandseiten,
+/// Bemaßungen, Aufmaß, Aufgaben, Einkaufsliste nach Lastenheft).
 Map<String, dynamic> planstandErzeugen(ProjectStore store) {
   final typen = {for (final t in store.objekttypen()) t.id: t};
   final gewerke = store.gewerke();
   final gewerkKuerzel = {for (final g in gewerke) g.id: g.kuerzel};
+  final gewerkName = {for (final g in gewerke) g.id: g.name};
+  final verbinden = store.einstellung<bool>('ecken_verbinden') ?? true;
+  final gemessen = aufmassGemessen(store);
+  final brandschutz = wandFeuerwiderstand(store);
+  final raumName = <String, String>{};
+  final produkte = {for (final pr in store.produkte()) pr.id: pr};
   final geschosse = <Map<String, dynamic>>[];
   for (final geb in store.gebaeude()) {
     for (final g in store.geschosse(geb.id)) {
       final waende = store.waende(g.id);
+      final raeume = store.raeume(g.id);
+      for (final r in raeume) {
+        raumName[r.id] = r.name;
+      }
+      final masse = wandMasse(waende, raeume, verbindenStandard: verbinden);
       final wandNach = {for (final w in waende) w.id: w};
+      final hoeheRaum = {for (final r in raeume) r.id: r.hoehen(g)};
+      int ffbVon(String? raumId) => (hoeheRaum[raumId] ?? g.hoehen).ffb;
       geschosse.add({
         'id': g.id,
         'name': g.name,
         'kuerzel': g.kuerzel,
         'gebaeude': geb.name,
+        'ffb': g.hoehen.ffb,
+        'rohdecke': g.hoehen.rohdecke,
+        'meterriss': g.hoehen.meterriss - g.hoehen.ffb,
         'waende': [
-          for (final w in waende) {'id': w.id, 'a': [w.x1, w.y1], 'b': [w.x2, w.y2], 'd': w.dicke}
+          for (final w in waende)
+            {
+              'id': w.id,
+              'a': [w.x1, w.y1],
+              'b': [w.x2, w.y2],
+              'd': w.dicke,
+              'zustand': w.zustand.name,
+              'l': w.laenge.round(),
+              'li': masse[w.id]!.links.round(),
+              're': masse[w.id]!.rechts.round(),
+              'gr': [for (final v in [masse[w.id]!.grenzen.linksA, masse[w.id]!.grenzen.linksB, masse[w.id]!.grenzen.rechtsA, masse[w.id]!.grenzen.rechtsB]) v.round()],
+              if (masse[w.id]!.raumLinks != null) 'rl': masse[w.id]!.raumLinks,
+              if (masse[w.id]!.raumRechts != null) 'rr': masse[w.id]!.raumRechts,
+              'sl': [for (final e in masse[w.id]!.stueckeLinks.entries) [e.key, e.value.$1.round(), e.value.$2.round()]],
+              'sr': [for (final e in masse[w.id]!.stueckeRechts.entries) [e.key, e.value.$1.round(), e.value.$2.round()]],
+              if (gemessen[w.id] != null) 'gemessen': gemessen[w.id],
+              if (brandschutz[w.id] != null) 'brandschutz': brandschutz[w.id],
+              if (w.gesperrt) 'gesperrt': true,
+            }
         ],
         'oeffnungen': [
           for (final o in store.oeffnungen(g.id))
-            if (wandNach[o.wandId] != null) {'wand': o.wandId, 'art': o.art.name, 'abstand': o.abstand, 'breite': o.breite}
+            if (wandNach[o.wandId] != null)
+              {
+                'id': o.id,
+                'wand': o.wandId,
+                'art': o.art.name,
+                'abstand': o.abstand,
+                'breite': o.breite,
+                'hoehe': o.hoehe,
+                'bruestung': o.bruestung,
+                if (gemessen[o.id] != null) 'gemessen': gemessen[o.id],
+              }
         ],
         'raeume': [
-          for (final r in store.raeume(g.id))
+          for (final r in raeume)
             {
               'id': r.id,
               'name': r.name,
               'kuerzel': r.kuerzel,
               if (r.umriss != null) 'umriss': [for (final q in r.umriss!) [q.x.round(), q.y.round()]],
+              if (r.flaeche != null) 'flaeche': r.flaeche!.round(),
+              'hoehe': ((r.ukDecke ?? hoeheRaum[r.id]!.rohdecke) - hoeheRaum[r.id]!.ffb),
+              'art': r.art.name,
+              if (gemessen[r.id] != null) 'gemessen': gemessen[r.id],
             }
+        ],
+        'bemassungen': [
+          for (final b in store.bemassungen(g.id))
+            if (!b.versteckt) {'id': b.id, 'a': [b.x1, b.y1], 'b': [b.x2, b.y2], 'abstand': b.abstand, 'l': b.laenge.round(), if (gemessen[b.id] != null) 'gemessen': gemessen[b.id]}
         ],
         'objekte': [
           for (final o in store.objekte(g.id))
-            if (typen[o.typId] != null)
-              {
-                'id': o.id,
-                'kennung': o.kennung,
-                'typ': typen[o.typId]!.kuerzel,
-                'name': typen[o.typId]!.name,
-                'geometrie': typen[o.typId]!.geometrie.name,
-                'gewerk': gewerkKuerzel[typen[o.typId]!.gewerkId] ?? '',
-                'raum': o.raumId,
-                'status': o.status.name,
-                'lage': o.lage,
-                'punkte': [for (final q in o.punkte) [q.x.round(), q.y.round()]],
-                if (o.z != null) 'z': o.z,
-                if (o.zBezug != null) 'z_bezug': o.zBezug!.name,
-              }
+            if (typen[o.typId] != null) _objektFuerApp(store, o, typen[o.typId]!, gewerkKuerzel, hoeheRaum[o.raumId] ?? g.hoehen, ffbVon(o.raumId), produkte),
         ],
-      });
-    }
-  }
-  final einkauf = <Map<String, dynamic>>[];
-  for (final e in einkaufsliste(store.kostenpositionen(), store.produkte(), auchUnterwegs: true).entries) {
-    for (final x in e.value) {
-      einkauf.add({
-        'id': x.position.id,
-        'text': x.position.text,
-        'menge': x.menge,
-        'einheit': x.position.einheit,
-        'haendler': e.key,
-        if (x.angebot?.link != null) 'link': x.angebot!.link,
-        'status': x.position.status.name,
       });
     }
   }
@@ -102,8 +138,95 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
     'gewerke': [for (final g in gewerke) {'kuerzel': g.kuerzel, 'name': g.name, 'farbe': g.farbe}],
     'status': [for (final s in ObjektStatus.values) {'name': s.name, 'label': s.label}],
     'geschosse': geschosse,
-    'einkauf': einkauf,
+    'einkauf': _einkaufFuerApp(store, raumName, gewerkName, produkte),
+    'aufmass': [for (final a in aufmassListe(store)) if (a['status'] == 'offen') a],
+    'aufgaben': [
+      for (final a in store.aufgaben())
+        if (a.status != AufgabenStatus.erledigt)
+          {
+            'id': a.id,
+            'titel': a.titel,
+            if (a.beschreibung.isNotEmpty) 'text': a.beschreibung,
+            if (a.raumId != null) 'raum': a.raumId,
+            if (a.gewerkId != null) 'gewerk': gewerkKuerzel[a.gewerkId],
+            if (a.faellig != null) 'faellig': a.faellig!.toIso8601String(),
+            'status': a.status.name,
+          }
+    ],
   };
+}
+
+Map<String, dynamic> _objektFuerApp(ProjectStore store, Objekt o, Objekttyp t, Map<String, String> gewerkKuerzel, Bezugshoehen h,
+    int ffb, Map<String, Produkt> produkte) {
+  final hoehe = o.z == null ? null : absolut(o.z!, o.zBezug ?? Hoehenbezug.ffb, h) - ffb;
+  final zAbs = o.eigenschaften['z_abs'];
+  final belId = o.eigenschaften['bauelement'] as String?;
+  final bel = belId == null ? null : bauelementLesen?.call(store, belId);
+  final produkt = produkte[o.produktId];
+  return {
+    'id': o.id,
+    'kennung': o.kennung,
+    'typ': t.kuerzel,
+    'name': t.name,
+    'geometrie': t.geometrie.name,
+    'gewerk': gewerkKuerzel[t.gewerkId] ?? '',
+    'raum': o.raumId,
+    'status': o.status.name,
+    'lage': o.lage,
+    'punkte': [for (final q in o.punkte) [q.x.round(), q.y.round()]],
+    if (o.z != null) 'z': o.z,
+    if (o.zBezug != null) 'z_bezug': o.zBezug!.name,
+    if (hoehe != null) 'h': hoehe,
+    if (zAbs is List && zAbs.length == o.punkte.length) 'hs': [for (final z in zAbs) z is num ? z.round() - ffb : null],
+    if (o.punkte.length >= 2) 'laenge': o.laenge.round(),
+    if (produkt != null) 'produkt': [if (produkt.hersteller != null) produkt.hersteller, produkt.name].join(' '),
+    if (bel != null)
+      'geraet': {
+        'name': [if ('${bel['hersteller'] ?? ''}'.isNotEmpty) bel['hersteller'], bel['name']].join(' '),
+        if ('${bel['artikelnummer'] ?? ''}'.isNotEmpty) 'artikel': bel['artikelnummer'],
+        'daten': bel['daten'],
+      },
+    if (o.eigenschaften['kabel'] != null) 'kabel': o.eigenschaften['kabel'],
+    if (o.eigenschaften['stromkreis'] != null) 'stromkreis': o.eigenschaften['stromkreis'],
+  };
+}
+
+/// Einkaufsliste nach Lastenheft: alle offenen Positionen, gruppiert nach
+/// Händler, mit Produktinfo und Händler-Link; auf dem Handy abhakbar.
+List<Map<String, dynamic>> _einkaufFuerApp(ProjectStore store, Map<String, String> raumName, Map<String, String> gewerkName, Map<String, Produkt> produkte) {
+  final einkauf = <Map<String, dynamic>>[];
+  for (final e in einkaufsliste(store.kostenpositionen(), store.produkte(), auchUnterwegs: true).entries) {
+    for (final x in e.value) {
+      final pr = x.produkt;
+      einkauf.add({
+        'id': x.position.id,
+        'quelle': 'kosten',
+        'text': x.position.text,
+        'menge': x.menge,
+        'einheit': x.position.einheit,
+        'haendler': e.key,
+        if (x.angebot?.link != null) 'link': x.angebot!.link,
+        'preis_cent': x.einzelCent,
+        'status': x.position.status.name,
+        if (x.position.raumId != null) 'raum': raumName[x.position.raumId],
+        if (x.position.gewerkId != null) 'gewerk': gewerkName[x.position.gewerkId],
+        if (pr != null)
+          'produkt': {
+            'name': pr.name,
+            if (pr.hersteller != null) 'hersteller': pr.hersteller,
+            if (pr.artikelnummer != null) 'artikel': pr.artikelnummer,
+            if (pr.ean != null) 'ean': pr.ean,
+            'angebote': [
+              for (final a in pr.angebote) {'haendler': a.haendler, if (a.link != null) 'link': a.link, 'preis_cent': a.preisCent, if (a.datum != null) 'datum': a.datum}
+            ],
+          },
+      });
+    }
+  }
+  try {
+    einkauf.addAll(zusatzEinkauf?.call(store) ?? const []);
+  } catch (_) {}
+  return einkauf;
 }
 
 /// Lesekopie schreiben (atomar: erst .tmp, dann umbenennen).
@@ -162,6 +285,10 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
     final x = (e['x'] as num?)?.round(), y = (e['y'] as num?)?.round();
     if (x != null && y != null) store.fotoMarkerAendern(medium, {'x_mm': x, 'y_mm': y});
     if (objektId != null) store.fotoObjektZuordnen(medium, objektId, true);
+    final marken = e['markierungen'];
+    if (marken is List && marken.isNotEmpty) {
+      store.fotoMarkierungenSetzen(medium, [for (final m in marken) if (m is Map) Map<String, dynamic>.from(m)]);
+    }
   }
   switch (art) {
     case 'status':
@@ -183,7 +310,35 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
       store.tagebuchAnlegen(datum: zeit, text: '$titel$wert${text.isEmpty ? '' : ': $text'} – $autor (App)', raeume: [if (raumId != null) raumId]);
     case 'einkauf':
       final id = e['position'] as String?;
-      if (id != null) store.kostenpositionAendern(id, {'status': e['erledigt'] == false ? KostenStatus.geplant.name : KostenStatus.geliefert.name});
+      final element = e['element'] as String?;
+      if (element != null) {
+        // Besorgungsliste: abgehakt = gekauft, Bestand erhöhen (bzw. zurücknehmen)
+        final m = Map<String, dynamic>.from(store.einstellung<Map>('bestand') ?? const {});
+        final menge = (e['menge'] as num?)?.toDouble() ?? 1;
+        final neu = ((m[element] as num?)?.toDouble() ?? 0) + (e['erledigt'] == false ? -menge : menge);
+        if (neu <= 0) {
+          m.remove(element);
+        } else {
+          m[element] = neu;
+        }
+        store.einstellungSetzen('bestand', m);
+        hinweise.add('${e['text'] ?? 'Artikel'} ${e['erledigt'] == false ? 'wieder offen' : 'gekauft'} ($autor)');
+      } else if (id != null) {
+        store.kostenpositionAendern(id, {'status': e['erledigt'] == false ? KostenStatus.geplant.name : KostenStatus.geliefert.name});
+      }
+    case 'aufmass':
+      aufmassAblegen(store, {...e, 'autor': autor, 'zeit': zeit.toIso8601String()});
+      hinweise.add('Aufmaß ${aufmassFeldText('${e['ziel']}', '${e['feld']}')}: ${e['wert']} mm ($autor)');
+    case 'aufgabe':
+      final id = e['aufgabe'] as String?;
+      if (id != null) {
+        if (e['status'] == 'erledigt') {
+          store.aufgabeErledigen(id, am: zeit);
+        } else if (e['status'] != null) {
+          store.aufgabeAendern(id, {'status': e['status']});
+        }
+        if (text.isNotEmpty) store.tagebuchAnlegen(datum: zeit, text: 'Aufgabe: $text – $autor (App)', raeume: [if (raumId != null) raumId]);
+      }
     case 'foto':
       break;
     default:

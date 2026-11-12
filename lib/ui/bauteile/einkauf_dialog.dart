@@ -12,6 +12,8 @@ import '../../core/einkauf.dart';
 import '../../core/fbh.dart';
 import '../../core/oberflaechen.dart';
 import '../bauphysik/oberflaechen_ansicht.dart' show lichteHoeheVon;
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../core/ki.dart';
 import '../../core/pdf_text.dart';
 import '../../data/bauelement_bibliothek.dart';
@@ -444,6 +446,40 @@ List<BedarfZeile> besorgungsliste(AppState s) {
   return l;
 }
 
+/// Händler eines Bibliothekselements (Feld „Händler“), sonst „ohne Händler“.
+String elementHaendler(Bauelement e) {
+  final h = '${e.daten['haendler'] ?? ''}'.trim();
+  return h.isEmpty ? 'ohne Händler' : h;
+}
+
+/// Fehlende Artikel der Besorgungsliste für die App (Einkaufsliste nach Lastenheft).
+List<Map<String, dynamic>> besorgungFuerApp(AppState s) => [
+      for (final r in besorgungsliste(s))
+        if (r.bedarf > r.bestand)
+          {
+            'id': 'b-${r.element.id}',
+            'quelle': 'bedarf',
+            'element': r.element.id,
+            'text': r.element.anzeige,
+            'menge': ((r.bedarf - r.bestand) * 10).ceil() / 10,
+            'einheit': r.einheit,
+            'haendler': elementHaendler(r.element),
+            if ('${r.element.daten['link'] ?? ''}'.isNotEmpty) 'link': r.element.daten['link'],
+            if (r.element.preisCent != null) 'preis_cent': r.element.preisCent,
+            'status': 'geplant',
+            'herkunft': r.herkunft,
+            'kategorie': r.element.kategorie.label,
+            'produkt': {
+              'name': r.element.name,
+              if (r.element.hersteller.isNotEmpty) 'hersteller': r.element.hersteller,
+              if (r.element.artikelnummer.isNotEmpty) 'artikel': r.element.artikelnummer,
+              'bedarf': r.bedarf,
+              'bestand': r.bestand,
+              if (r.element.notiz.isNotEmpty) 'notiz': r.element.notiz,
+            },
+          }
+    ];
+
 /// Besorgungsliste als Dialog mit Speichern als CSV.
 Future<void> besorgungslisteZeigen(BuildContext context, AppState s) async {
   final l = besorgungsliste(s);
@@ -463,7 +499,7 @@ Future<void> besorgungslisteZeigen(BuildContext context, AppState s) async {
   await showDialog<void>(
     context: context,
     builder: (c) => AlertDialog(
-      title: Text('Besorgungsliste (${fehlt.length} fehlen)'),
+      title: Text('Besorgungs- und Einkaufsliste (${fehlt.length} fehlen) – nach Händler'),
       content: SizedBox(
         width: 820,
         height: 520,
@@ -481,23 +517,52 @@ Future<void> besorgungslisteZeigen(BuildContext context, AppState s) async {
                   ]),
                   const Divider(height: 24),
                 ],
-                DataTable(columnSpacing: 18, columns: const [
-                  DataColumn(label: Text('Artikel')),
-                  DataColumn(label: Text('Bedarf'), numeric: true),
-                  DataColumn(label: Text('Bestand'), numeric: true),
-                  DataColumn(label: Text('fehlt'), numeric: true),
-                  DataColumn(label: Text('aus')),
-                ], rows: [
-                  for (final r in l)
-                    DataRow(cells: [
-                      DataCell(Text(r.element.anzeige)),
-                      DataCell(Text('${z(r.bedarf)} ${r.einheit}')),
-                      DataCell(Text(z(r.bestand))),
-                      DataCell(Text(r.bedarf > r.bestand ? z(r.bedarf - r.bestand) : '–',
-                          style: TextStyle(fontWeight: FontWeight.w600, color: r.bedarf > r.bestand ? const Color(0xFFB91C1C) : const Color(0xFF2F9E44)))),
-                      DataCell(Text(r.herkunft, style: const TextStyle(fontSize: 12, color: BsFarben.textLeise))),
-                    ]),
-                ]),
+                for (final h in {for (final r in l) elementHaendler(r.element)}.toList()..sort((x, y) => x == 'ohne Händler' ? 1 : y == 'ohne Händler' ? -1 : x.compareTo(y))) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 2),
+                    child: Text(h, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  ),
+                  DataTable(columnSpacing: 18, headingRowHeight: 32, columns: const [
+                    DataColumn(label: Text('Artikel')),
+                    DataColumn(label: Text('Bedarf'), numeric: true),
+                    DataColumn(label: Text('Bestand'), numeric: true),
+                    DataColumn(label: Text('fehlt'), numeric: true),
+                    DataColumn(label: Text('aus')),
+                    DataColumn(label: Text('')),
+                  ], rows: [
+                    for (final r in l.where((r) => elementHaendler(r.element) == h))
+                      DataRow(cells: [
+                        DataCell(Tooltip(
+                          message: [r.element.kategorie.label, if (r.element.artikelnummer.isNotEmpty) 'Art.-Nr. ${r.element.artikelnummer}', if (r.element.preisCent != null) '${(r.element.preisCent! / 100).toStringAsFixed(2).replaceAll('.', ',')} € netto'].join(' · '),
+                          child: Text(r.element.anzeige),
+                        )),
+                        DataCell(Text('${z(r.bedarf)} ${r.einheit}')),
+                        DataCell(Text(z(r.bestand))),
+                        DataCell(Text(r.bedarf > r.bestand ? z(r.bedarf - r.bestand) : '–',
+                            style: TextStyle(fontWeight: FontWeight.w600, color: r.bedarf > r.bestand ? const Color(0xFFB91C1C) : const Color(0xFF2F9E44)))),
+                        DataCell(Text(r.herkunft, style: const TextStyle(fontSize: 12, color: BsFarben.textLeise))),
+                        DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                          if ('${r.element.daten['link'] ?? ''}'.startsWith('http'))
+                            IconButton(
+                              tooltip: 'Händler-Link öffnen',
+                              onPressed: () => launchUrl(Uri.parse('${r.element.daten['link']}')),
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                            ),
+                          if (r.bedarf > r.bestand)
+                            IconButton(
+                              tooltip: 'Abhaken: gekauft (Bestand erhöhen)',
+                              onPressed: () {
+                                bestandSetzen(store, r.element.id, r.bedarf);
+                                s.geaendert();
+                                Navigator.pop(c);
+                                besorgungslisteZeigen(context, s);
+                              },
+                              icon: const Icon(Icons.check_box_outline_blank, size: 18),
+                            ),
+                        ])),
+                      ]),
+                  ]),
+                ],
                 ]),
               ),
       ),
@@ -508,7 +573,7 @@ Future<void> besorgungslisteZeigen(BuildContext context, AppState s) async {
               : () async {
                   final csv = StringBuffer('Artikel;Hersteller;Artikelnummer;Menge;Einheit\n');
                   for (final r in fehlt) {
-                    csv.writeln('${r.element.name};${r.element.hersteller};${r.element.artikelnummer};${z(r.bedarf - r.bestand)};${r.einheit}');
+                    csv.writeln('${elementHaendler(r.element)};${r.element.name};${r.element.hersteller};${r.element.artikelnummer};${z(r.bedarf - r.bestand)};${r.einheit};${r.element.daten['link'] ?? ''}');
                   }
                   final f = File(p.join(s.store!.ordner, 'exporte', 'Besorgungsliste.csv'));
                   await f.parent.create(recursive: true);
