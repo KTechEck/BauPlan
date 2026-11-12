@@ -371,5 +371,6 @@ Rauchmelder/Brandschutz, fehlende Bibliothek-Einstellungen, Anschlusspositionen,
 - [ ] Aufmaß: Raum diagonal messen, daraus die Winkel bestimmen (Raum ist nicht rechtwinklig).
 - [ ] Aufmaß in der Höhe / in den Wandansichten: Dachschrägen messen, auch ungleiche Schrägen auf beiden Raumseiten,
       Räume mit Schräge UND waagrechter Decke (Kniestock, Schrägenhöhe, Deckenhöhe).
-- [ ] Sparrendecke und Dachsparren aufmessen (Lage, Abstand, Querschnitt), möglichst über das ganze Geschoss – am PC und in der App.
+- [ ] Sparrendecke und Dachsparren aufmessen (Lage, Abstand, Querschnitt) – am PC und in der App. Wahlweise je Raum oder fürs ganze Geschoss.
+      Sparren können über die Außenwand hinausragen (Dachüberstand, über einen Balkon/Terrasse) – Sparren also nicht auf Raumgrenzen beschränken.
 - [ ] In der App auch Steckdosen, Türen und andere Objekte aufmessen (Position ab Ecke, Höhe, Maße) → am PC übernehmen.
