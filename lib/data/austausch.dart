@@ -17,23 +17,16 @@ import 'project_store.dart';
 const planstandDatei = 'planstand/planstand.json';
 const planstandVersion = 1;
 
-/// Ordner für den Austausch mit der App. Vorgabe: der Projektordner. Weil die
-/// iPhone-Dateiauswahl Ordner nur in iCloud Drive (und „Auf meinem iPhone“)
-/// zulässt – OneDrive & Co. sind dort ausgegraut –, lässt sich ein eigener
-/// Austauschordner wählen, z. B. iCloud Drive\BauSpur\Wohnhaus (iCloud für Windows).
-String austauschOrdner(ProjectStore store) {
-  final eigen = store.einstellung<String>('austausch_ordner');
-  return eigen == null || eigen.trim().isEmpty ? store.ordner : eigen;
-}
+/// Netzwerkordner (NAS, Netzwerkrechner) für den Austausch – gesetzt vom
+/// Programm, wenn die Speicherart „Heimnetz“ gewählt und der Ordner erreichbar
+/// ist (siehe AppState). Darin liegt je Projekt ein Unterordner.
+String? netzAustauschBasis;
 
-/// Übliche Lage von iCloud Drive unter Windows (iCloud für Windows), sonst null.
-String? iCloudDriveOrdner() {
-  final home = Platform.environment['USERPROFILE'];
-  if (home == null) return null;
-  for (final kandidat in [p.join(home, 'iCloudDrive'), p.join(home, 'iCloud Drive')]) {
-    if (Directory(kandidat).existsSync()) return kandidat;
-  }
-  return null;
+/// Ordner für den Austausch mit der App: der Projektordner oder, bei
+/// Speicherart „Heimnetz“, `<Netzwerkordner>/<Projektname>`.
+String austauschOrdner(ProjectStore store) {
+  final netz = netzAustauschBasis;
+  return netz == null || netz.isEmpty ? store.ordner : p.join(netz, p.basename(store.ordner));
 }
 
 /// Lesekopie des Projekts für die App.

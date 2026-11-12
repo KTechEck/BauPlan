@@ -35,6 +35,9 @@ class AppSettings {
   /// Darstellung der Geräte im Plan: groesse, text, deckkraft, flaeche, form (siehe Einstellungen).
   Map<String, dynamic> darstellung = {};
 
+  /// Speicher und Abgleich mit der App: art (pc/netz/cloud), Kopplungscode, Netzwerkordner, WebDAV (siehe SpeicherEinstellung).
+  Map<String, dynamic> speicher = {};
+
   static Future<AppSettings> laden() async {
     final dir = await getApplicationSupportDirectory();
     final s = AppSettings._(File(p.join(dir.path, 'einstellungen.json')));
@@ -50,6 +53,7 @@ class AppSettings {
         s.ha = (m['ha'] as Map?)?.cast<String, dynamic>();
         s.hilfeAnzeigen = m['hilfe'] as bool? ?? true;
         s.darstellung = Map<String, dynamic>.from(m['darstellung'] as Map? ?? const {});
+        s.speicher = Map<String, dynamic>.from(m['speicher'] as Map? ?? const {});
       } catch (_) {
         // Beschädigte Datei: mit Standardwerten weiter.
       }
@@ -84,6 +88,7 @@ class AppSettings {
       'ha': ha,
       'hilfe': hilfeAnzeigen,
       'darstellung': darstellung,
+      'speicher': speicher,
     }));
   }
 }

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../app/theme.dart';
 import 'ordner.dart';
 import 'planstand.dart';
+import 'verbindung.dart';
 
 /// BauSpur auf iPhone und iPad (Lastenheft Abschnitt 14): kein zweites
 /// Planungsprogramm, sondern das schnelle Werkzeug für die Baustelle.
@@ -131,7 +132,7 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
     await _abgleichen();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_wartend > 0 ? 'Gespeichert – wird übertragen, sobald der Ordner erreichbar ist.' : 'Gespeichert und übertragen.'),
+        content: Text(_wartend > 0 ? 'Gespeichert – wird übertragen, sobald die Verbindung steht.' : 'Gespeichert und übertragen.'),
         duration: const Duration(seconds: 2),
       ));
     }
@@ -181,7 +182,20 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
     );
   }
 
-  Widget _einrichten() => Scaffold(
+  Widget _einrichten() {
+    final o = widget.ordner;
+    if (o is FernOrdner) return VerbindungSeite(ordner: o, fertig: _laden);
+    return _einrichtenOrdner();
+  }
+
+  Future<void> _verbindungAendern() async {
+    final o = widget.ordner;
+    if (o is! FernOrdner) return _ordnerWaehlen();
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (c) => VerbindungSeite(ordner: o, zurueck: true, fertig: () async => Navigator.of(c).pop())));
+    await _laden();
+  }
+
+  Widget _einrichtenOrdner() => Scaffold(
         appBar: AppBar(title: const Text('BauSpur')),
         body: ListView(padding: const EdgeInsets.all(24), children: [
           const Icon(Icons.folder_open_outlined, size: 64, color: BsFarben.akzent),
@@ -225,9 +239,9 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.folder_outlined),
-          title: Text('Projektordner: ${_ordnerName ?? '–'}'),
+          title: Text('Verbunden mit: ${_ordnerName ?? '–'}'),
           subtitle: Text('Planstand vom ${plan.erstellt == null ? '–' : _datum(plan.erstellt!)}'),
-          trailing: TextButton(onPressed: _ordnerWaehlen, child: const Text('Ändern')),
+          trailing: TextButton(onPressed: _verbindungAendern, child: const Text('Ändern')),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,

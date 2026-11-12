@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'app/version.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
@@ -11,9 +12,10 @@ import 'data/app_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // iPhone/iPad: nur das Baustellen-Werkzeug (Erfassen + Nachschlagen), nicht das ganze Programm
+  // Handy und Tablet (iPhone, iPad, Android): nur das Baustellen-Werkzeug (Erfassen + Nachschlagen), nicht das ganze Programm
   if (Platform.isIOS || Platform.isAndroid) {
-    runApp(MobilApp(ordner: KanalOrdner(), einstellungen: await MobilEinstellungen.laden(), puffer: await Puffer.laden()));
+    final e = await MobilEinstellungen.laden();
+    runApp(MobilApp(ordner: FernOrdner(e, await getApplicationDocumentsDirectory()), einstellungen: e, puffer: await Puffer.laden()));
     return;
   }
   final settings = await AppSettings.laden();

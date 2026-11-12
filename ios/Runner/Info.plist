@@ -70,6 +70,13 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>BauSpur sucht im WLAN den PC bzw. das NAS mit deinem Projekt und gleicht Planstand und Erfassungen ab.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Fotos für die Baudokumentation aufnehmen.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

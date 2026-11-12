@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../app/version.dart';
+import '../core/speicher.dart';
 import '../data/app_settings.dart';
 import '../data/austausch.dart';
 import '../data/bauelement_bibliothek.dart';
@@ -31,7 +33,9 @@ enum Modul {
 /// Zentraler Zustand der Anwendung: offenes Projekt, gewähltes Modul,
 /// gewähltes Geschoss. Widgets hören über ListenableBuilder darauf.
 class AppState extends ChangeNotifier {
-  AppState(this.settings);
+  AppState(this.settings) {
+    if (!_imTest) Timer.run(speicherAnwenden);
+  }
 
   final AppSettings settings;
 
@@ -71,8 +75,90 @@ class AppState extends ChangeNotifier {
       if (st == null) return;
       try {
         planstandSchreiben(st);
+        _planNeu = true;
+        if (speicher.art == 'cloud') abgleichen();
       } catch (_) {}
     });
+  }
+
+  // ---------------------------------------------------------------- Speicher und Abgleich
+
+  SpeicherEinstellung get speicher => SpeicherEinstellung(settings.speicher);
+
+  /// Dienst für die App im Heimnetz (Planstand geben, Erfassungen annehmen).
+  late final PcDienst dienst = PcDienst(
+    ordner: () => store == null ? null : austauschOrdner(store!),
+    code: () => speicher.code,
+    auskunft: () => {'name': Platform.localHostname, 'projekt': store == null ? '' : p.basename(store!.ordner), 'build': bauspurBuild},
+    beiEingang: () => Timer(const Duration(seconds: 1), eingangPruefen),
+  );
+
+  /// Störung beim Abgleich (Netzwerkordner oder Cloud nicht erreichbar), sonst null.
+  String? speicherMeldung;
+  DateTime? letzterAbgleich;
+  bool _planNeu = true, _abgleichLaeuft = false;
+
+  /// Speichereinstellung anwenden: Kopplungscode anlegen, Dienst starten/stoppen, Netzwerkordner prüfen.
+  Future<void> speicherAnwenden() async {
+    if (speicher.code.isEmpty) {
+      settings.speicher = {...settings.speicher, 'code': neuerCode()};
+      settings.speichern();
+    }
+    final s = speicher;
+    if (!s.dienst) {
+      await dienst.stoppen();
+    } else if (!dienst.laeuft || dienst.port != s.port) {
+      await dienst.starten(port: s.port);
+    }
+    _planNeu = true;
+    await abgleichen();
+    notifyListeners();
+  }
+
+  Future<void> _netzPruefen() async {
+    final s = speicher;
+    if (s.art != 'netz' || s.netzPfad.isEmpty) {
+      netzAustauschBasis = null;
+      if (s.art != 'cloud') speicherMeldung = null;
+      return;
+    }
+    var ok = false;
+    try {
+      ok = await Directory(s.netzPfad).exists().timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    netzAustauschBasis = ok ? s.netzPfad : null;
+    speicherMeldung = ok ? null : 'Netzwerkordner nicht erreichbar – bis dahin bleibt alles im Projektordner.';
+  }
+
+  /// Abgleich: Netzwerkordner prüfen, Cloud abgleichen, Erfassungen übernehmen.
+  Future<void> abgleichen() async {
+    if (_abgleichLaeuft) return;
+    _abgleichLaeuft = true;
+    try {
+      final vorher = netzAustauschBasis;
+      await _netzPruefen();
+      final st = store;
+      if (st == null) return;
+      if (netzAustauschBasis != vorher) {
+        try {
+          planstandSchreiben(st);
+        } catch (_) {}
+      }
+      final fern = speicher.fern(p.basename(st.ordner));
+      if (fern != null) {
+        try {
+          await fernAbgleich(fern, austauschOrdner(st), planstandHochladen: _planNeu);
+          _planNeu = false;
+          speicherMeldung = null;
+        } catch (e) {
+          speicherMeldung = 'Cloud-Speicher nicht erreichbar ($e)';
+        }
+      }
+      letzterAbgleich = DateTime.now();
+      if (store == st) eingangPruefen();
+    } finally {
+      _abgleichLaeuft = false;
+    }
   }
 
   /// Neue Erfassungen der App übernehmen (beim Öffnen und alle 30 s).
@@ -93,10 +179,13 @@ class AppState extends ChangeNotifier {
     store = s;
     _eingangTimer?.cancel();
     if (!_imTest) {
-      _eingangTimer = Timer.periodic(const Duration(seconds: 30), (_) => eingangPruefen());
+      _eingangTimer = Timer.periodic(const Duration(seconds: 30), (_) => abgleichen());
       Timer.run(() {
-        eingangPruefen();
-        _planstandVormerken();
+        try {
+          planstandSchreiben(s);
+        } catch (_) {}
+        _planNeu = true;
+        abgleichen();
       });
     }
     settings.merkeProjekt(s.ordner);
@@ -114,6 +203,8 @@ class AppState extends ChangeNotifier {
     if (st != null) {
       try {
         planstandSchreiben(st);
+        final fern = speicher.fern(p.basename(st.ordner));
+        if (fern != null) fernAbgleich(fern, austauschOrdner(st)).catchError((Object _) => 0);
       } catch (_) {}
     }
     store?.schliessen();

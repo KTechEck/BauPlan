@@ -325,3 +325,18 @@ Tim 09.11.: Er wollte NICHT das ganze Programm aufs iPhone. Umgesetzt laut Laste
 - iPhone: lib/mobil/ (ordner.dart: KanalOrdner über nativen Kanal „bauspur/ordner“ in ios/Runner/AppDelegate.swift mit Security-Scoped-Bookmark + NSFileCoordinator,
   Puffer offline, MobilEinstellungen; planstand.dart; mobil_app.dart: Erfassen/Grundriss+Bohr-Check/Einkauf/Mehr). main.dart startet auf iOS nur MobilApp.
 - Swift-Teil ist hier nicht kompilierbar → erster Cloud-Build zeigt, ob er durchläuft. Commit 11ab16f, Push macht Tim (Push von hier wird blockiert).
+
+## Build 9 (12.11. 14:53) – Speicherwege statt iCloud, Logo-Entwürfe
+Tim 12.11.: iCloud-Abgleich hat nie funktioniert → ersetzt durch drei Speicherarten, Automatik, Android-tauglich (kein Apple-Sonderweg).
+- lib/core/speicher.dart: Speicher (OrdnerSpeicher, WebDavSpeicher, UnterSpeicher, PcSpeicher), PcDienst (HTTP-Dienst in BauSpur, Port 47824,
+  Kopplungscode im Kopf x-bauspur-code; /bauspur ohne Code, /pruefen, /datei/…, /liste/…; nur planstand/ lesbar, nur eingang/ beschreibbar),
+  pcSuchen (fragt x.y.z.1–254 per TCP an – ohne Rundruf, daher auf iOS ohne Multicast-Freigabe), fernAbgleich (Cloud), SpeicherEinstellung.
+- PC: AppSettings.speicher (art pc/netz/cloud, code, netz_pfad, url/benutzer/passwort, dienst, port); AppState.speicherAnwenden/abgleichen/dienst;
+  austausch.dart: netzAustauschBasis (Netzwerkordner/<Projekt>), iCloud-Teil entfernt; Einstellungen › Speicher und Abgleich (lib/ui/speicher_einstellungen.dart).
+- App: lib/mobil/ordner.dart FernOrdner (PC oder WebDAV, findet den PC bei neuer Adresse selbst wieder, Kopie des Planstands auf dem Gerät),
+  lib/mobil/verbindung.dart (Suche, Code, Erweitert). main.dart nutzt FernOrdner auf iOS und Android; KanalOrdner/Swift-Kanal bleiben ungenutzt liegen.
+  Info.plist: NSLocalNetworkUsageDescription, NSAllowsLocalNetworking.
+- 207 Tests grün (test/speicher_test.dart mit Test-WebDAV-Server), Bilder: test/speicher_bild_test.dart (BAUSPUR_BILD).
+- Im echten Build geprüft: Dienst antwortet auf allen Adressen des PCs, ohne Code 401, mit Code 200. Windows-Firewall-Regel für bauspur.exe fehlt noch (Tim muss zulassen).
+- OFFEN: Logo – Tim wählt aus Entwürfen A–D (Thread), dann Symbole für Windows (.ico) und iOS (AppIcon) erzeugen. Android-Ordner (flutter create --platforms=android) noch nicht angelegt.
+  OneDrive/iCloud als Cloud gehen nicht (kein WebDAV); bei Bedarf eigener Weg über Microsoft Graph. NAS-Weg ungetestet (kein NAS vorhanden).
