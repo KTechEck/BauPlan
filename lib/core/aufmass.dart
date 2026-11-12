@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import '../data/models.dart';
 import '../data/project_store.dart';
+import 'height.dart';
 import 'ids.dart';
 import 'raumerkennung.dart';
+import 'sparren.dart';
 import 'wandmasse.dart';
 
 /// Aufmaß: Am PC wird grob gezeichnet, auf der Baustelle misst man mit dem
@@ -103,6 +106,14 @@ String aufmassFeldText(String ziel, String feld) => switch ((ziel, feld)) {
       ('raum', 'hoehe') => 'lichte Raumhöhe',
       ('bemassung', _) => 'Bemaßung',
       ('raumseite', _) => 'Raumlänge an der Wand',
+      ('diagonale', _) => 'Diagonale (Winkel)',
+      ('sparren', 'neu') => 'Neues Sparrenfeld',
+      ('sparren', _) => 'Sparren: ${feld.startsWith('pos_') ? 'Lage Sparren ${int.parse(feld.substring(4)) + 1}' : sparrenFelder[feld] ?? feld}',
+      ('schraege', 'kniestock') => 'Dachschräge: Kniestock',
+      ('schraege', 'tiefe') => 'Dachschräge: Tiefe bis waagrechte Decke',
+      ('schraege', 'decke') => 'Dachschräge: Höhe waagrechte Decke',
+      ('objekt', 'h') => 'Höhe Gerät über FFB',
+      ('objekt', 'x') => 'Gerät ab Wandecke',
       _ => feld,
     };
 
@@ -129,6 +140,9 @@ void aufmassAblegen(ProjectStore store, Map<String, dynamic> e) {
     if (e['text'] != null) 'text': e['text'],
     if (e['von'] != null) 'von': e['von'],
     if (e['bis'] != null) 'bis': e['bis'],
+    if (e['wand'] != null) 'wand': e['wand'],
+    if (e['ecken'] != null) 'ecken': e['ecken'],
+    if (e['feld_json'] != null) 'feld_json': e['feld_json'],
     'autor': e['autor'] ?? 'App',
     'zeit': e['zeit'] ?? DateTime.now().toIso8601String(),
     'status': 'offen',
@@ -201,6 +215,114 @@ double? aufmassPlanwert(ProjectStore store, Map<String, dynamic> a) {
     case 'raumseite':
       final st = _raumStueck(store, a);
       return st == null ? null : st.$3 - st.$2;
+    case 'objekt':
+      return _objektMass(store, a)?.wert;
+    case 'diagonale':
+      final d = _diagonale(store, a);
+      return d == null ? null : (d.p[d.i] - d.p[d.j]).laenge;
+    case 'sparren':
+      if (feld == 'neu') return 0;
+      final f = _sparrenfeld(store, id);
+      if (f == null) return null;
+      if (feld.startsWith('pos_')) {
+        final i = int.tryParse(feld.substring(4)) ?? 0;
+        return i < f.$1.lagen.length ? f.$1.lagen[i] : 0;
+      }
+      return (f.$1.toJson()[feld] as num?)?.toDouble();
+    case 'schraege':
+      final r = _raum(store, id);
+      if (r == null) return null;
+      final v = (raumSchraegen(r.$1)['${a['wand']}|${a['seite']}'] ?? const {})[feld];
+      return (v as num?)?.toDouble() ?? 0;
+  }
+  return null;
+}
+
+(Sparrenfeld, String)? _sparrenfeld(ProjectStore store, String id) {
+  for (final geb in store.gebaeude()) {
+    for (final g in store.geschosse(geb.id)) {
+      final f = sparrenfelder(store, g.id).where((x) => x.id == id).firstOrNull;
+      if (f != null) return (f, g.id);
+    }
+  }
+  return null;
+}
+
+(Raum, Geschoss)? _raum(ProjectStore store, String id) {
+  for (final geb in store.gebaeude()) {
+    for (final g in store.geschosse(geb.id)) {
+      final r = store.raeume(g.id).where((x) => x.id == id).firstOrNull;
+      if (r != null) return (r, g);
+    }
+  }
+  return null;
+}
+
+/// Dachschrägen eines Raums je Wandseite („wandId|l/r“ → kniestock, tiefe,
+/// decke in mm über FFB bzw. waagrecht ab Wand). Ungleiche Schrägen auf beiden
+/// Seiten und Schräge mit waagrechter Decke gehen damit.
+Map<String, Map<String, dynamic>> raumSchraegen(Raum r) => {
+      for (final e in (r.eigenschaften['schraegen'] as Map? ?? const {}).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map),
+    };
+
+/// Ecke B zwischen den Diagonal-Enden A (i) und C (j) im Raumumriss.
+({List<Punkt> p, int i, int j, int b, String g})? _diagonale(ProjectStore store, Map<String, dynamic> a) {
+  final e = a['ecken'];
+  if (e is! List || e.length != 2) return null;
+  for (final geb in store.gebaeude()) {
+    for (final g in store.geschosse(geb.id)) {
+      final r = store.raeume(g.id).where((x) => x.id == a['id_ziel']).firstOrNull;
+      final u = r?.umriss;
+      if (u == null || u.length < 4) continue;
+      final i = (e[0] as num).toInt(), j = (e[1] as num).toInt();
+      final n = u.length;
+      if (i >= n || j >= n) return null;
+      final b = (i + 1) % n == (j - 1 + n) % n ? (i + 1) % n : ((j + 1) % n == (i - 1 + n) % n ? (j + 1) % n : -1);
+      if (b < 0) return null;
+      return (p: u, i: i, j: j, b: b, g: g.id);
+    }
+  }
+  return null;
+}
+
+/// Winkel an Ecke B aus den Seiten AB, BC und der gemessenen Diagonale (Kosinussatz).
+double? diagonalWinkel(double ab, double bc, double diagonale) {
+  final c = (ab * ab + bc * bc - diagonale * diagonale) / (2 * ab * bc);
+  if (c.abs() > 1) return null;
+  return math.acos(c) * 180 / math.pi;
+}
+
+/// Erklärender Text für den Dialog: welcher Winkel sich aus der Diagonale ergibt.
+String? diagonaleText(ProjectStore store, Map<String, dynamic> a) {
+  final d = _diagonale(store, a);
+  final w = (a['wert'] as num?)?.toDouble();
+  if (d == null || w == null) return null;
+  final x = diagonalWinkel((d.p[d.i] - d.p[d.b]).laenge, (d.p[d.j] - d.p[d.b]).laenge, w);
+  return x == null ? 'Diagonale passt nicht zu den Seitenlängen' : 'Winkel an der Ecke ${x.toStringAsFixed(1).replaceAll('.', ',')}°';
+}
+
+/// Aktuelle Lage eines Geräts: Höhe über FFB oder Abstand ab Wandecke (Wandseite wie in der App).
+({double wert, Objekt o, Wand? w, double ux, double uy, double s})? _objektMass(ProjectStore store, Map<String, dynamic> a) {
+  for (final geb in store.gebaeude()) {
+    for (final g in store.geschosse(geb.id)) {
+      final o = store.objekte(g.id).where((x) => x.id == a['id_ziel']).firstOrNull;
+      if (o == null || o.punkte.isEmpty) continue;
+      final raum = store.raeume(g.id).where((r) => r.id == o.raumId).firstOrNull;
+      final h = raum?.hoehen(g) ?? g.hoehen;
+      if (a['feld'] == 'h') {
+        if (o.z == null) return (wert: 0, o: o, w: null, ux: 0, uy: 0, s: 0);
+        return (wert: (absolut(o.z!, o.zBezug ?? Hoehenbezug.ffb, h) - h.ffb).toDouble(), o: o, w: null, ux: 0, uy: 0, s: 0);
+      }
+      final w = store.waende(g.id).where((x) => x.id == a['wand']).firstOrNull;
+      if (w == null) return null;
+      final m = wandMasse(store.waende(g.id), const [], verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true)[w.id]!;
+      final l = math.max(1.0, w.laenge);
+      final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+      final t = (o.punkte.first.x - w.x1) * ux + (o.punkte.first.y - w.y1) * uy;
+      final links = a['seite'] == 'l';
+      final x = links ? m.grenzen.linksB - t : t - m.grenzen.rechtsA;
+      return (wert: x, o: o, w: w, ux: ux, uy: uy, s: links ? -1.0 : 1.0);
+    }
   }
   return null;
 }
@@ -231,7 +353,9 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
   final id = a['id_ziel'] as String?;
   final feld = a['feld'] as String? ?? '';
   final wert = (a['wert'] as num?)?.round();
-  if (id == null || wert == null || wert <= 0) return 'Kein gültiger Wert.';
+  if (id == null || wert == null || wert < 0 || (wert == 0 && !(a['ziel'] == 'sparren' && (feld == 'neu' || feld.startsWith('pos_') || feld == 'erster')))) {
+    return 'Kein gültiger Wert.';
+  }
   final plan = aufmassPlanwert(store, a);
   if (plan == null) return 'Das Bauteil gibt es im Plan nicht mehr.';
   switch (a['ziel']) {
@@ -297,6 +421,68 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
       final ok = store.bemassungAendern(b, wert) != null;
       store.bemassungLoeschen(b);
       if (!ok) return 'Raumlänge ließ sich nicht setzen (Wand gesperrt?).';
+    case 'sparren':
+      if (feld == 'neu') {
+        final j = a['feld_json'];
+        final g = a['geschoss'] as String?;
+        if (j is! Map || g == null) return 'Sparrenfeld unvollständig.';
+        final l = sparrenfelder(store, g)..removeWhere((x) => x.id == id);
+        sparrenfelderSetzen(store, g, [...l, Sparrenfeld.ausJson({...j, 'id': id})]);
+      } else {
+        final f = _sparrenfeld(store, id);
+        if (f == null) return 'Sparrenfeld fehlt – zuerst „Neues Sparrenfeld“ übernehmen.';
+        sparrenfelderSetzen(store, f.$2, [for (final x in sparrenfelder(store, f.$2)) x.id == id ? x.mitWert(feld, wert) : x]);
+      }
+    case 'schraege':
+      final r = _raum(store, id);
+      if (r == null) return 'Raum nicht gefunden.';
+      final m = raumSchraegen(r.$1);
+      (m['${a['wand']}|${a['seite']}'] ??= {})[feld] = wert;
+      store.raumEigenschaftenSetzen(id, {...r.$1.eigenschaften, 'schraegen': m});
+    case 'diagonale':
+      final d = _diagonale(store, a);
+      if (d == null) return 'Raumecken nicht gefunden (Raum geändert?).';
+      final winkel = diagonalWinkel((d.p[d.i] - d.p[d.b]).laenge, (d.p[d.j] - d.p[d.b]).laenge, wert.toDouble());
+      if (winkel == null) return 'Die Diagonale passt nicht zu den Seitenlängen – erst die Wandlängen übernehmen.';
+      // Wände an Ecke B: die, deren Achse den Seitenmitten AB und BC am nächsten liegt
+      final waende = store.waende(d.g);
+      Wand? naechste(Punkt q) {
+        Wand? best;
+        var bd = double.infinity;
+        for (final w in waende) {
+          final dx = (w.x2 - w.x1).toDouble(), dy = (w.y2 - w.y1).toDouble();
+          final l2 = dx * dx + dy * dy;
+          if (l2 < 1) continue;
+          final t = (((q.x - w.x1) * dx + (q.y - w.y1) * dy) / l2).clamp(0.0, 1.0);
+          final ex = w.x1 + dx * t - q.x, ey = w.y1 + dy * t - q.y;
+          final dd = math.sqrt(ex * ex + ey * ey);
+          if (dd < bd) {
+            bd = dd;
+            best = w;
+          }
+        }
+        return best;
+      }
+
+      Punkt mitte(Punkt p, Punkt q) => Punkt((p.x + q.x) / 2, (p.y + q.y) / 2);
+      final w1 = naechste(mitte(d.p[d.i], d.p[d.b])), w2 = naechste(mitte(d.p[d.j], d.p[d.b]));
+      if (w1 == null || w2 == null || w1.id == w2.id) return 'Wände an der Ecke nicht gefunden.';
+      final m = store.winkelmassAnlegen(d.g, w1.id, w2.id);
+      if (store.winkelAendern(m, winkel) == null) {
+        store.winkelmassLoeschen(m);
+        return 'Winkel ließ sich nicht setzen (Wände gesperrt?).';
+      }
+    case 'objekt':
+      final om = _objektMass(store, a);
+      if (om == null) return 'Gerät oder Wand nicht gefunden.';
+      if (feld == 'h') {
+        store.objektAendern(id, {'z_mm': wert, 'z_bezug': Hoehenbezug.ffb.name});
+      } else {
+        // entlang der Wand verschieben (x der Ansicht läuft auf Seite l gegen die Zeichenrichtung)
+        final d = (wert - om.wert) * om.s;
+        final q = om.o.punkte.first;
+        store.objektAendern(id, {'geometrie': jsonEncode([[(q.x + om.ux * d).round(), (q.y + om.uy * d).round()]])});
+      }
     default:
       return 'Unbekanntes Ziel.';
   }

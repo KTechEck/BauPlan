@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:bauspur/app/qr_bild.dart';
 import 'package:bauspur/core/aufmass.dart';
 import 'package:bauspur/core/brandschutz.dart';
+import 'package:bauspur/core/height.dart';
+import 'package:bauspur/core/sparren.dart';
 import 'package:bauspur/core/ki.dart';
 import 'package:bauspur/data/austausch.dart';
 import 'package:bauspur/data/project_store.dart';
@@ -95,6 +97,58 @@ void main() {
     expect(aufmassAnwenden(store, a), isNull);
     final zwischen = store.waende(g).firstWhere((w) => w.dicke == 100);
     expect(zwischen.x1, closeTo(2800, 2)); // Zwischenwand 20 cm nach links
+    store.schliessen();
+    tmp.deleteSync(recursive: true);
+  });
+
+  test('Gerät aufmessen: Höhe und Abstand ab Ecke übernehmen', () {
+    final (store, g, tmp) = _projekt();
+    final w = store.waende(g).first; // (0,0) → (4000,0), Raum unten = rechte Seite
+    final sd = store.objekttypen().firstWhere((t) => t.kuerzel == 'SD');
+    final id = store.objektAnlegen(geschossId: g, typ: sd, punkte: [punktAus([1000, 150])], z: 300, zBezug: Hoehenbezug.ffb);
+    final pw = ((planstandErzeugen(store)['geschosse'] as List).first['waende'] as List).first as Map;
+    final seite = pw['rr'] != null ? 'r' : 'l';
+    for (final (feld, wert) in [('h', 1050), ('x', 1000)]) {
+      final a = {'nr': feld, 'ziel': 'objekt', 'id_ziel': id, 'feld': feld, 'wert': wert, 'seite': seite, 'wand': w.id, 'geschoss': g, 'status': 'offen'};
+      store.einstellungSetzen('aufmass', [a]);
+      expect(aufmassAnwenden(store, a), isNull);
+      expect(aufmassPlanwert(store, a), closeTo(wert, 1));
+    }
+    expect(store.objekte(g).single.z, 1050);
+    store.schliessen();
+    tmp.deleteSync(recursive: true);
+  });
+
+  test('Diagonale: Winkel an der Ecke wird gesetzt', () {
+    final (store, g, tmp) = _projekt();
+    final raum = store.raeume(g).single;
+    final a = {'nr': 'd', 'ziel': 'diagonale', 'id_ziel': raum.id, 'feld': 'diag_0_2', 'wert': 4750, 'ecken': [0, 2], 'geschoss': g, 'status': 'offen'};
+    store.einstellungSetzen('aufmass', [a]);
+    expect(aufmassPlanwert(store, a), closeTo(4664, 2));
+    expect(diagonaleText(store, a), contains('°'));
+    expect(aufmassAnwenden(store, a), isNull);
+    expect(store.winkelmasse(g).length, 1);
+    store.schliessen();
+    tmp.deleteSync(recursive: true);
+  });
+
+  test('Sparren: Feld aus der App anlegen, Achsabstand und Einzellage übernehmen, Überstand', () {
+    final (store, g, tmp) = _projekt();
+    final w = store.waende(g).first;
+    final f = sparrenfeldAnWand(w, links: false, laenge: 5200); // ragt 2 m über die Wand hinaus
+    final neu = {'nr': 'n', 'ziel': 'sparren', 'id_ziel': f.id, 'feld': 'neu', 'wert': 0, 'feld_json': f.toJson(), 'geschoss': g, 'status': 'offen', 'zeit': '1'};
+    final e = {'nr': 'e', 'ziel': 'sparren', 'id_ziel': f.id, 'feld': 'achsabstand', 'wert': 800, 'geschoss': g, 'status': 'offen', 'zeit': '2'};
+    final p = {'nr': 'p', 'ziel': 'sparren', 'id_ziel': f.id, 'feld': 'pos_1', 'wert': 900, 'geschoss': g, 'status': 'offen', 'zeit': '3'};
+    store.einstellungSetzen('aufmass', [neu, e, p]);
+    for (final a in [neu, e, p]) {
+      expect(aufmassAnwenden(store, a), isNull);
+    }
+    final x = sparrenfelder(store, g).single;
+    expect(x.achsabstand, 800);
+    expect(x.lagen[1], 900);
+    expect(x.laenge, 5200);
+    final pl = planstandErzeugen(store);
+    expect(((pl['geschosse'] as List).first['sparren'] as List).length, 1);
     store.schliessen();
     tmp.deleteSync(recursive: true);
   });

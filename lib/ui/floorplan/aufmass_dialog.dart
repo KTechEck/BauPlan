@@ -85,6 +85,7 @@ class _AufmassDialogState extends State<_AufmassDialog> {
                             if (plan != null) 'Plan ${mmText(plan)} mm',
                             if (diff != null) 'Δ ${diff >= 0 ? '+' : ''}${mmText(diff)} mm',
                             '${a['autor']}, ${_datum('${a['zeit']}')}',
+                            if (a['ziel'] == 'diagonale' && diagonaleText(store, a) != null) diagonaleText(store, a)!,
                             if (a['text'] != null) '„${a['text']}“',
                           ].join(' · ')),
                           trailing: a['status'] != 'offen'
@@ -110,7 +111,8 @@ class _AufmassDialogState extends State<_AufmassDialog> {
         if (offen.isNotEmpty)
           OutlinedButton(
             onPressed: () {
-              for (final a in offen) {
+              // in Reihenfolge der Messung (neues Sparrenfeld vor seinen Maßen)
+              for (final a in [...offen]..sort((x, y) => '${x['zeit']}'.compareTo('${y['zeit']}'))) {
                 final f = aufmassAnwenden(store, a);
                 if (f != null) zeigeFehler(context, '${_zielText(a)}: $f');
               }

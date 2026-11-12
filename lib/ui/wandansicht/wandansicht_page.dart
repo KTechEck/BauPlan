@@ -10,6 +10,7 @@ import '../../app/theme.dart';
 import '../../core/height.dart';
 import '../../core/raumerkennung.dart';
 import '../../core/anschluesse.dart';
+import '../../core/aufmass.dart' show raumSchraegen;
 import '../../core/geraeteanschluesse.dart';
 import '../../core/leitungsnetz.dart';
 import '../../core/verteiler.dart';
@@ -546,12 +547,32 @@ class _WandansichtPageState extends State<WandansichtPage> {
     if (store == null) return null;
     final gid = _seite.wand.geschossId;
     final dach = dachLesen(store, gid);
-    if (!dach.aktiv) return null;
-    final g = gebaeuderahmen(store.waende(gid));
-    if (g == null) return null;
+    final g = dach.aktiv ? gebaeuderahmen(store.waende(gid)) : null;
+    // im Raum aufgemessene Dachschrägen (je Wandseite Kniestock, Tiefe, waagrechte Decke)
+    final raum = _seite.raum;
+    final schraegen = <(WandSeite, double, double, double)>[];
+    if (raum != null) {
+      final waende = store.waende(gid), raeume = store.raeume(gid);
+      final verb = store.einstellung<bool>('ecken_verbinden') ?? true;
+      for (final e in raumSchraegen(raum).entries) {
+        final t = e.key.split('|');
+        final w = waende.where((x) => x.id == t[0]).firstOrNull;
+        final knie = (e.value['kniestock'] as num?)?.toDouble() ?? 0, tiefe = (e.value['tiefe'] as num?)?.toDouble() ?? 0;
+        if (w == null || t.length < 2 || knie <= 0 || tiefe <= 0) continue;
+        schraegen.add((WandSeite.berechnen(w, waende, raeume, verb, t[1] == 'l'), knie, tiefe, (e.value['decke'] as num?)?.toDouble() ?? 99999));
+      }
+    }
+    if (g == null && schraegen.isEmpty) return null;
     return (x) {
       final w = _seite.welt(x) + _seite.normale * 5;
-      return dachHoehe(dach, g, Punkt(w.dx, w.dy));
+      double? z = g == null ? null : dachHoehe(dach, g, Punkt(w.dx, w.dy));
+      for (final (seite, knie, tiefe, decke) in schraegen) {
+        final d = seite.vor(w);
+        if (d < -50) continue;
+        final zz = d >= tiefe ? decke : knie + (decke - knie).clamp(0, 99999) * (d.clamp(0, tiefe) / tiefe);
+        z = z == null ? zz.toDouble() : math.min(z, zz.toDouble());
+      }
+      return z;
     };
   }
 

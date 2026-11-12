@@ -14,6 +14,7 @@ import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/aufmass.dart';
 import '../../core/brandschutz.dart';
+import '../../core/sparren.dart';
 import '../../core/dach.dart' show wohnflaeche;
 import '../../core/dxf.dart';
 import '../../core/raumerkennung.dart';
@@ -31,6 +32,7 @@ import '../../core/bauelemente.dart';
 import '../bauteile/bauelement_wahl.dart';
 import '../widgets.dart';
 import 'aufmass_dialog.dart';
+import 'sparren_dialog.dart';
 import 'dach_dialog.dart';
 import 'geschoss_3d.dart';
 import 'einbaudetail_page.dart';
@@ -3572,6 +3574,12 @@ class _FloorplanPageState extends State<FloorplanPage> {
         const SizedBox(height: 12),
         ..._laengeAendern(w, plan),
         _aufmassZeile(w.id),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => sparrenDialogZeigen(context, _s, w.geschossId, wand: w),
+          icon: const Icon(Icons.roofing, size: 18),
+          label: Text('Sparren … (${sparrenfelder(store, w.geschossId).length} Felder im Geschoss)'),
+        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey('fw-${w.id}-${wandFeuerwiderstand(store)[w.id]}'),

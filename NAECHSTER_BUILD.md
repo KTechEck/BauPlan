@@ -367,10 +367,19 @@ Rauchmelder/Brandschutz, fehlende Bibliothek-Einstellungen, Anschlusspositionen,
 - Pakete neu: qr, mobile_scanner, url_launcher. 217 Tests grün; Bilder: test/mobil_bild_test.dart, test/pc_bild_test.dart (BAUSPUR_BILD).
 - Hinweis Sichtprüfung: Bildschirm war bei Tims Abwesenheit eingefroren (Uhr stand), Fensterfotos blieben weiß; Start über den Dienst geprüft (/bauspur meldet Build 11).
 
-## Gesammelt für Build 12 (Tim 12.11. 21:55 – nicht sofort umsetzen)
-- [ ] Aufmaß: Raum diagonal messen, daraus die Winkel bestimmen (Raum ist nicht rechtwinklig).
-- [ ] Aufmaß in der Höhe / in den Wandansichten: Dachschrägen messen, auch ungleiche Schrägen auf beiden Raumseiten,
+## Build 12 (12.11. 22:14) – Aufmaß erweitert (alle vier Punkte erledigt)
+- [x] Aufmaß: Raum diagonal messen, daraus die Winkel bestimmen (Raum ist nicht rechtwinklig).
+- [x] Aufmaß in der Höhe / in den Wandansichten: Dachschrägen messen, auch ungleiche Schrägen auf beiden Raumseiten,
       Räume mit Schräge UND waagrechter Decke (Kniestock, Schrägenhöhe, Deckenhöhe).
-- [ ] Sparrendecke und Dachsparren aufmessen (Lage, Abstand, Querschnitt) – am PC und in der App. Wahlweise je Raum oder fürs ganze Geschoss.
+- [x] Sparrendecke und Dachsparren aufmessen (Lage, Abstand, Querschnitt) – am PC und in der App. Wahlweise je Raum oder fürs ganze Geschoss.
       Sparren können über die Außenwand hinausragen (Dachüberstand, über einen Balkon/Terrasse) – Sparren also nicht auf Raumgrenzen beschränken.
-- [ ] In der App auch Steckdosen, Türen und andere Objekte aufmessen (Position ab Ecke, Höhe, Maße) → am PC übernehmen.
+- [x] In der App auch Steckdosen, Türen und andere Objekte aufmessen (Position ab Ecke, Höhe, Maße) → am PC übernehmen.
+- Umsetzung: aufmass.dart neue Ziele objekt (h, x ab Ecke über Wand+Seite), diagonale (Ecken i/j, Winkel per Kosinussatz → Winkelmaß
+  wird angelegt und gesetzt), schraege (raum.eigenschaften['schraegen'] „wandId|l/r“ → kniestock, tiefe, decke; bezug = Wand-ID),
+  sparren (lib/core/sparren.dart: Sparrenfeld mit Bezugslinie, Seite, Länge inkl. Überstand, Achsabstand, erster, Querschnitt, Neigung,
+  Einzellagen pos_i; Einstellung sparren_<geschossId>; feld 'neu' legt das Feld aus der App an). „Alle übernehmen“ geht in Messreihenfolge.
+- PC: Wand-Eigenschaften › „Sparren …“ (lib/ui/floorplan/sparren_dialog.dart, Vorschau), PC-Wandansicht zeigt aufgemessene Schrägen über den Dach-Hook.
+- App: Wandansicht › Gerät antippen › aufmessen; „Dachschräge messen“ mit Profil; Raum-Aufmaß mit Diagonalen (Ecken A, B, C im Plan);
+  Plan › „Sparren“ bzw. Wand › „Sparren ganzes Geschoss / nur Raum“ (lib/mobil/seiten/sparren.dart), Sparren im Plan braun.
+- Offen/Ideen: Sparren im PC-Grundriss selbst zeichnen (bisher nur Vorschau im Dialog), Dachschrägen in Heizlast/Wohnfläche einrechnen.
+- 220 Tests grün.

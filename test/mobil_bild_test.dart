@@ -99,6 +99,17 @@ void main() {
     final raum = Planstand.liste(plan.geschosse.first['raeume']).first;
     await tester.pumpWidget(_app(RaumAufmassSeite(k: k, geschoss: plan.geschosse.first, raum: raum)));
     await _foto(tester, 'app_raum');
+    // Dachschräge an der linken Außenwand des Wohnzimmers, Ansicht der oberen Wand (Giebelseite)
+    final links = Planstand.liste(plan.geschosse.first['waende']).firstWhere((w) => (w['a'] as List)[0] == 0 && (w['b'] as List)[0] == 0);
+    final wz = (links['rl'] ?? links['rr']) as String;
+    final sl = links['rl'] == wz ? 'l' : 'r';
+    final jetzt = DateTime.now().toUtc().toIso8601String();
+    for (final (f, v) in [('kniestock', 900), ('tiefe', 1800), ('decke', 2400)]) {
+      ein.aufmass['$wz|$f|$sl|${links['id']}'] = {'wert': v, 'zeit': jetzt};
+    }
+    final oben = Planstand.liste(plan.geschosse.first['waende']).first;
+    await tester.pumpWidget(_app(WandansichtSeite(k: k, geschoss: plan.geschosse.first, wand: oben, links: oben['rl'] == wz)));
+    await _foto(tester, 'app_schraege');
     await tester.pumpWidget(_app(Scaffold(body: EinkaufSeite(k: k))));
     await _foto(tester, 'app_einkauf');
     ein.raum = raum['id'] as String;

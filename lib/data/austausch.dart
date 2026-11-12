@@ -7,6 +7,7 @@ import '../core/auswertung.dart';
 import '../core/aufmass.dart';
 import '../core/brandschutz.dart';
 import '../core/height.dart';
+import '../core/sparren.dart';
 import '../core/raumerkennung.dart';
 import 'models.dart';
 import 'project_store.dart';
@@ -117,8 +118,12 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
               if (r.flaeche != null) 'flaeche': r.flaeche!.round(),
               'hoehe': ((r.ukDecke ?? hoeheRaum[r.id]!.rohdecke) - hoeheRaum[r.id]!.ffb),
               'art': r.art.name,
+              if (r.eigenschaften['schraegen'] != null) 'schraegen': r.eigenschaften['schraegen'],
               if (gemessen[r.id] != null) 'gemessen': gemessen[r.id],
             }
+        ],
+        'sparren': [
+          for (final f in sparrenfelder(store, g.id)) {...f.toJson(), if (gemessen[f.id] != null) 'gemessen': gemessen[f.id]}
         ],
         'bemassungen': [
           for (final b in store.bemassungen(g.id))

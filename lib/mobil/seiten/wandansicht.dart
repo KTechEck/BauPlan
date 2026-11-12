@@ -90,6 +90,93 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
     return aus;
   }
 
+  /// Dachschrägen des Raums (vom PC übernommen oder hier gemessen).
+  List<({AppWandSeite seite, double knie, double tiefe, double decke})> _schraegen() {
+    final raum = k.plan.raum(_seite.raumId);
+    if (raum == null) return const [];
+    final r = raum.$1;
+    final vomPc = Map<String, dynamic>.from(r['schraegen'] as Map? ?? const {});
+    final schluessel = <String>{...vomPc.keys};
+    for (final a in k.einstellungen.aufmass.keys) {
+      final t = a.split('|'); // id|feld|seite|bezug
+      if (t.length == 4 && t[0] == r['id'] && const {'kniestock', 'tiefe', 'decke'}.contains(t[1])) schluessel.add('${t[3]}|${t[2]}');
+    }
+    final aus = <({AppWandSeite seite, double knie, double tiefe, double decke})>[];
+    for (final key in schluessel) {
+      final t = key.split('|');
+      final w = Planstand.liste(widget.geschoss['waende']).where((x) => x['id'] == t[0]).firstOrNull;
+      if (w == null || t.length < 2) continue;
+      double wert(String f) {
+        final g = k.gemessen(r, f, seite: t[1], bezug: t[0]);
+        return (g?.wert ?? ((vomPc[key] as Map?)?[f] as num?) ?? 0).toDouble();
+      }
+
+      final knie = wert('kniestock'), tiefe = wert('tiefe'), decke = wert('decke');
+      if (knie > 0 && tiefe > 0) aus.add((seite: AppWandSeite(w, t[1] == 'l'), knie: knie, tiefe: tiefe, decke: decke > 0 ? decke : 99999));
+    }
+    return aus;
+  }
+
+  /// Oberkante der Wand an Stelle x (Dachschrägen berücksichtigt).
+  List<double> _profil(double hoehe, int n) {
+    final s = _seite;
+    final sch = _schraegen();
+    return [
+      for (var i = 0; i <= n; i++)
+        () {
+          final p = s.ursprung + s.richtung * (s.laenge * i / n) + s.nl * (s.s * 5);
+          var z = hoehe;
+          for (final q in sch) {
+            final d = q.seite.vor(p);
+            if (d < -50) continue;
+            final zz = d >= q.tiefe ? q.decke : q.knie + (q.decke - q.knie).clamp(0, 99999) * (d.clamp(0, q.tiefe) / q.tiefe);
+            if (zz < z) z = zz.toDouble();
+          }
+          return z;
+        }(),
+    ];
+  }
+
+  void _schraegeMessen(BuildContext context) {
+    final raum = k.plan.raum(_seite.raumId);
+    if (raum == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Diese Wandseite liegt in keinem Raum.')));
+      return;
+    }
+    final r = raum.$1;
+    final key = '${widget.wand['id']}|${_seite.seiteKurz}';
+    final vomPc = (r['schraegen'] as Map?)?[key] as Map?;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('Dachschräge an dieser Wand: Kniestock (Wandhöhe bis Schrägenbeginn), waagrechte Tiefe von der Wand bis zur waagrechten Decke, '
+                'Höhe der waagrechten Decke. Für jede Raumseite einzeln – ungleiche Schrägen sind kein Problem.', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          ),
+          for (final (f, t) in const [('kniestock', 'Kniestock (Höhe über FFB)'), ('tiefe', 'Tiefe der Schräge (waagrecht ab Wand)'), ('decke', 'Höhe waagrechte Decke (Kehlbalken)')])
+            Builder(builder: (_) {
+              final plan = ((vomPc?[f]) as num?) ?? 0;
+              final a = massAnzeige(k, r, f, plan, seite: _seite.seiteKurz, bezug: '${widget.wand['id']}');
+              return ListTile(
+                leading: const Icon(Icons.roofing),
+                title: Text(t),
+                trailing: Text(plan == 0 && a.farbe == massGrob ? '–' : a.text, style: TextStyle(fontWeight: FontWeight.w700, color: a.farbe)),
+                onTap: () async {
+                  Navigator.pop(c);
+                  final e = await massEingeben(context, titel: t, plan: plan, bisher: k.gemessen(r, f, seite: _seite.seiteKurz, bezug: '${widget.wand['id']}')?.wert);
+                  if (e == null) return;
+                  await k.massSenden(ziel: 'schraege', objekt: r, feld: f, wert: e.wert, plan: plan, seite: _seite.seiteKurz, bezug: '${widget.wand['id']}', raum: '${r['id']}', text: e.text, extra: {'wand': widget.wand['id']});
+                  if (mounted) setState(() {});
+                },
+              );
+            }),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = _seite;
@@ -130,6 +217,7 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
             ),
             FilterChip(label: const Text('Installationszonen'), selected: _zonen, onSelected: (v) => setState(() => _zonen = v)),
             if (_bohren) ActionChip(avatar: const Icon(Icons.keyboard, size: 16), label: const Text('Stelle eingeben'), onPressed: () => _stelleEingeben(context, hoehe)),
+            if (!_bohren) ActionChip(avatar: const Icon(Icons.roofing, size: 16), label: const Text('Dachschräge messen'), onPressed: () => _schraegeMessen(context)),
           ]),
         ),
         Padding(
@@ -210,6 +298,7 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
                     oeffnungText: (o, f) => massAnzeige(k, o, f, o[f] as num? ?? 0),
                     bohrpunkt: _bohrpunkt,
                     brandschutz: widget.wand['brandschutz'] as String?,
+                    profil: _profil(hoehe, 60),
                   ),
                 ),
               ),
@@ -301,6 +390,25 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
         if (o['lage'] != null) Text('Lage: ${o['lage']}'),
         Text('Status: ${k.plan.status.where((s) => s.name == o['status']).firstOrNull?.label ?? o['status']}'),
         for (final a in _anschluesse(o)) Text('Anschluss ${a.$1}: ${mmCm(x + a.$2)} ab Ecke, ${z == null ? '?' : mmCm(z + a.$3)} hoch'),
+        const Divider(),
+        const Text('Aufmessen (geht an den PC zum Übernehmen)', style: TextStyle(fontWeight: FontWeight.w600)),
+        for (final (feld, titel, plan) in [('x', 'Abstand ab linker Ecke', x), ('h', 'Höhe über Fertigfußboden (Mitte)', z ?? 0)])
+          Builder(builder: (c) {
+            final a = massAnzeige(k, o, feld, plan);
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.straighten),
+              title: Text(titel),
+              trailing: Text(a.text, style: TextStyle(fontWeight: FontWeight.w700, color: a.farbe)),
+              onTap: () async {
+                Navigator.pop(c);
+                final r = await massEingeben(context, titel: '${o['kennung']}: $titel', plan: plan, bisher: k.gemessen(o, feld)?.wert);
+                if (r == null) return;
+                await k.massSenden(ziel: 'objekt', objekt: o, feld: feld, wert: r.wert, plan: plan, seite: _seite.seiteKurz, raum: _seite.raumId, text: r.text, extra: {'wand': widget.wand['id']});
+                if (mounted) setState(() {});
+              },
+            );
+          }),
       ]),
     );
   }
@@ -415,7 +523,9 @@ class _WandPainter extends CustomPainter {
     required this.oeffnungText,
     this.bohrpunkt,
     this.brandschutz,
+    this.profil = const [],
   });
+  final List<double> profil;
   final double laenge, hoehe, m;
   final Offset Function(double x, double z) zuBild;
   final List<({Map<String, dynamic> o, double x1, double x2, double z1, double z2})> oeffnungen;
@@ -529,6 +639,28 @@ class _WandPainter extends CustomPainter {
           }
         }
       }
+    }
+    // Dachschrägen: alles oberhalb der Oberkante weg, Schräge orange mit Höhen
+    if (profil.length > 1 && profil.any((z) => z < hoehe - 1)) {
+      final n = profil.length - 1;
+      final weg = Path()..moveTo(zuBild(0, hoehe + 300).dx, zuBild(0, hoehe + 300).dy);
+      for (var i = 0; i <= n; i++) {
+        final q = zuBild(laenge * i / n, profil[i]);
+        weg.lineTo(q.dx, q.dy);
+      }
+      weg.lineTo(zuBild(laenge, hoehe + 300).dx, zuBild(laenge, hoehe + 300).dy);
+      weg.close();
+      canvas.drawPath(weg, Paint()..color = Colors.white);
+      final linie = Path()..moveTo(zuBild(0, profil[0]).dx, zuBild(0, profil[0]).dy);
+      for (var i = 1; i <= n; i++) {
+        final q = zuBild(laenge * i / n, profil[i]);
+        linie.lineTo(q.dx, q.dy);
+      }
+      canvas.drawPath(linie, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = BsFarben.akzent);
+      _text(canvas, 'Oberkante ${mmCm(profil.first)} … ${mmCm(profil.last)}', zuBild(laenge / 2, profil[n ~/ 2]) + const Offset(0, 10), farbe: BsFarben.akzent, groesse: 9);
     }
     // Maßketten: Länge oben, Raumhöhe links, Abstände ab linker Ecke unten
     final oben = zuBild(0, hoehe).dy - 18;

@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../kontext.dart';
 import '../planstand.dart';
 import 'aufmass.dart';
+import 'sparren.dart';
 import 'wandansicht.dart';
 
 /// Plan auf der Baustelle: Grundriss mit allen Maßen (Wandseiten, Bemaßungen,
@@ -53,6 +54,12 @@ class _PlanSeiteState extends State<PlanSeite> {
           FilterChip(label: const Text('Maße'), selected: _masse, onSelected: (v) => setState(() => _masse = v)),
           const SizedBox(width: 6),
           FilterChip(label: const Text('Objekte'), selected: _objekte, onSelected: (v) => setState(() => _objekte = v)),
+          const SizedBox(width: 6),
+          ActionChip(
+            avatar: const Icon(Icons.roofing, size: 16),
+            label: Text('Sparren (${appSparrenfelder(k, g).length})'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SparrenSeite(k: k, geschoss: g))).then((_) => setState(() {})),
+          ),
           const SizedBox(width: 6),
           for (final e in gewerke.entries)
             Padding(
@@ -159,6 +166,22 @@ Future<void> wandBlatt(BuildContext context, MobilKontext k, Map<String, dynamic
                 ),
               ),
           ]),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final links in [true, false]) ...[
+              OutlinedButton.icon(
+                onPressed: () => sparrenfeldAnlegen(c, k, g, w, links, geschossweit: true),
+                icon: const Icon(Icons.roofing, size: 16),
+                label: Text('Sparren ganzes Geschoss → ${seitenName(k.plan, w, links)}', overflow: TextOverflow.ellipsis),
+              ),
+              if ((links ? w['rl'] : w['rr']) != null)
+                OutlinedButton.icon(
+                  onPressed: () => sparrenfeldAnlegen(c, k, g, w, links, geschossweit: false),
+                  icon: const Icon(Icons.roofing, size: 16),
+                  label: Text('Sparren nur ${seitenName(k.plan, w, links)}', overflow: TextOverflow.ellipsis),
+                ),
+            ],
+          ]),
           const Divider(),
           for (final links in [true, false])
             massZeile('Länge ${seitenName(k.plan, w, links)}', w, 'laenge', ((links ? w['li'] : w['re']) as num?) ?? (w['l'] as num? ?? 0),
@@ -201,6 +224,9 @@ class RaumAufmassSeite extends StatefulWidget {
 
 class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
   String? _wand;
+
+  /// Diagonalen über je eine Ecke (Ecke i → i+2); beim Viereck die zwei Raumdiagonalen.
+  List<(int, int)> _diagonalen(int n) => n == 4 ? const [(0, 2), (1, 3)] : [for (var i = 0; i < n; i++) (i, (i + 2) % n)];
 
   MobilKontext get k => widget.k;
 
@@ -271,6 +297,36 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
                   },
                 );
               }),
+            if (punkte(r['umriss']).length >= 4) ...[
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Text('Diagonalen (bestimmen die Winkel, Ecken A, B, C … im Plan oben)', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+              ),
+              for (final (i, j) in _diagonalen(punkte(r['umriss']).length))
+                Builder(builder: (context) {
+                  final u = punkte(r['umriss']);
+                  final plan = (u[i] - u[j]).distance;
+                  final feld = 'diag_${i}_$j';
+                  final m = massAnzeige(k, r, feld, plan);
+                  return ListTile(
+                    leading: const Icon(Icons.open_in_full),
+                    title: Text('Diagonale ${String.fromCharCode(65 + i)} → ${String.fromCharCode(65 + j)}'),
+                    subtitle: Text('Plan ${mmCm(plan)}'),
+                    trailing: Text(m.text, style: TextStyle(fontWeight: FontWeight.w700, color: m.farbe)),
+                    onTap: () async {
+                      final e = await massEingeben(context,
+                          titel: 'Diagonale ${String.fromCharCode(65 + i)} → ${String.fromCharCode(65 + j)}',
+                          plan: plan,
+                          bisher: k.gemessen(r, feld)?.wert,
+                          hinweis: 'Von Ecke zu Ecke quer durch den Raum (Laser). Daraus rechnet der PC den Winkel der Ecke dazwischen.');
+                      if (e == null) return;
+                      await k.massSenden(ziel: 'diagonale', objekt: r, feld: feld, wert: e.wert, plan: plan, raum: '$id', text: e.text, extra: {'ecken': [i, j]});
+                      if (mounted) setState(() {});
+                    },
+                  );
+                }),
+            ],
             if (oeffnungen.isNotEmpty) ...[
               const Divider(),
               for (final o in oeffnungen)
@@ -501,6 +557,11 @@ class _PlanPainter extends CustomPainter {
       if (u.length < 3) continue;
       final hier = nurRaum == null || r['id'] == nurRaum;
       canvas.drawPath(Path()..addPolygon([for (final q in u) zuBild(q)], true), Paint()..color = hier ? const Color(0xFFF1F3F5) : const Color(0xFFFAFAFA));
+      if (nurRaum != null && r['id'] == nurRaum) {
+        for (var i = 0; i < u.length; i++) {
+          _text(canvas, String.fromCharCode(65 + i), zuBild(u[i]), groesse: 11, farbe: BsFarben.akzent, fett: true, grund: Colors.white);
+        }
+      }
       var cx = 0.0, cy = 0.0;
       for (final q in u) {
         cx += q.dx;
@@ -575,6 +636,18 @@ class _PlanPainter extends CustomPainter {
         final kk = k;
         final anz = kk == null ? (text: mmCm(bm['l'] as num), farbe: const Color(0xFF1C7ED6)) : massAnzeige(kk, bm, 'laenge', bm['l'] as num);
         _text(canvas, anz.text, zuBild((a + e) / 2 + n), groesse: 9, farbe: anz.farbe == massGrob ? const Color(0xFF1C7ED6) : anz.farbe, winkel: math.atan2(d.dy, d.dx), grund: Colors.white);
+      }
+    }
+    final kk = k;
+    if (kk != null) {
+      for (final f in appSparrenfelder(kk, g)) {
+        final sf = appSparrenfeld(kk, f);
+        final p = Paint()
+          ..color = const Color(0xAA8D6E63)
+          ..strokeWidth = math.max(1.0, sf.breite * m);
+        for (final (a, e) in sf.strecken) {
+          canvas.drawLine(zuBild(Offset(a.$1, a.$2)), zuBild(Offset(e.$1, e.$2)), p);
+        }
       }
     }
     if (objekte) {
