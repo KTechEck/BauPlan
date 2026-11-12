@@ -340,3 +340,9 @@ Tim 12.11.: iCloud-Abgleich hat nie funktioniert → ersetzt durch drei Speicher
 - Im echten Build geprüft: Dienst antwortet auf allen Adressen des PCs, ohne Code 401, mit Code 200. Windows-Firewall-Regel für bauspur.exe fehlt noch (Tim muss zulassen).
 - OFFEN: Logo – Tim wählt aus Entwürfen A–D (Thread), dann Symbole für Windows (.ico) und iOS (AppIcon) erzeugen. Android-Ordner (flutter create --platforms=android) noch nicht angelegt.
   OneDrive/iCloud als Cloud gehen nicht (kein WebDAV); bei Bedarf eigener Weg über Microsoft Graph. NAS-Weg ungetestet (kein NAS vorhanden).
+
+## Build 10 (12.11. 15:05) – Logo
+Tim wählte Entwurf H „Bauplan-Linie“ (dunkelblau #0F2A43 mit Planraster, orange Linie zeichnet das Haus). lib/app/logo.dart (logoZeichnen),
+BauSpurLogo in widgets.dart nutzt es (Kopfleiste, Startseite). Symbole erzeugen: BAUSPUR_LOGO=<Ordner> flutter test test/logo_test.dart,
+dann python tools/logo_einbauen.py <Ordner> (schreibt windows/runner/resources/app_icon.ico, iOS AppIcon, assets/logo/bauspur_logo.png).
+209 Tests grün. Im Programm geprüft: Symbol der exe, Fenstertitel „Build 10“, Logo in Kopfleiste und Startseite.

@@ -99,6 +99,12 @@ class StartPage extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.all(32),
                   children: [
+                    Row(children: [
+                      const BauSpurLogo(groesse: 56),
+                      const SizedBox(width: 14),
+                      Text('BauSpur', style: Theme.of(context).textTheme.headlineLarge),
+                    ]),
+                    const SizedBox(height: 24),
                     Text('Projekte', style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 16),
                     if (zuletzt.isEmpty)

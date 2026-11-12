@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:bauspur/core/speicher.dart';
 import 'package:bauspur/mobil/ordner.dart';

@@ -1,3 +1,4 @@
+import '../app/logo.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -47,30 +48,7 @@ class BauSpurLogo extends StatelessWidget {
 
 class _LogoPainter extends CustomPainter {
   @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width / 28;
-    final rahmen = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2 * s
-      ..color = Colors.white;
-    canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(s, s, 26 * s, 26 * s), Radius.circular(6 * s)),
-        rahmen);
-    final spur = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5 * s
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = BsFarben.akzent;
-    final path = Path()
-      ..moveTo(7 * s, 20 * s)
-      ..lineTo(7 * s, 12 * s)
-      ..lineTo(14 * s, 12 * s)
-      ..lineTo(14 * s, 8 * s)
-      ..lineTo(21 * s, 8 * s);
-    canvas.drawPath(path, spur);
-    canvas.drawCircle(Offset(21 * s, 8 * s), 2.5 * s, Paint()..color = BsFarben.akzent);
-  }
+  void paint(Canvas canvas, Size size) => logoZeichnen(canvas, size.shortestSide);
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
