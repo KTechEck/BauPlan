@@ -68,6 +68,7 @@ void main() {
     ]) {
       store.wandAnlegen(geschossId: g, x1: x1, y1: y1, x2: x2, y2: y2, dicke: d, zustand: WandZustand.bestand);
     }
+    store.waendeZusammenfuehren(g); // wie beim Öffnen: geteilte Stücke werden eine Wand
     for (final (f, name) in ProjectStore.erkenneAusWaenden(store.waende(g)).indexed.map((e) => (e.$2, ['Wohnen', 'Bad'][e.$1 % 2]))) {
       store.raumAnlegen(geschossId: g, name: name, kuerzel: name.substring(0, 2).toUpperCase(), flaeche: f);
     }

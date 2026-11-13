@@ -183,10 +183,45 @@ Future<void> wandBlatt(BuildContext context, MobilKontext k, Map<String, dynamic
             ],
           ]),
           const Divider(),
-          for (final links in [true, false])
-            massZeile('Länge ${seitenName(k.plan, w, links)}', w, 'laenge', ((links ? w['li'] : w['re']) as num?) ?? (w['l'] as num? ?? 0),
-                () => wandLaengeMessen(c, k, w, links),
-                seite: links ? 'l' : 'r', bezug: 'innen'),
+          for (final links in [true, false]) ...() {
+            // Grenzt die Seite an mehrere Räume (oder nur teilweise an einen), gilt je Raum seine lichte Strecke
+            final stuecke = [
+              for (final st in (w[links ? 'sl' : 'sr'] as List? ?? const []))
+                for (final r in raumSeiten(g, '${(st as List)[0]}'))
+                  if (r.wand['id'] == w['id'] && r.links == links) ('${st[0]}', r)
+            ];
+            if (stuecke.isEmpty || (stuecke.length == 1 && stuecke.first.$2.voll)) {
+              return [
+                massZeile('Länge ${seitenName(k.plan, w, links)}', w, 'laenge', ((links ? w['li'] : w['re']) as num?) ?? (w['l'] as num? ?? 0),
+                    () => wandLaengeMessen(c, k, w, links),
+                    seite: links ? 'l' : 'r', bezug: 'innen'),
+              ];
+            }
+            return [
+              for (final (raumId, r) in stuecke)
+                Builder(builder: (_) {
+                  final m = raumSeiteAnzeige(k, r, raumId);
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('Lichte Länge im Raum ${k.plan.raumName(raumId)}'),
+                    subtitle: Text('Plan ${mmCm(r.t2 - r.t1)} · von Wand zu Wand in diesem Raum'),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(m.text, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: m.farbe)),
+                      const SizedBox(width: 8),
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          await raumSeiteMessen(c, k, r, raumId);
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.straighten, size: 18),
+                        label: const Text('Messen'),
+                      ),
+                    ]),
+                  );
+                }),
+            ];
+          }(),
           massZeile('Wanddicke', w, 'dicke', w['d'] as num? ?? 0, () => wandDickeMessen(c, k, w)),
           if (oeffnungen.isNotEmpty) ...[
             const Divider(),
@@ -223,7 +258,7 @@ class RaumAufmassSeite extends StatefulWidget {
 }
 
 class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
-  String? _wand;
+  int? _auswahl; // gewählte Raumseite (Index)
 
   /// Diagonalen über je eine Ecke (Ecke i → i+2); beim Viereck die zwei Raumdiagonalen.
   List<(int, int)> _diagonalen(int n) => n == 4 ? const [(0, 2), (1, 3)] : [for (var i = 0; i < n; i++) (i, (i + 2) % n)];
@@ -245,7 +280,18 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
       body: Column(children: [
         SizedBox(
           height: 220,
-          child: GrundrissAnsicht(plan: k.plan, geschoss: g, k: k, nurRaum: id, hervor: _wand, objekte: false, wandGetippt: (w) => setState(() => _wand = w['id'] as String)),
+          child: GrundrissAnsicht(
+            plan: k.plan,
+            geschoss: g,
+            k: k,
+            nurRaum: id,
+            objekte: false,
+            strecke: _auswahl != null && _auswahl! < seiten.length ? seiten[_auswahl!] : null,
+            wandGetippt: (w) => setState(() {
+              final i = seiten.indexWhere((r) => r.wand['id'] == w['id']);
+              if (i >= 0) _auswahl = i;
+            }),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -291,7 +337,7 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
                 final w = r.wand;
                 final m = raumSeiteAnzeige(k, r, '$id');
                 return ListTile(
-                  selected: _wand == w['id'],
+                  selected: _auswahl == i,
                   leading: CircleAvatar(radius: 14, backgroundColor: m.farbe.withValues(alpha: 0.15), child: Text('${i + 1}', style: TextStyle(color: m.farbe, fontSize: 12))),
                   title: Text('Wand ${i + 1}${r.voll ? '' : ' (Teilstück)'}${w['brandschutz'] == null ? '' : ' · ${w['brandschutz']}'}'),
                   subtitle: Text('Plan ${mmCm(r.t2 - r.t1)} · Dicke ${mmCm(w['d'] as num? ?? 0)}'),
@@ -304,12 +350,12 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
                     ),
                   ]),
                   onTap: () async {
-                    setState(() => _wand = w['id'] as String);
+                    setState(() => _auswahl = i);
                     await raumSeiteMessen(context, k, r, '$id');
                     if (!mounted) return;
                     // nächste ungemessene Wand vormerken
                     final naechste = seiten.skip(i + 1).where((s) => !raumSeiteGemessen(k, s, '$id')).firstOrNull;
-                    setState(() => _wand = naechste?.wand['id'] as String? ?? _wand);
+                    setState(() => _auswahl = naechste == null ? _auswahl : seiten.indexOf(naechste));
                   },
                 );
               }),
@@ -386,7 +432,11 @@ class GrundrissAnsicht extends StatefulWidget {
     this.bemassungGetippt,
     this.nurRaum,
     this.hervor,
+    this.strecke,
   });
+
+  /// Hervorgehobene Messstrecke (Raumseite): nur die lichte Strecke, nicht die ganze Wand.
+  final RaumSeite? strecke;
   final Planstand plan;
   final Map<String, dynamic> geschoss;
   final MobilKontext? k;
@@ -488,6 +538,7 @@ class _GrundrissAnsichtState extends State<GrundrissAnsicht> {
               objekte: widget.objekte,
               nurRaum: widget.nurRaum,
               hervor: widget.hervor,
+              strecke: widget.strecke,
               tc: _tc,
             ),
           ),
@@ -539,8 +590,10 @@ class _PlanPainter extends CustomPainter {
     this.objekte = true,
     this.nurRaum,
     this.hervor,
+    this.strecke,
     this.tc,
   }) : super(repaint: tc);
+  final RaumSeite? strecke;
   final TransformationController? tc;
 
   /// Aktueller Zoom: Schrift bleibt auf dem Bildschirm gleich groß, Maße ohne Platz werden ausgeblendet.
@@ -636,6 +689,22 @@ class _PlanPainter extends CustomPainter {
           // Außenseite: nur zeigen, wenn genug Platz
           if (l * m * zoom < 60 * dichte * schrift) continue;
         }
+        // Seite an mehreren Räumen: je Raum seine lichte Strecke beschriften
+        final st = [for (final x in (w[links ? 'sl' : 'sr'] as List? ?? const [])) x as List];
+        final sw = AppWandSeite(w, links);
+        if (st.length > 1 || st.any((x) => ((x[1] as num) - sw.tA).abs() > 5 || ((x[2] as num) - sw.tB).abs() > 5)) {
+          final kk = k;
+          for (final x in st) {
+            if (nurRaum != null && x[0] != nurRaum) continue;
+            final t1 = (x[1] as num).toDouble(), t2 = (x[2] as num).toDouble();
+            if ((t2 - t1) * m * zoom < 34 * dichte * schrift) continue;
+            final rs = (wand: w, links: links, t1: t1, t2: t2, voll: false);
+            final anz = kk == null ? (text: mmCm(t2 - t1), farbe: massGrob) : raumSeiteAnzeige(kk, rs, '${x[0]}');
+            final p = zuBild(sw.a + sw.u * ((t1 + t2) / 2) + nl * ((links ? 1 : -1) * (d / 2 + 9 * schrift / (m * zoom))));
+            _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF));
+          }
+          continue;
+        }
         final plan = ((links ? w['li'] : w['re']) as num?) ?? l;
         if (plan * m * zoom < 34 * dichte * schrift) continue;
         final kk = k;
@@ -698,6 +767,20 @@ class _PlanPainter extends CustomPainter {
             _text(canvas, '${o['typ']}', pts.first, groesse: 7, farbe: Colors.white, fett: true);
         }
       }
+    }
+    final st = strecke;
+    if (st != null) {
+      final s = AppWandSeite(st.wand, st.links);
+      final versatz = s.dicke / 2 + 10 / (m * zoom);
+      final p1 = zuBild(s.a + s.u * st.t1 + s.nl * (s.s * versatz)), p2 = zuBild(s.a + s.u * st.t2 + s.nl * (s.s * versatz));
+      final stift = Paint()
+        ..color = BsFarben.akzent
+        ..strokeWidth = 3 / zoom
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(p1, p2, stift);
+      final q = Offset(-(p2 - p1).dy, (p2 - p1).dx) / math.max(0.001, (p2 - p1).distance) * (7 / zoom);
+      canvas.drawLine(p1 - q, p1 + q, stift);
+      canvas.drawLine(p2 - q, p2 + q, stift);
     }
     final mk = markiert;
     if (mk != null) {

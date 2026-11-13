@@ -62,6 +62,7 @@ class _Plan {
     required this.schichten,
     required this.achsen,
     required this.flanken,
+    this.raumStuecke = const {},
     required this.umrisse,
     required this.bemassungen,
     required this.winkelmasse,
@@ -71,6 +72,7 @@ class _Plan {
 
   final List<WandAchse> achsen; // gleiche Reihenfolge wie waende
   final Map<String, (double, double)> flanken; // Seitenlängen je Wand
+  final Map<String, List<(double, double, double, String)>> raumStuecke; // lichte Messstrecken je Raum
   final Map<String, List<Offset>> umrisse; // verschnittene Wandumrisse
   final List<Bemassung> bemassungen;
   final List<Winkelmass> winkelmasse;
@@ -266,6 +268,28 @@ class _FloorplanPageState extends State<FloorplanPage> {
           for (final e in roh.entries)
             e.key: (e.value.$1 - 2 * (verk[mm[e.key]?.raumLinks] ?? 0), e.value.$2 - 2 * (verk[mm[e.key]?.raumRechts] ?? 0)),
         };
+      }(),
+      raumStuecke: () {
+        // Wände an mehreren Räumen (oder nur teilweise an einem): je Raum seine lichte Strecke
+        final mm = wandMasse(waende, raeume, verbindenStandard: _eckenVerbinden);
+        final namen = {for (final r in raeume) r.id: r.name};
+        final verk = store.einstellung<String>('massart') == 'fertig' ? {for (final r in raeume) r.id: raumVerkleidung(r)} : const <String, int>{};
+        final aus = <String, List<(double, double, double, String)>>{};
+        for (final w in waende) {
+          final m = mm[w.id];
+          if (m == null) continue;
+          final l = <(double, double, double, String)>[];
+          for (final (seite, st, ta, tb) in [(1.0, m.stueckeLinks, m.grenzen.linksA, m.grenzen.linksB), (-1.0, m.stueckeRechts, m.grenzen.rechtsA, m.grenzen.rechtsB)]) {
+            final teil = st.length > 1 || st.values.any((x) => (x.$1 - ta).abs() > 5 || (x.$2 - tb).abs() > 5);
+            if (!teil) continue;
+            for (final e in st.entries) {
+              final v = (verk[e.key] ?? 0).toDouble();
+              l.add((e.value.$1 + v, e.value.$2 - v, seite, namen[e.key] ?? ''));
+            }
+          }
+          if (l.isNotEmpty) aus[w.id] = l;
+        }
+        return aus;
       }(),
       bemassungen: g == null ? const [] : store.bemassungen(g),
       winkelmasse: g == null ? const [] : store.winkelmasse(g),
@@ -592,7 +616,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
       verbinden: _neueVerbinden,
     );
     _rueckgaengig.add(() => store.wandLoeschen(id));
-    store.waendeAnAnschluessenTeilen(_s.geschossId!);
+    store.doppelteWaendeEntfernen(_s.geschossId!);
     _s.geaendert();
   }
 
@@ -1832,8 +1856,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
         store.wandLoeschen(id);
       }
     });
-    // angrenzender Raum: gemeinsame Wand nicht doppelt, durchgehende Wände teilen
-    store.waendeAnAnschluessenTeilen(_s.geschossId!);
+    // angrenzender Raum: die gemeinsame Wand nicht doppelt anlegen
+    store.doppelteWaendeEntfernen(_s.geschossId!);
     setState(() {
       _kettenStart = null;
       _eingabeLeeren();
@@ -2930,6 +2954,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   maus: _maus,
                   vorschauDicke: _zeichenDicke,
                   flanken: plan.flanken,
+                  raumStuecke: plan.raumStuecke,
                   vorschauEnde: _form == 1 ? null : vorschauEnde,
                   vorschauRechteck: _form == 1 && start != null && vorschauEnde != null ? _rechteckAchse(start, vorschauEnde) : null,
                   vorschauFlanken: vorschauFlanken,

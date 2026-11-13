@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Angrenzender Raum: gemeinsame Wand einmal, durchgehende Wand geteilt, Innenmaße je Raum', () {
+  test('Angrenzender Raum: Wand bleibt ganz, doppelte Wand weg, je Raum eine Messstrecke', () {
     final tmp = Directory.systemTemp.createTempSync('pr');
     final s = ProjectStore.anlegen(elternOrdner: tmp.path, projektName: 'P');
     final g = s.geschosse(s.gebaeude().single.id).single.id;
@@ -18,16 +18,39 @@ void main() {
       }
     }
     rechteck(0, 0, 4000, 3000);
-    final rechte = s.waende(g)[1];
-    s.oeffnungAnlegen(wandId: rechte.id, art: OeffnungsArt.tuer, abstand: 1200, breite: 900, hoehe: 2010);
-    rechteck(4000, 1000, 6000, 2500);
-    expect(s.waendeAnAnschluessenTeilen(g), greaterThan(0));
+    rechteck(4000, 1000, 6000, 2500); // linke Wand liegt auf der rechten Wand von A
+    expect(s.doppelteWaendeEntfernen(g), 1);
     final w = s.waende(g);
-    expect(w.length, 9); // A: 3 + 3 Stücke an x = 4000, B: 3 (doppelte Wand weg)
-    final m = wandMasse(w, const []);
-    final mitte = w.firstWhere((x) => x.x1 == 4000 && x.x2 == 4000 && {x.y1, x.y2}.containsAll({1000, 2500}));
-    expect({m[mitte.id]!.links.round(), m[mitte.id]!.rechts.round()}, contains(1260)); // Raum B innen
-    expect(s.alleOeffnungen().single.wandId, mitte.id);
+    expect(w.length, 7);
+    final fl = s.flaechenErkennen(g)..sort((a, b) => a.flaeche.compareTo(b.flaeche));
+    final b = s.raumAnlegen(geschossId: g, name: 'B', kuerzel: 'B', flaeche: fl.first);
+    final a = s.raumAnlegen(geschossId: g, name: 'A', kuerzel: 'A', flaeche: fl.last);
+    final mitte = w.firstWhere((x) => x.x1 == 4000 && x.x2 == 4000);
+    final st = {...raumStuecke(mitte, true, s.raeume(g)), ...raumStuecke(mitte, false, s.raeume(g))};
+    expect(st[b]!.$2 - st[b]!.$1, closeTo(1260, 1)); // B: nur sein Stück
+    expect(st[a]!.$2 - st[a]!.$1, closeTo(2760, 1)); // A: Wand läuft durch
+    // je Raum genau eine Messstrecke je Seite: A hat 4 Seiten
+    var n = 0;
+    for (final x in s.waende(g)) {
+      for (final l in [true, false]) {
+        if (raumStuecke(x, l, s.raeume(g)).containsKey(a)) n++;
+      }
+    }
+    expect(n, 4);
+    s.schliessen();
+  });
+
+  test('Geteilte Wandstücke werden wieder zu einer Wand', () {
+    final tmp = Directory.systemTemp.createTempSync('pr');
+    final s = ProjectStore.anlegen(elternOrdner: tmp.path, projektName: 'P');
+    final g = s.geschosse(s.gebaeude().single.id).single.id;
+    s.wandAnlegen(geschossId: g, x1: 0, y1: 0, x2: 1000, y2: 0, dicke: 240);
+    final b = s.wandAnlegen(geschossId: g, x1: 1000, y1: 0, x2: 4000, y2: 0, dicke: 240);
+    s.oeffnungAnlegen(wandId: b, art: OeffnungsArt.tuer, abstand: 500, breite: 900, hoehe: 2010);
+    expect(s.waendeZusammenfuehren(g), 1);
+    final w = s.waende(g).single;
+    expect(w.laenge, 4000);
+    expect(s.alleOeffnungen().single.abstand, 1500);
     s.schliessen();
   });
 

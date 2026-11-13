@@ -43,15 +43,30 @@ Map<String, (double, double)> raumStuecke(Wand w, bool links, List<Raum> raeume)
   for (final r in raeume) {
     final u = r.umriss;
     if (u == null || u.length < 3) continue;
-    double? t1, t2;
-    for (final q in u) {
-      final dx = q.x - w.x1, dy = q.y - w.y1;
-      if (((dx * nx + dy * ny) - soll).abs() > 6) continue;
-      final t = dx * ux + dy * uy;
-      t1 = t1 == null ? t : math.min(t1, t);
-      t2 = t2 == null ? t : math.max(t2, t);
+    // Umrisskanten, die auf dieser Wandseite liegen (beide Enden auf der Flankenlinie)
+    final stuecke = <(double, double)>[];
+    for (var i = 0; i < u.length; i++) {
+      final p = u[i], q = u[(i + 1) % u.length];
+      double quer(Punkt x) => ((x.x - w.x1) * nx + (x.y - w.y1) * ny) - soll;
+      if (quer(p).abs() > 6 || quer(q).abs() > 6) continue;
+      final tp = (p.x - w.x1) * ux + (p.y - w.y1) * uy, tq = (q.x - w.x1) * ux + (q.y - w.y1) * uy;
+      final a = math.max(math.min(tp, tq), -w.dicke.toDouble()), b = math.min(math.max(tp, tq), l + w.dicke);
+      if (b - a > 50) stuecke.add((a, b));
     }
-    if (t1 != null && t2 != null && t2 - t1 > 50) aus[r.id] = (t1, t2);
+    if (stuecke.isEmpty) continue;
+    // zusammenhängende Stücke vereinen, das längste gilt (eine Messstrecke je Raumseite)
+    stuecke.sort((x, y) => x.$1.compareTo(y.$1));
+    var best = stuecke.first, akt = stuecke.first;
+    for (final s in stuecke.skip(1)) {
+      if (s.$1 <= akt.$2 + 2) {
+        akt = (akt.$1, math.max(akt.$2, s.$2));
+      } else {
+        akt = s;
+      }
+      if (akt.$2 - akt.$1 > best.$2 - best.$1) best = akt;
+    }
+    if (akt.$2 - akt.$1 > best.$2 - best.$1) best = akt;
+    aus[r.id] = best;
   }
   return aus;
 }

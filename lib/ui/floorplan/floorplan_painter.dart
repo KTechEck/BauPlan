@@ -55,6 +55,7 @@ class FloorplanPainter extends CustomPainter {
     required this.maus,
     required this.vorschauDicke,
     this.flanken = const {},
+    this.raumStuecke = const {},
     this.vorschauEnde,
     this.vorschauFlanken,
     this.vorschauWinkel,
@@ -86,6 +87,10 @@ class FloorplanPainter extends CustomPainter {
   final Offset? maus;
   final int vorschauDicke;
   final Map<String, (double, double)> flanken; // Seitenlängen je Wand
+
+  /// Lichte Messstrecken je Raum an Wänden, die an mehrere Räume grenzen oder
+  /// nur teilweise an einen Raum: Wand-ID → (von, bis entlang der Achse, Seite ±1, Raumname).
+  final Map<String, List<(double, double, double, String)>> raumStuecke;
   final Offset? vorschauEnde; // Ende der Vorschauwand (sonst Maus)
   final (double, double)? vorschauFlanken;
   final String? vorschauWinkel;
@@ -130,6 +135,11 @@ class FloorplanPainter extends CustomPainter {
       _oeffnung(canvas, wandNach[ov.$1]!, ov.$2, ov.$3, ov.$4, false, false, false, vorschau: true);
     }
     for (final w in waende) {
+      final st = raumStuecke[w.id];
+      if (st != null && st.isNotEmpty && (w.massanzeige ?? massVoreinstellung) != MassAnzeige.keine) {
+        _raumMasse(canvas, w, st, flanken[w.id], auswahl.length == 1 && auswahl.contains(w.id));
+        continue;
+      }
       _mass(canvas, Offset(w.x1.toDouble(), w.y1.toDouble()), Offset(w.x2.toDouble(), w.y2.toDouble()),
           w.dicke,
           hervorheben: auswahl.length == 1 && auswahl.contains(w.id),
@@ -655,6 +665,54 @@ class FloorplanPainter extends CustomPainter {
     canvas.rotate(winkel);
     tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
     canvas.restore();
+  }
+
+  /// Maße einer Wand, an der mehrere Räume liegen: je Raum eine eigene
+  /// Messlinie auf seiner Seite, nur über die lichte Strecke (Oberfläche zu
+  /// Oberfläche), beschriftet mit Maß und Raum. Seiten ohne Raumstück zeigen
+  /// ihre ganze Länge.
+  void _raumMasse(Canvas canvas, Wand w, List<(double, double, double, String)> st, (double, double)? f, bool hervorheben) {
+    final a = Offset(w.x1.toDouble(), w.y1.toDouble()), b = Offset(w.x2.toDouble(), w.y2.toDouble());
+    final l = (b - a).distance;
+    if (l * massstab < 40) return;
+    final u = (b - a) / l;
+    final nl = Offset(u.dy, -u.dx);
+    final farbe = hervorheben ? BsFarben.akzentDunkel : const Color(0xFF5C6B7A);
+    final stift = Paint()
+      ..color = farbe
+      ..strokeWidth = hervorheben ? 1.6 : 1;
+    var winkel = math.atan2(u.dy, u.dx);
+    if (winkel > math.pi / 2 || winkel < -math.pi / 2) winkel += math.pi;
+    void beschriften(String t, Offset p) {
+      final tp = TextPainter(
+        text: TextSpan(text: t, style: TextStyle(fontSize: 11, color: farbe, fontWeight: hervorheben ? FontWeight.w600 : FontWeight.w400, backgroundColor: BsFarben.zeichenflaeche.withValues(alpha: 0.85))),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      canvas.save();
+      canvas.translate(p.dx, p.dy);
+      canvas.rotate(winkel);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      canvas.restore();
+    }
+
+    for (final seite in [1.0, -1.0]) {
+      final hier = [for (final x in st) if (x.$3 == seite) x];
+      final versatz = w.dicke / 2 + 14 / massstab;
+      if (hier.isEmpty) {
+        final len = f == null ? l : (seite > 0 ? f.$1 : f.$2);
+        beschriften(mmText(len), _s((a + b) / 2 + nl * (seite * (w.dicke / 2 + 16 / massstab))));
+        continue;
+      }
+      for (final (t1, t2, _, name) in hier) {
+        if ((t2 - t1) * massstab < 30) continue;
+        final p1 = _s(a + u * t1 + nl * (seite * versatz)), p2 = _s(a + u * t2 + nl * (seite * versatz));
+        canvas.drawLine(p1, p2, stift);
+        final q = Offset(-(p2 - p1).dy, (p2 - p1).dx) / math.max(1, (p2 - p1).distance) * 4;
+        canvas.drawLine(p1 - q, p1 + q, stift);
+        canvas.drawLine(p2 - q, p2 + q, stift);
+        beschriften('${mmText(t2 - t1)} $name', _s(a + u * ((t1 + t2) / 2) + nl * (seite * (versatz + 12 / massstab))));
+      }
+    }
   }
 
   /// Maß an einer Wand. Mit [flanken] stehen die Längen beider Wandseiten
