@@ -455,3 +455,9 @@ Offen: Tims echtes Projekt nach dem Öffnen prüfen (Raumzuordnung), Wandverklei
   Auswahl PC (Raum-Panel + Wand-Panel je Seite) und App (Raum-Aufmaß + Wand-Blatt): Bibliothekselemente, Schnellwahl, „Eigener Aufbau …“.
   Fertigmaß genau: je Wandseite die Verkleidung der beiden anstoßenden Wände abziehen; PC rechnet es und gibt es im Planstand mit (w.fl / w.fr).
   PC-Grundriss: Maßtexte (floorplan_painter.dart, Wandmaße ab Zeile ~700) je Zoom ausblenden, Einstellung Dichte/Schrift + Zurücksetzen.
+
+## Build 15 (13.11. 23:20, 225 Tests)
+Gerade aneinanderstoßende Wandstücke beim Aufmaß wie eine Wand: raumStuecke kürzt Raumkanten nicht mehr auf die Wand (nur Überlappung nötig),
+wandMasse beschriftet dieselbe Raumkante nur beim ersten Stück; PC/App lassen die übrigen Stücke innen unbeschriftet. Unterschiedliche Dicken
+(Oberfläche springt) ergeben weiterhin zwei Maße. Offen: Tims Projekt prüfen, warum Stücke nicht zusammengeführt wurden (vermutlich Dicke/Wandtyp/Zustand
+verschieden); Wandverkleidungen; PC-Zoom-Ausblenden.
