@@ -418,3 +418,9 @@ Gilt für PC und App.
 - [ ] Im Auswahlmenü ein Eintrag wie „Eigener Aufbau …“: Verkleidung je Raum UND je Wand(-seite) einzeln festlegbar
       (nicht jede Wand im Raum hat den gleichen Aufbau). Gilt für PC und App; Fertigmaße rechnen dann je Wandseite.
 - [ ] Offen aus Build 13: Maße im PC-Grundriss je Zoomstufe ein-/ausblenden (wie in der App), Einstellung mit Zurücksetzen.
+- Plan für Build 14 (Tim: morgen früh nach Limit-Reset starten): neue Bauelement-Kategorie „Wandverkleidung / Vorsatzschale“ (Gruppe Material,
+  Felder Dicke, Unterkonstruktion, Beplankung, Lagen, Dämmung) → Anlegen/Bearbeiten über den vorhandenen Bibliothek-Editor. Zuordnung: Raum-Vorgabe in
+  raum.eigenschaften.verkleidung {element, dicke, art}; je Wandseite Projekteinstellung `verkleidung_seiten` {"wandId|l": {...}} (überschreibt Raum).
+  Auswahl PC (Raum-Panel + Wand-Panel je Seite) und App (Raum-Aufmaß + Wand-Blatt): Bibliothekselemente, Schnellwahl, „Eigener Aufbau …“.
+  Fertigmaß genau: je Wandseite die Verkleidung der beiden anstoßenden Wände abziehen; PC rechnet es und gibt es im Planstand mit (w.fl / w.fr).
+  PC-Grundriss: Maßtexte (floorplan_painter.dart, Wandmaße ab Zeile ~700) je Zoom ausblenden, Einstellung Dichte/Schrift + Zurücksetzen.
