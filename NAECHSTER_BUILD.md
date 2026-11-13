@@ -413,6 +413,20 @@ Gilt für PC und App.
   erscheint in allen Geschossen dazwischen (lib/core/geschossuebergreifend.dart, Installation + Planstand); Treppenwerte (Höhe, Steigungen,
   Podest) im Installations-Panel mit Schrittmaßprüfung.
 
+## OBERSTE PRIORITÄT Build 14 (Tim 13.11. 22:02 – Aufmaß aus Build 13 unbrauchbar)
+- [ ] Wände NICHT mehr teilen. Das automatische Teilen (store.waendeAnAnschluessenTeilen, läuft in Build 13 bei JEDEM Öffnen und nach dem
+      Zeichnen) entfernen. Stattdessen eine Funktion, die geteilte Stücke wieder zusammenführt (kollinear, Ende an Ende, gleiche Dicke, gleicher
+      Wandtyp und Zustand; Öffnungen umrechnen) und einmal auf Tims Projekt anwenden. Das Entfernen doppelter Wände darf bleiben.
+      Eine Wand bleibt ein Bauteil. Geteilt wird nur die MESSSTRECKE in dem Raum, in den die Querwand stößt (Raumstücke sl/sr gibt es schon).
+      Im Raum, in dem die Wand durchläuft, gilt die ganze Länge.
+- [ ] Zuordnung der Räume falsch: prüfen, ob es an Build 13 liegt (Teilen beim Öffnen, neue Wand-IDs, _raeumeAbgleichen) oder daran, dass alte
+      Projekte nicht neu gezeichnet wurden. Mit Tims echtem Projekt testen (vorher Kopie machen), rl/rr und Raumstücke prüfen.
+- [ ] Optik beim Messen: Hervorgehoben wird nur die gemessene lichte Strecke, von Oberfläche zu Oberfläche, nicht die ganze Wand bis zur Mitte.
+      Gilt für App (Plan, Wand-Blatt, Raum-Aufmaß: Messlinie mit Endstrichen, Raumseite) und PC (Grundriss-Markierung, Aufmaß-Dialog).
+      Klar beschriften: „lichte Länge im Raum X“.
+- [ ] Die App selbst Schritt für Schritt durchspielen (Bildtests mit zwei Räumen und durchlaufender Wand) und mit Tims Screenshots abgleichen.
+- [ ] Danach erst die Wandverkleidungen (unten).
+
 ## Gesammelt für Build 14 (Tim 13.11. 21:58 – erst umsetzen, wenn Tim es sagt)
 - [ ] Wandverkleidungen frei anlegen und zentral in der Bibliothek verwalten (Name, Schichten/Dicke), statt fester Auswahl.
 - [ ] Im Auswahlmenü ein Eintrag wie „Eigener Aufbau …“: Verkleidung je Raum UND je Wand(-seite) einzeln festlegbar
