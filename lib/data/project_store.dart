@@ -118,6 +118,7 @@ class ProjectStore {
     try {
       for (final geb in store.gebaeude()) {
         for (final g in store.geschosse(geb.id)) {
+          store.waendeAnAnschluessenTeilen(g.id);
           store._waendeAusrichten(g.id, store.flaechenErkennen(g.id));
         }
       }
@@ -160,6 +161,14 @@ class ProjectStore {
           _objekttypErgaenzen('SA', 'AV', 'Armatur / Absperrventil', 'punkt');
         }
         if (version == 17) _gewerkErgaenzen('BS');
+        if (version == 18) {
+          _objekttypErgaenzen('AL', 'TR', 'Treppe (Lauflinie)', 'linie');
+          _objekttypErgaenzen('AL', 'TP', 'Treppenpodest / Zwischenpodest', 'flaeche');
+          _objekttypErgaenzen('AL', 'KM', 'Kamin / Schornstein', 'flaeche');
+          _objekttypErgaenzen('SA', 'SR', 'Steigleitung / Fallrohr (über Geschosse)', 'punkt');
+          _objekttypErgaenzen('HZ', 'SR', 'Steigleitung Heizung (über Geschosse)', 'punkt');
+          _objekttypErgaenzen('EL', 'SR', 'Steigleitung Elektro (über Geschosse)', 'punkt');
+        }
         version++;
         db.userVersion = version;
         db.execute('COMMIT');
@@ -539,6 +548,88 @@ class ProjectStore {
       .map(Wand.ausZeile)
       .toList();
 
+  /// Durchgehende Wände an Anschlusspunkten teilen: Endet eine andere Wand
+  /// auf der Achse einer Wand (T-Stoß), wird diese dort geteilt – so hat jeder
+  /// Raum seine eigenen Wandstücke und Innenmaße. Doppelt gezeichnete Wände
+  /// (z. B. beim angrenzenden Rechteckraum) werden danach entfernt, die
+  /// ältere bleibt; Öffnungen wandern mit. Liefert die Zahl der Änderungen.
+  int waendeAnAnschluessenTeilen(String geschossId) {
+    var n = 0;
+    for (var runde = 0; runde < 200; runde++) {
+      final alle = waende(geschossId);
+      var geteilt = false;
+      for (final w in alle) {
+        final l = w.laenge;
+        if (l < 100) continue;
+        final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+        final schnitte = <int>{};
+        for (final o in alle) {
+          if (o.id == w.id) continue;
+          for (final (px, py) in [(o.x1, o.y1), (o.x2, o.y2)]) {
+            final t = (px - w.x1) * ux + (py - w.y1) * uy;
+            final quer = ((px - w.x1) * uy - (py - w.y1) * ux).abs();
+            if (quer <= 1.5 && t > 20 && t < l - 20) schnitte.add(t.round());
+          }
+        }
+        if (schnitte.isEmpty) continue;
+        final ts = [0, ...(schnitte.toList()..sort()), l.round()];
+        final zeile = db.select('SELECT * FROM wand WHERE id = ?', [w.id]).first;
+        final oeff = oeffnungen(geschossId).where((o) => o.wandId == w.id).toList();
+        for (var i = 0; i + 1 < ts.length; i++) {
+          final x1 = (w.x1 + ux * ts[i]).round(), y1 = (w.y1 + uy * ts[i]).round();
+          final x2 = (w.x1 + ux * ts[i + 1]).round(), y2 = (w.y1 + uy * ts[i + 1]).round();
+          String id;
+          if (i == 0) {
+            id = w.id;
+            db.execute('UPDATE wand SET x2 = ?, y2 = ? WHERE id = ?', [x2, y2, id]);
+          } else {
+            id = neueId();
+            final spalten = [for (final k in zeile.keys) if (!const {'id', 'x1', 'y1', 'x2', 'y2'}.contains(k)) k];
+            db.execute(
+              'INSERT INTO wand (id, x1, y1, x2, y2, ${spalten.join(', ')}) VALUES (?, ?, ?, ?, ?, ${spalten.map((_) => '?').join(', ')})',
+              [id, x1, y1, x2, y2, for (final k in spalten) zeile[k]],
+            );
+          }
+          for (final o in oeff) {
+            if (o.abstand >= ts[i] - 1 && (o.abstand < ts[i + 1] || i == ts.length - 2)) {
+              db.execute('UPDATE oeffnung SET wand_id = ?, abstand_mm = ? WHERE id = ?', [id, o.abstand - ts[i], o.id]);
+            }
+          }
+        }
+        _protokoll('wand', w.id, 'teilen', {'stuecke': ts.length - 1});
+        n++;
+        geteilt = true;
+        break;
+      }
+      if (!geteilt) break;
+    }
+    // doppelte Wände (gleiche Endpunkte) entfernen, die ältere bleibt
+    final alle = waende(geschossId)..sort((a, b) => a.id.compareTo(b.id));
+    final weg = <String>{};
+    for (var i = 0; i < alle.length; i++) {
+      final a = alle[i];
+      if (weg.contains(a.id)) continue;
+      for (var j = i + 1; j < alle.length; j++) {
+        final b = alle[j];
+        if (weg.contains(b.id)) continue;
+        bool gleich(int ax, int ay, int bx, int by) => (ax - bx).abs() <= 2 && (ay - by).abs() <= 2;
+        final vorwaerts = gleich(a.x1, a.y1, b.x1, b.y1) && gleich(a.x2, a.y2, b.x2, b.y2);
+        final rueckwaerts = gleich(a.x1, a.y1, b.x2, b.y2) && gleich(a.x2, a.y2, b.x1, b.y1);
+        if (!vorwaerts && !rueckwaerts) continue;
+        final l = b.laenge.round();
+        for (final o in oeffnungen(geschossId).where((o) => o.wandId == b.id)) {
+          db.execute('UPDATE oeffnung SET wand_id = ?, abstand_mm = ? WHERE id = ?', [a.id, rueckwaerts ? l - o.abstand - o.breite : o.abstand, o.id]);
+        }
+        db.execute('UPDATE wand SET geloescht = ? WHERE id = ?', [jetzt(), b.id]);
+        _protokoll('wand', b.id, 'doppelt_entfernt', {'bleibt': a.id});
+        weg.add(b.id);
+        n++;
+      }
+    }
+    if (n > 0) _raeumeAbgleichen(geschossId);
+    return n;
+  }
+
   String wandAnlegen({
     required String geschossId,
     required int x1,
@@ -576,6 +667,55 @@ class ProjectStore {
 
   /// Weist einen Wandtyp zu; die Dicke folgt der Summe seiner Schichten.
   /// Ohne Typ (null) behält die Wand ihre Dicke.
+  /// Nach einer Dickenänderung die Wand so versetzen, dass eine Seite fest
+  /// bleibt (lichtes Innenmaß des Raums ändert sich nicht). [festSeite]: 1 =
+  /// Seite links der Zeichenrichtung, −1 = rechts, 0 = Mitte (nichts tun).
+  /// Anschließende Wände werden entlang ihrer eigenen Richtung bis zur neuen
+  /// Achse verlängert bzw. gekürzt – Winkel bleiben, es wird nur skaliert.
+  void wandDickeVersetzen(String id, int alteDicke, int neueDicke, int festSeite) {
+    if (festSeite == 0 || alteDicke == neueDicke) return;
+    final alle = waende(_geschossDerWand(id) ?? '');
+    final w = alle.where((x) => x.id == id).firstOrNull;
+    if (w == null || w.gesperrt || w.laenge < 1) return;
+    final l = w.laenge;
+    final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+    final nlx = uy, nly = -ux;
+    final d = -festSeite * (neueDicke - alteDicke) / 2;
+    final vx = nlx * d, vy = nly * d;
+    // Schnitt der Geraden durch (px,py) Richtung (dx,dy) mit der neuen Wandachse
+    (double, double)? schnitt(double px, double py, double dx, double dy) {
+      final nenner = dx * uy - dy * ux;
+      if (nenner.abs() < 1e-6) return null;
+      final qx = w.x1 + vx - px, qy = w.y1 + vy - py;
+      final t = (qx * uy - qy * ux) / nenner;
+      return (px + dx * t, py + dy * t);
+    }
+
+    bool aufAlterAchse(int px, int py) {
+      final t = (px - w.x1) * ux + (py - w.y1) * uy;
+      final quer = ((px - w.x1) * uy - (py - w.y1) * ux).abs();
+      return quer <= 2 && t >= -2 && t <= l + 2;
+    }
+
+    for (final o in alle) {
+      if (o.id == w.id || o.gesperrt || o.laenge < 1) continue;
+      final ol = o.laenge;
+      final odx = (o.x2 - o.x1) / ol, ody = (o.y2 - o.y1) / ol;
+      if ((odx * uy - ody * ux).abs() < 1e-3) continue; // parallel
+      for (final ende in [1, 2]) {
+        final px = ende == 1 ? o.x1 : o.x2, py = ende == 1 ? o.y1 : o.y2;
+        if (!aufAlterAchse(px, py)) continue;
+        final q = schnitt(px.toDouble(), py.toDouble(), odx, ody);
+        if (q == null) continue;
+        db.execute('UPDATE wand SET ${ende == 1 ? 'x1 = ?, y1 = ?' : 'x2 = ?, y2 = ?'} WHERE id = ?', [q.$1.round(), q.$2.round(), o.id]);
+      }
+    }
+    db.execute('UPDATE wand SET x1 = ?, y1 = ?, x2 = ?, y2 = ? WHERE id = ?',
+        [(w.x1 + vx).round(), (w.y1 + vy).round(), (w.x2 + vx).round(), (w.y2 + vy).round(), id]);
+    _protokoll('wand', id, 'versetzen', {'fest': festSeite, 'dicke': neueDicke});
+    _nachWandAenderung(id);
+  }
+
   void wandWandtypSetzen(String id, String? wandtypId) {
     final typ = wandtypId == null ? null : wandtyp(wandtypId);
     if (typ == null) {

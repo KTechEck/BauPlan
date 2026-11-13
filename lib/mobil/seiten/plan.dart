@@ -268,6 +268,22 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
                 setState(() {});
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.layers_outlined),
+              title: const Text('Wandverkleidung'),
+              subtitle: Text(k.verkleidung('$id') == 0 ? 'keine – Maße sind Rohbaumaße' : '${k.verkleidung('$id')} mm je Wandseite · Anzeige ${k.einstellungen.massart == 'fertig' ? 'fertig' : 'Rohbau'}'),
+              trailing: Switch(
+                value: k.einstellungen.massart == 'fertig',
+                onChanged: (v) => setState(() {
+                  k.einstellungen.massart = v ? 'fertig' : 'roh';
+                  k.einstellungen.speichern();
+                }),
+              ),
+              onTap: () async {
+                await verkleidungWaehlen(context, k, r);
+                setState(() {});
+              },
+            ),
             const Divider(),
             for (var i = 0; i < seiten.length; i++)
               Builder(builder: (context) {
@@ -472,6 +488,7 @@ class _GrundrissAnsichtState extends State<GrundrissAnsicht> {
               objekte: widget.objekte,
               nurRaum: widget.nurRaum,
               hervor: widget.hervor,
+              tc: _tc,
             ),
           ),
         ),
@@ -522,7 +539,14 @@ class _PlanPainter extends CustomPainter {
     this.objekte = true,
     this.nurRaum,
     this.hervor,
-  });
+    this.tc,
+  }) : super(repaint: tc);
+  final TransformationController? tc;
+
+  /// Aktueller Zoom: Schrift bleibt auf dem Bildschirm gleich groß, Maße ohne Platz werden ausgeblendet.
+  double get zoom => tc?.value.getMaxScaleOnAxis() ?? 1;
+  double get dichte => k?.einstellungen.massDichte ?? 1;
+  double get schrift => k?.einstellungen.massSchrift ?? 1;
   final Planstand plan;
   final MobilKontext? k;
   final Map<String, dynamic> g;
@@ -536,7 +560,7 @@ class _PlanPainter extends CustomPainter {
 
   void _text(Canvas canvas, String t, Offset p, {double groesse = 10, Color farbe = BsFarben.textLeise, double winkel = 0, bool fett = false, Color? grund}) {
     final tp = TextPainter(
-      text: TextSpan(text: t, style: TextStyle(fontFamily: 'Roboto', fontSize: groesse, color: farbe, fontWeight: fett ? FontWeight.w700 : FontWeight.w400, backgroundColor: grund)),
+      text: TextSpan(text: t, style: TextStyle(fontFamily: 'Roboto', fontSize: groesse * schrift / zoom, color: farbe, fontWeight: fett ? FontWeight.w700 : FontWeight.w400, backgroundColor: grund)),
       textDirection: TextDirection.ltr,
     )..layout();
     canvas.save();
@@ -569,7 +593,8 @@ class _PlanPainter extends CustomPainter {
       }
       final mitte = zuBild(Offset(cx / u.length, cy / u.length));
       _text(canvas, '${r['name']}', mitte - const Offset(0, 7), groesse: 11, farbe: const Color(0xFF343A40), fett: true);
-      if (masse && r['flaeche'] != null) {
+      final breite = (u.map((q) => q.dx).reduce(math.max) - u.map((q) => q.dx).reduce(math.min)) * m * zoom;
+      if (masse && r['flaeche'] != null && breite > 80 * dichte * schrift) {
         final kk = k;
         final hm = kk == null ? null : massAnzeige(kk, r, 'hoehe', raumHoehe(g, r['id'] as String?));
         _text(canvas, '${((r['flaeche'] as num) / 1e6).toStringAsFixed(2).replaceAll('.', ',')} m²${hm == null ? '' : ' · h ${hm.text}'}', mitte + const Offset(0, 7),
@@ -609,14 +634,16 @@ class _PlanPainter extends CustomPainter {
         if (nurRaum != null && raum != nurRaum) continue;
         if (raum == null && nurRaum == null && (links ? w['rr'] : w['rl']) != null) {
           // Außenseite: nur zeigen, wenn genug Platz
-          if (l * m < 60) continue;
+          if (l * m * zoom < 60 * dichte * schrift) continue;
         }
         final plan = ((links ? w['li'] : w['re']) as num?) ?? l;
-        if (plan * m < 28) continue;
+        if (plan * m * zoom < 34 * dichte * schrift) continue;
         final kk = k;
-        final anz = kk == null ? (text: mmCm(plan), farbe: massGrob) : massAnzeige(kk, w, 'laenge', plan, seite: links ? 'l' : 'r', bezug: 'innen');
+        final anz = kk == null
+            ? (text: mmCm(plan), farbe: massGrob)
+            : massAnzeige(kk, w, 'laenge', plan, seite: links ? 'l' : 'r', bezug: 'innen', abzug: kk.fertigAbzug(raum));
         final s = links ? 1.0 : -1.0;
-        final p = zuBild((a + b) / 2 + nl * (s * (d / 2 + 9 / m + (raum == null ? 0 : 0))));
+        final p = zuBild((a + b) / 2 + nl * (s * (d / 2 + 9 * schrift / (m * zoom))));
         _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF));
       }
     }
@@ -626,6 +653,7 @@ class _PlanPainter extends CustomPainter {
         final a = punkt(bm['a']), e = punkt(bm['b']);
         final d = e - a;
         final l = math.max(1.0, d.distance);
+        if (l * m * zoom < 40 * dichte * schrift) continue;
         final n = Offset(-d.dy / l, d.dx / l) * ((bm['abstand'] as num?)?.toDouble() ?? 500);
         final stift = Paint()
           ..color = const Color(0xFF1C7ED6)

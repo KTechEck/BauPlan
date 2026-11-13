@@ -9,7 +9,7 @@ import 'raumerkennung.dart';
 /// „links“ ist links der Zeichenrichtung auf dem Bildschirm (y nach unten),
 /// also die Normale (u.y, −u.x) – wie bei der Schichtdarstellung.
 ({double linksA, double linksB, double rechtsA, double rechtsB}) flankenGrenzen(
-    WandAchse w, Iterable<WandAchse> andere) {
+    WandAchse w, Iterable<WandAchse> andere, {bool masse = false}) {
   final d = w.b - w.a;
   final l = d.laenge;
   if (l < 1) return (linksA: 0, linksB: l, rechtsA: 0, rechtsB: l);
@@ -24,16 +24,18 @@ import 'raumerkennung.dart';
     if (_beruehrt(o, w.b)) nachbarnB.add(o);
   }
   return (
-    linksA: _ende(w, u, nl, 1, h, l, w.a, nachbarnA, amAnfang: true),
-    linksB: _ende(w, u, nl, 1, h, l, w.b, nachbarnB, amAnfang: false),
-    rechtsA: _ende(w, u, nl, -1, h, l, w.a, nachbarnA, amAnfang: true),
-    rechtsB: _ende(w, u, nl, -1, h, l, w.b, nachbarnB, amAnfang: false),
+    linksA: _ende(w, u, nl, 1, h, l, w.a, nachbarnA, amAnfang: true, masse: masse),
+    linksB: _ende(w, u, nl, 1, h, l, w.b, nachbarnB, amAnfang: false, masse: masse),
+    rechtsA: _ende(w, u, nl, -1, h, l, w.a, nachbarnA, amAnfang: true, masse: masse),
+    rechtsB: _ende(w, u, nl, -1, h, l, w.b, nachbarnB, amAnfang: false, masse: masse),
   );
 }
 
-/// Längen der beiden Wandseiten (siehe [flankenGrenzen]).
+/// Längen der beiden Wandseiten (siehe [flankenGrenzen]) als Maß: an einem
+/// T-Stoß aus zwei Wandstücken endet die Seite mit dem Abzweig an dessen
+/// Oberfläche (lichtes Innenmaß des angrenzenden Raums).
 (double links, double rechts) flankenLaengen(WandAchse w, Iterable<WandAchse> andere) {
-  final g = flankenGrenzen(w, andere);
+  final g = flankenGrenzen(w, andere, masse: true);
   return (g.linksB - g.linksA, g.rechtsB - g.rechtsA);
 }
 
@@ -64,7 +66,7 @@ bool _beruehrt(WandAchse o, Punkt p) {
 
 /// Parameter t (entlang der Achse ab A), an dem die Flanke an einem Ende aufhört.
 double _ende(WandAchse w, Punkt u, Punkt nl, double s, double h, double l, Punkt p, List<WandAchse> nachbarn,
-    {required bool amAnfang}) {
+    {required bool amAnfang, bool masse = false}) {
   final grund = amAnfang ? 0.0 : l;
   if (nachbarn.isEmpty) return grund;
   bool endetBei(WandAchse o) => (o.a - p).laenge <= _toleranz || (o.b - p).laenge <= _toleranz;
@@ -78,7 +80,16 @@ double _ende(WandAchse w, Punkt u, Punkt nl, double s, double h, double l, Punkt
   // T-Stoß aus zwei Wandstücken: läuft diese Wand an P in einer gleich
   // gerichteten Wand weiter, ist der abzweigende Nachbar für dieses Ende
   // ohne Bedeutung – die Wand endet gerade und geht nahtlos weiter.
-  if (nachbarn.any((o) => endetBei(o) && parallel(o, w))) return grund;
+  // Zweigt dabei auf DIESER Seite eine Wand ab (angrenzender Raum), endet die
+  // Flanke an deren Oberfläche – so hat jeder Raum sein eigenes Innenmaß.
+  if (nachbarn.any((o) => endetBei(o) && parallel(o, w))) {
+    if (!masse) return grund; // Zeichnung: Stücke enden gerade, keine Kerbe
+    nachbarn = [
+      for (final o in nachbarn)
+        if (!parallel(o, w) && endetBei(o) && (((o.a - p).laenge <= _toleranz ? o.b : o.a) - p).skalar(nl) * s > 0) o
+    ];
+    if (nachbarn.isEmpty) return grund;
+  }
   final ursprung = w.a + nl * (s * h);
   double? ergebnis;
   for (final o in nachbarn) {

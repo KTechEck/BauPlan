@@ -14,6 +14,9 @@ List<BauelementKategorie> kategorienFuerKuerzel(String kuerzel) => switch (kuerz
       'WC' || 'WT' || 'DU' || 'BW' || 'SP' || 'WM' => const [BauelementKategorie.sanitaer],
       'VB' || 'VH' => const [BauelementKategorie.verbinder],
       'AV' => const [BauelementKategorie.armatur],
+      'KM' => const [BauelementKategorie.technik, BauelementKategorie.sonstiges],
+      'SR' => const [BauelementKategorie.rohr, BauelementKategorie.kabel],
+      'TR' || 'TP' => const [BauelementKategorie.sonstiges],
       'RW' || 'WR' || 'CM' || 'FL' || 'BA' || 'BK' || 'SI' || 'BW' => const [BauelementKategorie.brandschutz],
       _ => const [],
     };

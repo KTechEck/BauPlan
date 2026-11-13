@@ -7,19 +7,20 @@ import '../planstand.dart';
 
 /// Maß eintippen (wie mit dem Zollstock/Laser gemessen): Einheit wählbar,
 /// Planwert und Abweichung sofort sichtbar. Liefert mm.
-Future<({int wert, String text})?> massEingeben(BuildContext context, {required String titel, required num plan, int? bisher, String? hinweis}) {
+Future<({int wert, String text})?> massEingeben(BuildContext context, {required String titel, required num plan, int? bisher, String? hinweis, int verkleidung = 0}) {
   return showModalBottomSheet<({int wert, String text})>(
     context: context,
     isScrollControlled: true,
     builder: (c) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(c).bottom),
-      child: _MassEingabe(titel: titel, plan: plan, bisher: bisher, hinweis: hinweis),
+      child: _MassEingabe(titel: titel, plan: plan, bisher: bisher, hinweis: hinweis, verkleidung: verkleidung),
     ),
   );
 }
 
 class _MassEingabe extends StatefulWidget {
-  const _MassEingabe({required this.titel, required this.plan, this.bisher, this.hinweis});
+  const _MassEingabe({required this.titel, required this.plan, this.bisher, this.hinweis, this.verkleidung = 0});
+  final int verkleidung; // je Wandseite; fertig gemessen = Rohbau − 2 × Verkleidung
   final String titel;
   final num plan;
   final int? bisher;
@@ -31,6 +32,7 @@ class _MassEingabe extends StatefulWidget {
 
 class _MassEingabeState extends State<_MassEingabe> {
   String _einheit = 'cm';
+  bool _istFertig = false;
   final _ctrl = TextEditingController();
   final _text = TextEditingController();
 
@@ -41,10 +43,11 @@ class _MassEingabeState extends State<_MassEingabe> {
     if (b != null) _ctrl.text = (b / 10).toStringAsFixed(b % 10 == 0 ? 0 : 1).replaceAll('.', ',');
   }
 
+  /// Rohbaumaß in mm (fertig gemessen → Verkleidung beider Enden dazu).
   int? get _mm {
     final z = double.tryParse(_ctrl.text.trim().replaceAll(',', '.'));
     if (z == null || z <= 0) return null;
-    return (z * switch (_einheit) { 'm' => 1000, 'cm' => 10, _ => 1 }).round();
+    return (z * switch (_einheit) { 'm' => 1000, 'cm' => 10, _ => 1 }).round() + (_istFertig ? 2 * widget.verkleidung : 0);
   }
 
   @override
@@ -81,9 +84,20 @@ class _MassEingabeState extends State<_MassEingabe> {
               onSelectionChanged: (v) => setState(() => _einheit = v.first),
             ),
           ]),
+          if (widget.verkleidung > 0) ...[
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: [
+                const ButtonSegment(value: false, label: Text('Rohbau gemessen')),
+                ButtonSegment(value: true, label: Text('fertig (−${2 * widget.verkleidung} mm)')),
+              ],
+              selected: {_istFertig},
+              onSelectionChanged: (v) => setState(() => _istFertig = v.first),
+            ),
+          ],
           const SizedBox(height: 8),
           if (diff != null)
-            Text('= ${mmCm(mm!)} · Abweichung zum Plan ${diff >= 0 ? '+' : ''}${mmCm(diff)}',
+            Text('= ${mmCm(mm!)}${_istFertig ? ' Rohbau' : ''} · Abweichung zum Plan ${diff >= 0 ? '+' : ''}${mmCm(diff)}',
                 style: TextStyle(fontWeight: FontWeight.w600, color: diff.abs() > 50 ? massOffen : massGemessen)),
           const SizedBox(height: 8),
           TextField(controller: _text, decoration: const InputDecoration(labelText: 'Bemerkung (optional)', isDense: true)),
@@ -115,7 +129,8 @@ Future<void> wandLaengeMessen(BuildContext context, MobilKontext k, Map<String, 
       titel: 'Wandlänge ${seitenName(k.plan, wand, links)}',
       plan: plan,
       bisher: bisher?.wert,
-      hinweis: 'Von Ecke zu Ecke an der Wandoberfläche messen (fertige Wand oder Rohbau – wie gezeichnet).');
+      hinweis: 'Von Ecke zu Ecke an der Wandoberfläche messen.',
+      verkleidung: k.verkleidung((links ? wand['rl'] : wand['rr']) as String?));
   if (r == null) return;
   await k.massSenden(ziel: 'wand', objekt: wand, feld: 'laenge', wert: r.wert, plan: plan, seite: seite, bezug: 'innen', raum: (links ? wand['rl'] : wand['rr']) as String?, text: r.text);
 }
@@ -151,10 +166,10 @@ Future<void> bemassungMessen(BuildContext context, MobilKontext k, Map<String, d
 }
 
 /// Text und Farbe für ein Maß (gemessen grün, offen orange, grob grau).
-({String text, Color farbe}) massAnzeige(MobilKontext k, Map<String, dynamic> ziel, String feld, num plan, {String? seite, String? bezug}) {
+({String text, Color farbe}) massAnzeige(MobilKontext k, Map<String, dynamic> ziel, String feld, num plan, {String? seite, String? bezug, int abzug = 0}) {
   final g = k.gemessen(ziel, feld, seite: seite, bezug: bezug);
-  if (g == null) return (text: mmCm(plan), farbe: massGrob);
-  return (text: mmCm(g.wert), farbe: g.uebernommen ? massGemessen : massOffen);
+  if (g == null) return (text: mmCm(plan - abzug), farbe: massGrob);
+  return (text: mmCm(g.wert - abzug), farbe: g.uebernommen ? massGemessen : massOffen);
 }
 
 /// Eine Wandseite aus Sicht eines Raums: ganze Seite ([voll]) oder nur das
@@ -182,7 +197,37 @@ List<RaumSeite> raumSeiten(Map<String, dynamic> geschoss, String raumId) {
 String raumSeiteFeld(RaumSeite r, String raumId) => r.voll ? 'laenge' : 'laenge_$raumId';
 
 ({String text, Color farbe}) raumSeiteAnzeige(MobilKontext k, RaumSeite r, String raumId) =>
-    massAnzeige(k, r.wand, raumSeiteFeld(r, raumId), r.t2 - r.t1, seite: r.links ? 'l' : 'r', bezug: r.voll ? 'innen' : null);
+    massAnzeige(k, r.wand, raumSeiteFeld(r, raumId), r.t2 - r.t1, seite: r.links ? 'l' : 'r', bezug: r.voll ? 'innen' : null, abzug: k.fertigAbzug(raumId));
+
+/// Gängige Wandverkleidungen (Dicke je Wandseite in mm).
+const verkleidungVorlagen = <(String, int)>[
+  ('keine (Rohbau)', 0),
+  ('Putz', 15),
+  ('GK direkt geklebt', 25),
+  ('GK auf Unterkonstruktion', 62),
+  ('Vorsatzschale 75 + GK', 90),
+  ('Fliesen auf Putz', 25),
+];
+
+/// Wandverkleidung eines Raums wählen (geht als Aufmaß an den PC).
+Future<void> verkleidungWaehlen(BuildContext context, MobilKontext k, Map<String, dynamic> raum) async {
+  final aktuell = k.verkleidung(raum['id'] as String?);
+  final dicke = TextEditingController(text: '$aktuell');
+  final w = await showDialog<(String, int)>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: Text('Wandverkleidung ${raum['name']}'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        for (final (art, d) in verkleidungVorlagen)
+          ListTile(dense: true, title: Text(art), trailing: Text('$d mm'), onTap: () => Navigator.pop(c, (art, d))),
+        TextField(controller: dicke, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'eigene Dicke je Wandseite', suffixText: 'mm')),
+      ]),
+      actions: [FilledButton(onPressed: () => Navigator.pop(c, ('eigene', int.tryParse(dicke.text.trim()) ?? 0)), child: const Text('Eigene übernehmen'))],
+    ),
+  );
+  if (w == null) return;
+  await k.massSenden(ziel: 'verkleidung', objekt: raum, feld: 'verkleidung', wert: w.$2, plan: aktuell, raum: raum['id'] as String?, text: w.$1);
+}
 
 bool raumSeiteGemessen(MobilKontext k, RaumSeite r, String raumId) =>
     k.gemessen(r.wand, raumSeiteFeld(r, raumId), seite: r.links ? 'l' : 'r', bezug: r.voll ? 'innen' : null) != null;
@@ -195,7 +240,8 @@ Future<void> raumSeiteMessen(BuildContext context, MobilKontext k, RaumSeite r, 
       titel: 'Raumlänge an dieser Wand (${k.plan.raumName(raumId)})',
       plan: plan,
       bisher: k.gemessen(r.wand, 'laenge_$raumId', seite: seite)?.wert,
-      hinweis: 'Die Wand läuft weiter in einen anderen Raum: hier von Wand zu Wand im Raum messen.');
+      hinweis: 'Die Wand läuft weiter in einen anderen Raum: hier von Wand zu Wand im Raum messen.',
+      verkleidung: k.verkleidung(raumId));
   if (e == null) return;
   await k.massSenden(ziel: 'raumseite', objekt: r.wand, feld: 'laenge_$raumId', wert: e.wert, plan: plan, seite: seite, raum: raumId, text: e.text, extra: {'von': r.t1.round(), 'bis': r.t2.round()});
 }

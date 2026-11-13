@@ -384,16 +384,31 @@ Rauchmelder/Brandschutz, fehlende Bibliothek-Einstellungen, Anschlusspositionen,
 - Offen/Ideen: Sparren im PC-Grundriss selbst zeichnen (bisher nur Vorschau im Dialog), Dachschrägen in Heizlast/Wohnfläche einrechnen.
 - 220 Tests grün.
 
-## Gesammelt für Build 13 (Tim 13.11. 21:08–21:12 – erst umsetzen, wenn Tim es ausdrücklich sagt)
+## Build 13 (Tim 13.11. 21:13: „Du kannst jetzt anfangen“)
 Gilt für PC und App.
-- [ ] Schnittpunkte: Ein angrenzend gezeichneter Raum stößt an die Wandoberfläche, nicht an die Wandmitte. Gemessen/angezeigt wird das lichte Innenmaß
+- [x] Schnittpunkte: Ein angrenzend gezeichneter Raum stößt an die Wandoberfläche, nicht an die Wandmitte. Gemessen/angezeigt wird das lichte Innenmaß
       (bisher wurde bis zur Mitte der gestoßenen Wand gerechnet).
-- [ ] Durchgehende Wände automatisch an den Anschlusspunkten teilen (bzw. je Raum eigenes Stück), damit jeder Raum seine eigenen Innenmaße hat
+- [x] Durchgehende Wände automatisch an den Anschlusspunkten teilen (bzw. je Raum eigenes Stück), damit jeder Raum seine eigenen Innenmaße hat
       und nicht nur die Gesamtlänge der durchlaufenden Wand messbar ist.
-- [ ] Wanddicke ändern: Das lichte Innenmaß bleibt fest (z. B. Bad bleibt gleich groß), Außenmaße und Nachbarräume passen sich an.
+- [x] Wanddicke ändern: Das lichte Innenmaß bleibt fest (z. B. Bad bleibt gleich groß), Außenmaße und Nachbarräume passen sich an.
       Die Winkel bleiben unverändert, es wird nur skaliert bzw. verschoben.
-- [ ] Rohbaumaß und Fertigmaß unterscheiden: Verkleidung je Wand bzw. Wandseite schnell wählbar (z. B. GK auf Unterkonstruktion mit Dicke),
+- [x] Rohbaumaß und Fertigmaß unterscheiden: Verkleidung je Wand bzw. Wandseite schnell wählbar (z. B. GK auf Unterkonstruktion mit Dicke),
       beim Aufmaß einfach umschaltbar, ob roh oder fertig gemessen wurde. Nicht beide Maße nebeneinander anzeigen.
-- [ ] Maße je Zoomstufe ein- und ausblenden, damit alles lesbar bleibt (vor allem in der App). In den Einstellungen individuell einstellbar
+- [x] Maße je Zoomstufe ein- und ausblenden, damit alles lesbar bleibt (vor allem in der App). In den Einstellungen individuell einstellbar
       und auf Standard zurücksetzbar.
-- [ ] Treppe in ein anderes Geschoss einfügen, optional mit Zwischenpodest.
+- [x] Treppe in ein anderes Geschoss einfügen, optional mit Zwischenpodest.
+- [x] Kamin / Schornstein als einfügbares Element.
+- [x] Rohre (und Leitungen) in der Wand über mehrere Geschosse (Steigleitung, Fallrohr).
+- BUILD 13 ERSTELLT 13.11. 21:41 (sauber neu, 223 Tests grün, Migration 19). Umsetzung:
+  1/2: store.waendeAnAnschluessenTeilen (beim Öffnen jedes Projekts, nach Wand/Rechteck zeichnen): teilt Wände an T-Stößen, entfernt
+  doppelte Wände (ältere bleibt, Öffnungen wandern mit). wandmasse.flankenGrenzen(masse: true) für Maße: Seite mit Abzweig endet an dessen
+  Oberfläche; Zeichnung (masse: false) bleibt ohne Kerbe. Test test/wand_teilen_test.dart.
+  3: store.wandDickeVersetzen + aufmass.wandDickeMitInnenmass/festeSeite (Einstellung `dicke_fest` auto/links/rechts/mitte, auto = Raumseite
+  bzw. kleinerer Raum); Nachbarwände entlang ihrer Richtung bis zur neuen Achse, Rückgängig über waendeKoordinatenSetzen.
+  4: Wandverkleidung je Raum (raum.eigenschaften.verkleidung {art, dicke}; PC Raum-Eigenschaften, App Raum-Aufmaß, Aufmaß-Ziel verkleidung),
+  Anzeige roh/fertig (PC Einstellung `massart`, App MobilEinstellungen.massart), Eingabe in der App „Rohbau/fertig gemessen“.
+  App-Plan: Schrift bleibt beim Zoomen gleich groß, Maße ohne Platz werden ausgeblendet; Mehr › Maße im Plan: Dichte, Schriftgröße, Zurücksetzen.
+  OFFEN: dasselbe Ein-/Ausblenden im PC-Grundriss (dort bisher feste Maße).
+  5/6/7: Typen TR Treppe (Lauflinie), TP Podest, KM Kamin (Allgemein), SR Steigleitung in SA/HZ/EL; eigenschaften.bis_geschoss → Objekt
+  erscheint in allen Geschossen dazwischen (lib/core/geschossuebergreifend.dart, Installation + Planstand); Treppenwerte (Höhe, Steigungen,
+  Podest) im Installations-Panel mit Schrittmaßprüfung.

@@ -393,4 +393,6 @@ const List<List<String>> migrationen = [
   [],
   // Version 18 – Gewerk Brandschutz mit Rauchwarnmeldern, Feuerlöschern, Abschottungen … (Startbestand in _migrieren)
   [],
+  // Version 19 – Treppe, Podest, Kamin; Steigleitungen in Sanitär, Heizung, Elektro (Startbestand in _migrieren)
+  [],
 ];

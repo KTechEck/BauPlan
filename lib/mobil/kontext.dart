@@ -37,6 +37,18 @@ class MobilKontext {
 
   Map<String, dynamic>? get geschoss => plan.geschoss(einstellungen.geschoss);
 
+  /// Dicke der Wandverkleidung eines Raums (mm, je Wandseite), 0 = keine.
+  int verkleidung(String? raumId) {
+    final r = plan.raum(raumId)?.$1;
+    if (r == null) return 0;
+    final g = gemessen(r, 'verkleidung');
+    if (g != null) return g.wert;
+    return ((r['verkleidung'] as Map?)?['dicke'] as num?)?.round() ?? 0;
+  }
+
+  /// Abzug für die Fertigmaß-Anzeige einer Wandseite im Raum (beide Enden).
+  int fertigAbzug(String? raumId) => einstellungen.massart == 'fertig' ? 2 * verkleidung(raumId) : 0;
+
   /// Gemessener Wert für ein Ziel: am PC übernommen (grün), unterwegs/offen (orange) oder null.
   ({int wert, bool uebernommen})? gemessen(Map<String, dynamic> ziel, String feld, {String? seite, String? bezug}) {
     final schluessel = aufmassSchluessel('${ziel['id']}', feld, seite: seite, bezug: bezug);

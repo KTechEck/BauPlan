@@ -253,10 +253,20 @@ class _FloorplanPageState extends State<FloorplanPage> {
           t.id: [for (final s in t.schichten) (s.dicke, Color(materialien[s.materialId]?.farbe ?? 0xFFDDDDDD))],
       },
       achsen: achsen,
-      flanken: {
-        for (var i = 0; i < waende.length; i++)
-          waende[i].id: flankenLaengen(achsen[i], verbinden[i] ? nachbarn : [achsen[i]]),
-      },
+      flanken: () {
+        final roh = {
+          for (var i = 0; i < waende.length; i++)
+            waende[i].id: flankenLaengen(achsen[i], verbinden[i] ? nachbarn : [achsen[i]]),
+        };
+        // Fertigmaße: Wandverkleidung des Raums an beiden Enden abziehen
+        if (store.einstellung<String>('massart') != 'fertig') return roh;
+        final mm = wandMasse(waende, raeume, verbindenStandard: _eckenVerbinden);
+        final verk = {for (final r in raeume) r.id: raumVerkleidung(r)};
+        return {
+          for (final e in roh.entries)
+            e.key: (e.value.$1 - 2 * (verk[mm[e.key]?.raumLinks] ?? 0), e.value.$2 - 2 * (verk[mm[e.key]?.raumRechts] ?? 0)),
+        };
+      }(),
       bemassungen: g == null ? const [] : store.bemassungen(g),
       winkelmasse: g == null ? const [] : store.winkelmasse(g),
       vorlage: g == null ? null : store.planvorlage(g),
@@ -582,6 +592,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
       verbinden: _neueVerbinden,
     );
     _rueckgaengig.add(() => store.wandLoeschen(id));
+    store.waendeAnAnschluessenTeilen(_s.geschossId!);
     _s.geaendert();
   }
 
@@ -1821,6 +1832,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
         store.wandLoeschen(id);
       }
     });
+    // angrenzender Raum: gemeinsame Wand nicht doppelt, durchgehende Wände teilen
+    store.waendeAnAnschluessenTeilen(_s.geschossId!);
     setState(() {
       _kettenStart = null;
       _eingabeLeeren();
@@ -3074,6 +3087,36 @@ class _FloorplanPageState extends State<FloorplanPage> {
         if (flaeche != null) zeile('Fläche (licht)', flaecheText(flaeche)),
         if (umfang != null) zeile('Umfang (licht)', meterText(umfang)),
         if (lichteHoehe != null) zeile('lichte Höhe', '${mmText(lichteHoehe)} mm'),
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(
+            child: DropdownButtonFormField<int>(
+              key: ValueKey('verk-${r.id}-${raumVerkleidung(r)}'),
+              initialValue: raumVerkleidung(r),
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Wandverkleidung (je Seite)', isDense: true),
+              items: [
+                for (final (art, d) in const [('keine (Rohbau)', 0), ('Putz', 15), ('GK direkt geklebt', 25), ('GK auf Unterkonstruktion', 62), ('Vorsatzschale 75 + GK', 90)])
+                  DropdownMenuItem(value: d, child: Text('$art · $d mm')),
+                if (![0, 15, 25, 62, 90].contains(raumVerkleidung(r))) DropdownMenuItem(value: raumVerkleidung(r), child: Text('eigene · ${raumVerkleidung(r)} mm')),
+              ],
+              onChanged: (d) {
+                store.raumEigenschaftenSetzen(r.id, {...r.eigenschaften, 'verkleidung': {'art': '', 'dicke': d ?? 0}});
+                _s.geaendert();
+              },
+            ),
+          ),
+        ]),
+        Row(children: [
+          const Expanded(child: Text('Maße im Grundriss als Fertigmaß (aus = Rohbau)', style: TextStyle(fontSize: 12))),
+          Switch(
+            value: store.einstellung<String>('massart') == 'fertig',
+            onChanged: (v) {
+              store.einstellungSetzen('massart', v ? 'fertig' : 'roh');
+              _s.geaendert();
+            },
+          ),
+        ]),
         ...() {
           final dach = dachLesen(store, r.geschossId);
           final gr = dach.aktiv ? gebaeuderahmen(store.waende(r.geschossId)) : null;
@@ -3351,13 +3394,16 @@ class _FloorplanPageState extends State<FloorplanPage> {
           onChanged: (v) {
             if (v == null) return;
             final alt = [for (final w in waende) (w.id, w.wandtypId, w.dicke)];
+            final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
             for (final w in waende) {
-              store.wandWandtypSetzen(w.id, v);
+              final aktuell = store.waende(w.geschossId).where((x) => x.id == w.id).firstOrNull ?? w;
+              wandDickeMitInnenmass(store, aktuell, () => store.wandWandtypSetzen(w.id, v));
             }
             _rueckgaengig.add(() {
               for (final (id, typ, dicke) in alt) {
                 typ != null ? store.wandWandtypSetzen(id, typ) : store.wandAendern(id, dicke: dicke);
               }
+              store.waendeKoordinatenSetzen(koord);
             });
             _s.geaendert();
           },
@@ -3665,13 +3711,15 @@ class _FloorplanPageState extends State<FloorplanPage> {
           onChanged: (v) {
             final altTyp = w.wandtypId;
             final altDicke = w.dicke;
-            store.wandWandtypSetzen(w.id, v);
+            final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
+            wandDickeMitInnenmass(store, w, () => store.wandWandtypSetzen(w.id, v));
             _rueckgaengig.add(() {
               if (altTyp != null) {
                 store.wandWandtypSetzen(w.id, altTyp);
               } else {
                 store.wandAendern(w.id, dicke: altDicke);
               }
+              store.waendeKoordinatenSetzen(koord);
             });
             _s.geaendert();
           },
@@ -3715,11 +3763,32 @@ class _FloorplanPageState extends State<FloorplanPage> {
             onChanged: (d) {
               if (d == null) return;
               final alt = w.dicke;
-              store.wandAendern(w.id, dicke: d);
-              _rueckgaengig.add(() => store.wandAendern(w.id, dicke: alt));
+              final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
+              wandDickeMitInnenmass(store, w, () => store.wandAendern(w.id, dicke: d));
+              _rueckgaengig.add(() {
+                store.wandAendern(w.id, dicke: alt);
+                store.waendeKoordinatenSetzen(koord);
+              });
               _s.geaendert();
             },
           ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey('fest-${store.einstellung<String>('dicke_fest')}'),
+          initialValue: store.einstellung<String>('dicke_fest') ?? 'auto',
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Bei Dickenänderung bleibt fest', isDense: true),
+          items: const [
+            DropdownMenuItem(value: 'auto', child: Text('automatisch (Raumseite, kleinerer Raum)')),
+            DropdownMenuItem(value: 'links', child: Text('Seite A')),
+            DropdownMenuItem(value: 'rechts', child: Text('Seite B')),
+            DropdownMenuItem(value: 'mitte', child: Text('Wandmitte (beide Räume ändern sich)')),
+          ],
+          onChanged: (v) {
+            store.einstellungSetzen('dicke_fest', v);
+            _s.geaendert();
+          },
+        ),
         const SizedBox(height: 12),
         DropdownButtonFormField<WandZustand>(
           key: ValueKey('zustand-${w.id}-${w.zustand.name}'),

@@ -220,6 +220,11 @@ class MobilEinstellungen {
   /// Ansicht der Einkaufs-/Materialliste (haendler, herkunft, kategorie, raum).
   String einkaufAnsicht = 'haendler';
 
+  /// Maßanzeige: roh (Rohbau) oder fertig (abzüglich Wandverkleidung);
+  /// Dichte (wie früh Maße beim Herauszoomen ausgeblendet werden) und Schriftgröße.
+  String massart = 'roh';
+  double massDichte = 1, massSchrift = 1;
+
   /// Verbindung zum Speicher: art (pc/webdav), adresse, code, pc_name, auto, url, benutzer, passwort, unsicher, projekt.
   Map<String, dynamic> verbindung = {};
 
@@ -237,13 +242,16 @@ class MobilEinstellungen {
       s.aufmass = {for (final e in (m['aufmass'] as Map? ?? const {}).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map)};
       s.abgehakt = {for (final x in (m['abgehakt'] as List? ?? const [])) '$x'};
       s.einkaufAnsicht = m['einkauf_ansicht'] as String? ?? 'haendler';
+      s.massart = m['massart'] as String? ?? 'roh';
+      s.massDichte = (m['mass_dichte'] as num?)?.toDouble() ?? 1;
+      s.massSchrift = (m['mass_schrift'] as num?)?.toDouble() ?? 1;
     } catch (_) {}
     return s;
   }
 
   void speichern() {
     try {
-      _datei?.writeAsStringSync(jsonEncode({'benutzer': benutzer, 'foto': fotoQualitaet, 'geschoss': geschoss, 'raum': raum, 'gewerk': gewerk, 'verbindung': verbindung, 'aufmass': aufmass, 'abgehakt': abgehakt.toList(), 'einkauf_ansicht': einkaufAnsicht}));
+      _datei?.writeAsStringSync(jsonEncode({'benutzer': benutzer, 'foto': fotoQualitaet, 'geschoss': geschoss, 'raum': raum, 'gewerk': gewerk, 'verbindung': verbindung, 'aufmass': aufmass, 'abgehakt': abgehakt.toList(), 'einkauf_ansicht': einkaufAnsicht, 'massart': massart, 'mass_dichte': massDichte, 'mass_schrift': massSchrift}));
     } catch (_) {}
   }
 }

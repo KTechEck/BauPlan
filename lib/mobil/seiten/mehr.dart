@@ -284,6 +284,66 @@ class MehrSeite extends StatelessWidget {
           e.speichern();
         },
       ),
+      const SizedBox(height: 16),
+      Text('Maße im Plan', style: Theme.of(context).textTheme.titleSmall),
+      const SizedBox(height: 6),
+      SegmentedButton<String>(
+        segments: const [ButtonSegment(value: 'roh', label: Text('Rohbaumaße')), ButtonSegment(value: 'fertig', label: Text('Fertigmaße'))],
+        selected: {e.massart},
+        onSelectionChanged: (v) {
+          e.massart = v.first;
+          e.speichern();
+          neuZeichnen();
+        },
+      ),
+      const Text('Fertigmaße ziehen die Wandverkleidung des Raums ab (im Raum-Aufmaß einstellbar).', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      Row(children: [
+        const SizedBox(width: 110, child: Text('Maße zeigen')),
+        Expanded(
+          child: Slider(
+            value: e.massDichte,
+            min: 0.4,
+            max: 2.5,
+            divisions: 21,
+            label: e.massDichte < 0.9 ? 'mehr' : (e.massDichte > 1.1 ? 'weniger' : 'normal'),
+            onChanged: (v) {
+              e.massDichte = v;
+              e.speichern();
+              neuZeichnen();
+            },
+          ),
+        ),
+      ]),
+      Row(children: [
+        const SizedBox(width: 110, child: Text('Schriftgröße')),
+        Expanded(
+          child: Slider(
+            value: e.massSchrift,
+            min: 0.7,
+            max: 1.8,
+            divisions: 11,
+            onChanged: (v) {
+              e.massSchrift = v;
+              e.speichern();
+              neuZeichnen();
+            },
+          ),
+        ),
+      ]),
+      const Text('Beim Hineinzoomen erscheinen mehr Maße, beim Herauszoomen werden kleine ausgeblendet. Links = mehr Maße, rechts = weniger.',
+          style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      TextButton.icon(
+        onPressed: () {
+          e
+            ..massDichte = 1
+            ..massSchrift = 1
+            ..massart = 'roh';
+          e.speichern();
+          neuZeichnen();
+        },
+        icon: const Icon(Icons.restart_alt),
+        label: const Text('Maßanzeige auf Standard zurücksetzen'),
+      ),
       const SizedBox(height: 12),
       OutlinedButton.icon(
         onPressed: e.aufmass.isEmpty

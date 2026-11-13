@@ -66,7 +66,7 @@ Map<String, WandMasse> wandMasse(List<Wand> waende, List<Raum> raeume, {bool ver
   final aus = <String, WandMasse>{};
   for (var i = 0; i < waende.length; i++) {
     final w = waende[i];
-    final g = flankenGrenzen(achsen[i], (w.verbinden ?? verbindenStandard) ? nachbarn : [achsen[i]]);
+    final g = flankenGrenzen(achsen[i], (w.verbinden ?? verbindenStandard) ? nachbarn : [achsen[i]], masse: true);
     final l = math.max(1.0, w.laenge);
     final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
     String? raumAuf(double s, double tA, double tB) {
@@ -112,6 +112,7 @@ String aufmassFeldText(String ziel, String feld) => switch ((ziel, feld)) {
       ('schraege', 'kniestock') => 'Dachschräge: Kniestock',
       ('schraege', 'tiefe') => 'Dachschräge: Tiefe bis waagrechte Decke',
       ('schraege', 'decke') => 'Dachschräge: Höhe waagrechte Decke',
+      ('verkleidung', _) => 'Wandverkleidung (je Seite)',
       ('objekt', 'h') => 'Höhe Gerät über FFB',
       ('objekt', 'x') => 'Gerät ab Wandecke',
       _ => feld,
@@ -229,6 +230,9 @@ double? aufmassPlanwert(ProjectStore store, Map<String, dynamic> a) {
         return i < f.$1.lagen.length ? f.$1.lagen[i] : 0;
       }
       return (f.$1.toJson()[feld] as num?)?.toDouble();
+    case 'verkleidung':
+      final r = _raum(store, id);
+      return r == null ? null : ((r.$1.eigenschaften['verkleidung'] as Map?)?['dicke'] as num?)?.toDouble() ?? 0;
     case 'schraege':
       final r = _raum(store, id);
       if (r == null) return null;
@@ -353,7 +357,7 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
   final id = a['id_ziel'] as String?;
   final feld = a['feld'] as String? ?? '';
   final wert = (a['wert'] as num?)?.round();
-  if (id == null || wert == null || wert < 0 || (wert == 0 && !(a['ziel'] == 'sparren' && (feld == 'neu' || feld.startsWith('pos_') || feld == 'erster')))) {
+  if (id == null || wert == null || wert < 0 || (wert == 0 && a['ziel'] != 'verkleidung' && !(a['ziel'] == 'sparren' && (feld == 'neu' || feld.startsWith('pos_') || feld == 'erster')))) {
     return 'Kein gültiger Wert.';
   }
   final plan = aufmassPlanwert(store, a);
@@ -361,7 +365,9 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
   switch (a['ziel']) {
     case 'wand':
       if (feld == 'dicke') {
-        store.wandAendern(id, dicke: wert);
+        final w = store.waende((a['geschoss'] as String?) ?? _geschossVonWand(store, id) ?? '').where((x) => x.id == id).firstOrNull;
+        if (w == null) return 'Wand nicht gefunden.';
+        wandDickeMitInnenmass(store, w, () => store.wandAendern(id, dicke: wert));
       } else {
         final g = (a['geschoss'] as String?) ?? _geschossVonWand(store, id);
         final w = g == null ? null : store.waende(g).where((x) => x.id == id).firstOrNull;
@@ -433,6 +439,10 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
         if (f == null) return 'Sparrenfeld fehlt – zuerst „Neues Sparrenfeld“ übernehmen.';
         sparrenfelderSetzen(store, f.$2, [for (final x in sparrenfelder(store, f.$2)) x.id == id ? x.mitWert(feld, wert) : x]);
       }
+    case 'verkleidung':
+      final r = _raum(store, id);
+      if (r == null) return 'Raum nicht gefunden.';
+      store.raumEigenschaftenSetzen(id, {...r.$1.eigenschaften, 'verkleidung': {'art': a['text'] ?? '', 'dicke': wert}});
     case 'schraege':
       final r = _raum(store, id);
       if (r == null) return 'Raum nicht gefunden.';
@@ -490,3 +500,37 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
   aufmassStatusSetzen(store, a['nr'] as String, 'uebernommen');
   return null;
 }
+
+/// Welche Wandseite bei einer Dickenänderung fest bleibt (Projekteinstellung
+/// `dicke_fest`: auto, links, rechts, mitte). Automatisch: bei Außenwänden die
+/// Raumseite, zwischen zwei Räumen die Seite des kleineren Raums (z. B. Bad).
+int festeSeite(ProjectStore store, Wand w) {
+  switch (store.einstellung<String>('dicke_fest') ?? 'auto') {
+    case 'mitte':
+      return 0;
+    case 'links':
+      return 1;
+    case 'rechts':
+      return -1;
+  }
+  final raeume = store.raeume(w.geschossId);
+  final m = wandMasse(store.waende(w.geschossId), raeume, verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true)[w.id];
+  if (m == null) return 0;
+  final l = m.raumLinks, r = m.raumRechts;
+  if (l != null && r == null) return 1;
+  if (r != null && l == null) return -1;
+  if (l == null || r == null) return 0;
+  double f(String id) => raeume.where((x) => x.id == id).firstOrNull?.flaeche ?? double.infinity;
+  return f(l) <= f(r) ? 1 : -1;
+}
+
+/// Dicke ändern und dabei das lichte Maß halten (siehe [festeSeite]).
+void wandDickeMitInnenmass(ProjectStore store, Wand w, void Function() aendern) {
+  final fest = festeSeite(store, w);
+  aendern();
+  final neu = store.waende(w.geschossId).where((x) => x.id == w.id).firstOrNull;
+  if (neu != null) store.wandDickeVersetzen(w.id, w.dicke, neu.dicke, fest);
+}
+
+/// Wandverkleidung eines Raums (mm je Wandseite), 0 = keine.
+int raumVerkleidung(Raum r) => ((r.eigenschaften['verkleidung'] as Map?)?['dicke'] as num?)?.round() ?? 0;

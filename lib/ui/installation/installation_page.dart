@@ -12,6 +12,7 @@ import '../../app/theme.dart';
 import '../../core/bauelemente.dart';
 import '../../core/fbh.dart';
 import '../../core/verdrahtungskette.dart';
+import '../../core/geschossuebergreifend.dart';
 import '../../core/height.dart';
 import '../../core/leitungsnetz.dart';
 import '../../core/raumerkennung.dart';
@@ -162,7 +163,7 @@ class _InstallationPageState extends State<InstallationPage> {
             ),
       ],
       oeffnungen: g == null ? const [] : store.oeffnungen(g),
-      objekte: g == null ? const [] : store.objekte(g),
+      objekte: g == null ? const [] : [...store.objekte(g), ...durchgehendeObjekte(store, g)],
       typen: {for (final t in store.objekttypen()) t.id: t},
       gewerke: gewerke,
       geschoss: g == null ? null : store.geschoss(g),
@@ -2241,6 +2242,72 @@ class _InstallationPageState extends State<InstallationPage> {
 
   /// Eigenschaften mit Reitern (Lastenheft): Allgemein, Produkt & Kosten,
   /// Fotos, Verlauf.
+  /// Über Geschosse (Steigleitung, Kamin, Treppe) und Treppenwerte.
+  List<Widget> _geschossuebergreifend(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
+    final store = _s.store!;
+    final kuerzel = d.typen[o.typId]?.kuerzel ?? '';
+    void setzen(String k, Object? v) {
+      final e = {...o.eigenschaften};
+      v == null || (v is String && v.isEmpty) ? e.remove(k) : e[k] = v;
+      aendern({'eigenschaften': jsonEncode(e)});
+    }
+
+    final geschosse = [for (final geb in store.gebaeude()) ...store.geschosse(geb.id)];
+    final fremd = o.geschossId != _s.geschossId;
+    final widgets = <Widget>[
+      const SizedBox(height: 12),
+      if (fremd)
+        _hinweisBox('Dieses Objekt gehört zum Geschoss „${geschosse.where((g) => g.id == o.geschossId).firstOrNull?.name ?? '?'}“ und läuft bis hierher durch.'),
+      DropdownButtonFormField<String?>(
+        key: ValueKey('bis-${o.id}-${o.eigenschaften['bis_geschoss']}'),
+        initialValue: geschosse.any((g) => g.id == o.eigenschaften['bis_geschoss']) ? o.eigenschaften['bis_geschoss'] as String : null,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: kuerzel == 'TR' ? 'Treppe führt nach' : 'Läuft über Geschosse bis', isDense: true),
+        items: [
+          const DropdownMenuItem<String?>(value: null, child: Text('– nur dieses Geschoss –')),
+          for (final g in geschosse)
+            if (g.id != o.geschossId) DropdownMenuItem<String?>(value: g.id, child: Text(g.name)),
+        ],
+        onChanged: (v) => setzen('bis_geschoss', v),
+      ),
+    ];
+    if (kuerzel == 'TR') {
+      final t = treppeBerechnen(o);
+      Widget feld(String k, String label, int vorgabe) => SizedBox(
+            width: 150,
+            child: TextFormField(
+              key: ValueKey('tr-${o.id}-$k-${o.eigenschaften[k]}'),
+              initialValue: '${o.eigenschaften[k] ?? vorgabe}',
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: label, isDense: true),
+              onFieldSubmitted: (v) => setzen(k, int.tryParse(v.trim())),
+            ),
+          );
+      widgets.addAll([
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          feld('hoehe', 'Höhe FFB → FFB (mm)', 2800),
+          feld('breite', 'Laufbreite (mm)', 1000),
+          feld('steigungen', 'Steigungen', t.steigungen),
+          feld('podest_nach', 'Podest nach Stufe (0 = keins)', 0),
+          feld('podest_tiefe', 'Podesttiefe (mm)', 1000),
+        ]),
+        const SizedBox(height: 6),
+        Text('${t.steigungen} Steigungen à ${t.steigung.toStringAsFixed(1).replaceAll('.', ',')} mm, Auftritt ${t.auftritt.round()} mm – ${t.bewertung}. '
+            'Zwischenpodest als Fläche: Typ „Treppenpodest“.',
+            style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      ]);
+    }
+    return widgets;
+  }
+
+  Widget _hinweisBox(String t) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: BsFarben.akzentHell, borderRadius: BorderRadius.circular(8)),
+        child: Text(t, style: const TextStyle(fontSize: 12)),
+      );
+
   Widget _eigenschaften(Objekt o, _Daten d) {
     final store = _s.store!;
     final be = _s.bibliothek.fuerProjekt(store, o.eigenschaften['bauelement'] as String?);
@@ -2468,6 +2535,7 @@ class _InstallationPageState extends State<InstallationPage> {
         ],
         onChanged: (v) => aendern({'lage': v}),
       ),
+      ..._geschossuebergreifend(o, d, aendern),
       const SizedBox(height: 12),
       DropdownButtonFormField<ObjektStatus>(
         key: ValueKey('status-${o.id}-${o.status.name}'),

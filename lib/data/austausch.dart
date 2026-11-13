@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../core/auswertung.dart';
 import '../core/aufmass.dart';
 import '../core/brandschutz.dart';
+import '../core/geschossuebergreifend.dart';
 import '../core/height.dart';
 import '../core/sparren.dart';
 import '../core/raumerkennung.dart';
@@ -119,6 +120,7 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
               'hoehe': ((r.ukDecke ?? hoeheRaum[r.id]!.rohdecke) - hoeheRaum[r.id]!.ffb),
               'art': r.art.name,
               if (r.eigenschaften['schraegen'] != null) 'schraegen': r.eigenschaften['schraegen'],
+              if (r.eigenschaften['verkleidung'] != null) 'verkleidung': r.eigenschaften['verkleidung'],
               if (gemessen[r.id] != null) 'gemessen': gemessen[r.id],
             }
         ],
@@ -132,6 +134,10 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
         'objekte': [
           for (final o in store.objekte(g.id))
             if (typen[o.typId] != null) _objektFuerApp(store, o, typen[o.typId]!, gewerkKuerzel, hoeheRaum[o.raumId] ?? g.hoehen, ffbVon(o.raumId), produkte),
+          // Steigleitungen, Kamine, Treppen aus anderen Geschossen
+          for (final o in durchgehendeObjekte(store, g.id))
+            if (typen[o.typId] != null)
+              {..._objektFuerApp(store, o, typen[o.typId]!, gewerkKuerzel, g.hoehen, g.hoehen.ffb, produkte), 'durchgehend': true}..remove('h'),
         ],
       });
     }

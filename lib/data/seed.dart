@@ -21,6 +21,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('LR', 'Leerrohr', 'linie'),
     ('VT', 'Verteiler / Zählerschrank', 'punkt'),
     ('LB', 'LED-Streifen / Lichtband', 'linie'),
+    ('SR', 'Steigleitung Elektro (über Geschosse)', 'punkt'),
   ]),
   GewerkVorlage('KX', 'KNX / Smart Home', 0xFF2F9E44, 'dashed', false, [
     ('KX', 'KNX-Gerät', 'punkt'),
@@ -41,11 +42,13 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('ZI', 'Zirkulation', 'linie'),
     ('AW', 'Abwasserleitung', 'linie'),
     ('EN', 'Entnahmestelle / Ablauf', 'punkt'),
+    ('SR', 'Steigleitung / Fallrohr (über Geschosse)', 'punkt'),
   ]),
   GewerkVorlage('HZ', 'Heizungsanlage', 0xFFE03131, 'solid', true, [
     ('VL', 'Vorlauf', 'linie'),
     ('RL', 'Rücklauf', 'linie'),
     ('HZ', 'Anlagenbauteil', 'punkt'),
+    ('SR', 'Steigleitung Heizung (über Geschosse)', 'punkt'),
   ]),
   GewerkVorlage('FH', 'Flächenheizung', 0xFFF08C00, 'solid', true, [
     ('HK', 'Heizkreis', 'flaeche'),
@@ -65,6 +68,9 @@ const gewerkVorlagen = <GewerkVorlage>[
   GewerkVorlage('AL', 'Allgemein', 0xFF6B7178, 'solid', true, [
     ('MP', 'Messpunkt / Warnhinweis', 'punkt'),
     ('WD', 'Wanddurchbruch / Kernbohrung', 'punkt'),
+    ('TR', 'Treppe (Lauflinie)', 'linie'),
+    ('TP', 'Treppenpodest / Zwischenpodest', 'flaeche'),
+    ('KM', 'Kamin / Schornstein', 'flaeche'),
   ]),
 ];
 
