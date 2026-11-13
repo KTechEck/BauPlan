@@ -413,7 +413,14 @@ Gilt für PC und App.
   erscheint in allen Geschossen dazwischen (lib/core/geschossuebergreifend.dart, Installation + Planstand); Treppenwerte (Höhe, Steigungen,
   Podest) im Installations-Panel mit Schrittmaßprüfung.
 
-## OBERSTE PRIORITÄT Build 14 (Tim 13.11. 22:02 – Aufmaß aus Build 13 unbrauchbar)
+## Build 14 ERSTELLT 13.11. 22:50 (224 Tests) – Aufmaß-Korrektur
+Umgesetzt: waendeAnAnschluessenTeilen entfernt; waendeZusammenfuehren (einmalig beim Öffnen, Flag `waende_zusammengefuehrt`),
+doppelteWaendeEntfernen (auch enthaltene/teilweise überlappende Wand), raumStuecke aus Umrisskanten (eine Strecke je Raumseite),
+PC-Painter _raumMasse (Messlinie je Raum auf seiner Seite, „Länge Raumname“), App: Wand-Blatt „Lichte Länge im Raum …“,
+Raum-Aufmaß markiert nur die gewählte Strecke (GrundrissAnsicht.strecke), Plan beschriftet je Raumstück.
+Offen: Tims echtes Projekt nach dem Öffnen prüfen (Raumzuordnung), Wandverkleidungen (Build 15), PC-Zoom-Ausblenden.
+
+### (ursprüngliche Liste)
 - [ ] Wände NICHT mehr teilen. Das automatische Teilen (store.waendeAnAnschluessenTeilen, läuft in Build 13 bei JEDEM Öffnen und nach dem
       Zeichnen) entfernen. Stattdessen eine Funktion, die geteilte Stücke wieder zusammenführt (kollinear, Ende an Ende, gleiche Dicke, gleicher
       Wandtyp und Zustand; Öffnungen umrechnen) und einmal auf Tims Projekt anwenden. Das Entfernen doppelter Wände darf bleiben.
