@@ -429,6 +429,11 @@ Gilt für PC und App.
       Beschriftung „4860 innen“. Auf der Balkonseite läuft die Wand durch. Soll: ein Bauteil, nur die Messlinie auf der Wohnzimmerseite endet
       an der Oberfläche der Querwand. Die Auswahl-Markierung soll die gemessene Seite zeigen, nicht den ganzen Wandkörper. Oben stand „Längen als Achsmaß“:
       Bei gewählter Wand das gemeinte Maß (innen im Raum X) eindeutig zeigen.
+- [ ] Tims App-Screenshot (Aufmaß Wohnzimmer): obere Wand in 239 + 247 cm geteilt (Querwand kommt nur von oben aus dem Nachbarraum),
+      rechtes Stück über die ganze Dicke orange. Liste „0 von 10 Wänden“ für ein Rechteck; Wand 1/4/5 „(Teilstück)“ mehrfach mit 486 cm,
+      Wand 2 und 3 je 386 cm. Ursachen prüfen: raumStuecke() nimmt Umriss-Ecken innerhalb 6 mm der Flankenlinie – bei geteilten Stücken trifft
+      jedes Stück den ganzen Raumumriss → Doppelungen. Soll: je Raum genau eine Messstrecke pro Raumseite (Rechteck = 4), zusammenhängende
+      kollineare Stücke zusammenfassen, Stück nur dort, wo es wirklich an den Raum grenzt (Überlappung von Flanke und Umrisskante, nicht nur Ecken).
 - [ ] Die App selbst Schritt für Schritt durchspielen (Bildtests mit zwei Räumen und durchlaufender Wand) und mit Tims Screenshots abgleichen.
 - [ ] Danach erst die Wandverkleidungen (unten).
 
