@@ -383,3 +383,17 @@ Rauchmelder/Brandschutz, fehlende Bibliothek-Einstellungen, Anschlusspositionen,
   Plan › „Sparren“ bzw. Wand › „Sparren ganzes Geschoss / nur Raum“ (lib/mobil/seiten/sparren.dart), Sparren im Plan braun.
 - Offen/Ideen: Sparren im PC-Grundriss selbst zeichnen (bisher nur Vorschau im Dialog), Dachschrägen in Heizlast/Wohnfläche einrechnen.
 - 220 Tests grün.
+
+## Gesammelt für Build 13 (Tim 13.11. 21:08–21:12 – erst umsetzen, wenn Tim es ausdrücklich sagt)
+Gilt für PC und App.
+- [ ] Schnittpunkte: Ein angrenzend gezeichneter Raum stößt an die Wandoberfläche, nicht an die Wandmitte. Gemessen/angezeigt wird das lichte Innenmaß
+      (bisher wurde bis zur Mitte der gestoßenen Wand gerechnet).
+- [ ] Durchgehende Wände automatisch an den Anschlusspunkten teilen (bzw. je Raum eigenes Stück), damit jeder Raum seine eigenen Innenmaße hat
+      und nicht nur die Gesamtlänge der durchlaufenden Wand messbar ist.
+- [ ] Wanddicke ändern: Das lichte Innenmaß bleibt fest (z. B. Bad bleibt gleich groß), Außenmaße und Nachbarräume passen sich an.
+      Die Winkel bleiben unverändert, es wird nur skaliert bzw. verschoben.
+- [ ] Rohbaumaß und Fertigmaß unterscheiden: Verkleidung je Wand bzw. Wandseite schnell wählbar (z. B. GK auf Unterkonstruktion mit Dicke),
+      beim Aufmaß einfach umschaltbar, ob roh oder fertig gemessen wurde. Nicht beide Maße nebeneinander anzeigen.
+- [ ] Maße je Zoomstufe ein- und ausblenden, damit alles lesbar bleibt (vor allem in der App). In den Einstellungen individuell einstellbar
+      und auf Standard zurücksetzbar.
+- [ ] Treppe in ein anderes Geschoss einfügen, optional mit Zwischenpodest.
