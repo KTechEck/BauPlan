@@ -412,3 +412,9 @@ Gilt für PC und App.
   5/6/7: Typen TR Treppe (Lauflinie), TP Podest, KM Kamin (Allgemein), SR Steigleitung in SA/HZ/EL; eigenschaften.bis_geschoss → Objekt
   erscheint in allen Geschossen dazwischen (lib/core/geschossuebergreifend.dart, Installation + Planstand); Treppenwerte (Höhe, Steigungen,
   Podest) im Installations-Panel mit Schrittmaßprüfung.
+
+## Gesammelt für Build 14 (Tim 13.11. 21:58 – erst umsetzen, wenn Tim es sagt)
+- [ ] Wandverkleidungen frei anlegen und zentral in der Bibliothek verwalten (Name, Schichten/Dicke), statt fester Auswahl.
+- [ ] Im Auswahlmenü ein Eintrag wie „Eigener Aufbau …“: Verkleidung je Raum UND je Wand(-seite) einzeln festlegbar
+      (nicht jede Wand im Raum hat den gleichen Aufbau). Gilt für PC und App; Fertigmaße rechnen dann je Wandseite.
+- [ ] Offen aus Build 13: Maße im PC-Grundriss je Zoomstufe ein-/ausblenden (wie in der App), Einstellung mit Zurücksetzen.
