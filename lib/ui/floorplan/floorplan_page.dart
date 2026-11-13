@@ -279,7 +279,15 @@ class _FloorplanPageState extends State<FloorplanPage> {
           final m = mm[w.id];
           if (m == null) continue;
           final l = <(double, double, double, String)>[];
-          for (final (seite, st, ta, tb) in [(1.0, m.stueckeLinks, m.grenzen.linksA, m.grenzen.linksB), (-1.0, m.stueckeRechts, m.grenzen.rechtsA, m.grenzen.rechtsB)]) {
+          for (final (seite, st, ta, tb, raum) in [
+            (1.0, m.stueckeLinks, m.grenzen.linksA, m.grenzen.linksB, m.raumLinks),
+            (-1.0, m.stueckeRechts, m.grenzen.rechtsA, m.grenzen.rechtsB, m.raumRechts),
+          ]) {
+            // Raumkante schon an einem anderen geraden Wandstück beschriftet: hier nichts
+            if (st.isEmpty && raum != null) {
+              l.add((0, 0, seite, ''));
+              continue;
+            }
             final teil = st.length > 1 || st.values.any((x) => (x.$1 - ta).abs() > 5 || (x.$2 - tb).abs() > 5);
             if (!teil) continue;
             for (final e in st.entries) {

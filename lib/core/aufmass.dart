@@ -50,8 +50,11 @@ Map<String, (double, double)> raumStuecke(Wand w, bool links, List<Raum> raeume)
       double quer(Punkt x) => ((x.x - w.x1) * nx + (x.y - w.y1) * ny) - soll;
       if (quer(p).abs() > 6 || quer(q).abs() > 6) continue;
       final tp = (p.x - w.x1) * ux + (p.y - w.y1) * uy, tq = (q.x - w.x1) * ux + (q.y - w.y1) * uy;
-      final a = math.max(math.min(tp, tq), -w.dicke.toDouble()), b = math.min(math.max(tp, tq), l + w.dicke);
-      if (b - a > 50) stuecke.add((a, b));
+      // Kante nicht auf die Wand kürzen: Besteht die Wand aus mehreren geraden
+      // Stücken, gilt die ganze lichte Raumkante (eine Länge je Raumseite).
+      final a = math.min(tp, tq), b = math.max(tp, tq);
+      final ueberlapp = math.min(b, l) - math.max(a, 0.0);
+      if (b - a > 50 && ueberlapp > 50) stuecke.add((a, b));
     }
     if (stuecke.isEmpty) continue;
     // zusammenhängende Stücke vereinen, das längste gilt (eine Messstrecke je Raumseite)
@@ -79,6 +82,7 @@ Map<String, WandMasse> wandMasse(List<Wand> waende, List<Raum> raeume, {bool ver
       if (waende[i].verbinden ?? verbindenStandard) achsen[i]
   ];
   final aus = <String, WandMasse>{};
+  final gesehen = <String>{};
   for (var i = 0; i < waende.length; i++) {
     final w = waende[i];
     final g = flankenGrenzen(achsen[i], (w.verbinden ?? verbindenStandard) ? nachbarn : [achsen[i]], masse: true);
@@ -94,6 +98,21 @@ Map<String, WandMasse> wandMasse(List<Wand> waende, List<Raum> raeume, {bool ver
     }
 
     final sl = raumStuecke(w, true, raeume), sr = raumStuecke(w, false, raeume);
+    // Gleiche Raumkante an mehreren geraden Wandstücken nur einmal (beim ersten Stück)
+    for (final (st, links) in [(sl, true), (sr, false)]) {
+      for (final e in st.entries.toList()) {
+        final ux = (w.x2 - w.x1) / math.max(1.0, w.laenge), uy = (w.y2 - w.y1) / math.max(1.0, w.laenge);
+        final s0 = (links ? 1 : -1) * w.dicke / 2;
+        final key = '${e.key}|${_rund(w.x1 + ux * e.value.$1 + uy * s0)}|${_rund(w.y1 + uy * e.value.$1 - ux * s0)}|'
+            '${_rund(w.x1 + ux * e.value.$2 + uy * s0)}|${_rund(w.y1 + uy * e.value.$2 - ux * s0)}';
+        final key2 = '${e.key}|${key.split('|').sublist(3).join('|')}|${key.split('|').sublist(1, 3).join('|')}';
+        if (gesehen.contains(key) || gesehen.contains(key2)) {
+          st.remove(e.key);
+        } else {
+          gesehen.add(key);
+        }
+      }
+    }
     String? groesster(Map<String, (double, double)> m) =>
         m.isEmpty ? null : (m.entries.toList()..sort((a, b) => (b.value.$2 - b.value.$1).compareTo(a.value.$2 - a.value.$1))).first.key;
     aus[w.id] = (
@@ -549,3 +568,5 @@ void wandDickeMitInnenmass(ProjectStore store, Wand w, void Function() aendern) 
 
 /// Wandverkleidung eines Raums (mm je Wandseite), 0 = keine.
 int raumVerkleidung(Raum r) => ((r.eigenschaften['verkleidung'] as Map?)?['dicke'] as num?)?.round() ?? 0;
+
+int _rund(double v) => (v / 20).round(); // 2 cm Raster für den Vergleich gleicher Kanten

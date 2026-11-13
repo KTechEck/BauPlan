@@ -95,4 +95,24 @@ void main() {
     expect(b.auftritt, closeTo(2500 / 14, 0.1));
     s.schliessen();
   });
+
+  test('Wand aus zwei geraden Stücken: eine lichte Länge je Raum, keine Splittermaße', () {
+    final tmp = Directory.systemTemp.createTempSync('pr');
+    final s = ProjectStore.anlegen(elternOrdner: tmp.path, projektName: 'P');
+    final g = s.geschosse(s.gebaeude().single.id).single.id;
+    // linke Wand aus zwei Stücken mit unterschiedlichem Zustand (wird nicht zusammengeführt)
+    s.wandAnlegen(geschossId: g, x1: 0, y1: 4000, x2: 0, y2: 2500, dicke: 300);
+    s.wandAnlegen(geschossId: g, x1: 0, y1: 2500, x2: 0, y2: 0, dicke: 300, zustand: WandZustand.neu);
+    s.wandAnlegen(geschossId: g, x1: 0, y1: 0, x2: 3000, y2: 0, dicke: 300);
+    s.wandAnlegen(geschossId: g, x1: 3000, y1: 0, x2: 3000, y2: 4000, dicke: 300);
+    s.wandAnlegen(geschossId: g, x1: 3000, y1: 4000, x2: 0, y2: 4000, dicke: 300);
+    expect(s.waendeZusammenfuehren(g), 0);
+    final r = s.raumAnlegen(geschossId: g, name: 'T', kuerzel: 'T', flaeche: s.flaechenErkennen(g).single);
+    final m = wandMasse(s.waende(g), s.raeume(g));
+    final links = [for (final w in s.waende(g)) if (w.x1 == 0 && w.x2 == 0) m[w.id]!];
+    final stuecke = [for (final x in links) ...x.stueckeLinks.entries, for (final x in links) ...x.stueckeRechts.entries].where((e) => e.key == r).toList();
+    expect(stuecke.length, 1); // nur einmal beschriftet
+    expect(stuecke.single.value.$2 - stuecke.single.value.$1, closeTo(3700, 2)); // 4000 − 2 × 150
+    s.schliessen();
+  });
 }

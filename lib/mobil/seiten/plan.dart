@@ -692,6 +692,8 @@ class _PlanPainter extends CustomPainter {
         // Seite an mehreren Räumen: je Raum seine lichte Strecke beschriften
         final st = [for (final x in (w[links ? 'sl' : 'sr'] as List? ?? const [])) x as List];
         final sw = AppWandSeite(w, links);
+        // Raumkante schon an einem anderen geraden Wandstück beschriftet
+        if (st.isEmpty && raum != null && w['sl'] != null) continue;
         if (st.length > 1 || st.any((x) => ((x[1] as num) - sw.tA).abs() > 5 || ((x[2] as num) - sw.tB).abs() > 5)) {
           final kk = k;
           for (final x in st) {
