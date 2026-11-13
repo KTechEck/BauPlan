@@ -424,6 +424,11 @@ Gilt für PC und App.
 - [ ] Optik beim Messen: Hervorgehoben wird nur die gemessene lichte Strecke, von Oberfläche zu Oberfläche, nicht die ganze Wand bis zur Mitte.
       Gilt für App (Plan, Wand-Blatt, Raum-Aufmaß: Messlinie mit Endstrichen, Raumseite) und PC (Grundriss-Markierung, Aufmaß-Dialog).
       Klar beschriften: „lichte Länge im Raum X“.
+- [ ] Tims PC-Screenshot (13.11. 22:02): Wohnzimmer oben, Balkon unten (9260 innen), Querwand rechts zum Nachbarraum. Die Wand zwischen
+      Wohnzimmer und Balkon ist an der Querwand geteilt; das linke Stück ist orange markiert, über die ganze Dicke bis zur Mitte der Querwand,
+      Beschriftung „4860 innen“. Auf der Balkonseite läuft die Wand durch. Soll: ein Bauteil, nur die Messlinie auf der Wohnzimmerseite endet
+      an der Oberfläche der Querwand. Die Auswahl-Markierung soll die gemessene Seite zeigen, nicht den ganzen Wandkörper. Oben stand „Längen als Achsmaß“:
+      Bei gewählter Wand das gemeinte Maß (innen im Raum X) eindeutig zeigen.
 - [ ] Die App selbst Schritt für Schritt durchspielen (Bildtests mit zwei Räumen und durchlaufender Wand) und mit Tims Screenshots abgleichen.
 - [ ] Danach erst die Wandverkleidungen (unten).
 
