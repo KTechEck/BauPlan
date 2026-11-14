@@ -321,6 +321,18 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
   final zeit = DateTime.tryParse(e['zeit'] as String? ?? '') ?? DateTime.now();
   final text = (e['text'] as String? ?? '').trim();
   String? medium;
+  if (art == 'beleg' && anhang != null) {
+    // Kassenbon-Foto: in den Projektordner, am PC unter Einkauf › „Belege vom Handy“ auslesen
+    final ziel = Directory(p.join(store.ordner, 'belege'))..createSync(recursive: true);
+    final name = '${zeit.millisecondsSinceEpoch}_${p.basename(anhang.path)}';
+    anhang.copySync(p.join(ziel.path, name));
+    store.einstellungSetzen('belege_offen', [
+      ...(store.einstellung<List>('belege_offen') ?? const []),
+      {'datei': 'belege/$name', 'zeit': zeit.toIso8601String(), 'autor': autor, 'text': text},
+    ]);
+    hinweise.add('Kassenbon von $autor – am PC unter Einkauf erfassen auslesen');
+    return;
+  }
   if (anhang != null && geschossId != null) {
     medium = store.fotoImportieren(anhang.path, geschossId: geschossId, raumId: raumId, notiz: text.isEmpty ? null : '$text ($autor)');
     final x = (e['x'] as num?)?.round(), y = (e['y'] as num?)?.round();

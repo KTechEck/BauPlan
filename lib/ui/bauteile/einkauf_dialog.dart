@@ -15,6 +15,7 @@ import '../bauphysik/oberflaechen_ansicht.dart' show lichteHoeheVon;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ki.dart';
+import '../../core/texterkennung.dart';
 import '../../core/pdf_text.dart';
 import '../../data/bauelement_bibliothek.dart';
 import '../../data/project_store.dart';
@@ -35,6 +36,10 @@ void bestandSetzen(ProjectStore store, String id, double menge) {
   }
   store.einstellungSetzen('bestand', m);
 }
+
+/// Kassenbon-Fotos aus der App, die am PC noch nicht als Einkauf erfasst sind.
+List<Map<String, dynamic>> belegeOffen(ProjectStore store) =>
+    [for (final x in store.einstellung<List>('belege_offen') ?? const []) Map<String, dynamic>.from(x as Map)];
 
 List<Einkauf> einkaeufeLesen(ProjectStore store) => [
       for (final m in (store.einstellung<List>('einkaeufe') ?? const [])) Einkauf.ausJson(Map<String, dynamic>.from(m as Map)),
@@ -71,6 +76,7 @@ class _EinkaufDialogState extends State<EinkaufDialog> {
   final _haendler = TextEditingController();
   DateTime _datum = DateTime.now();
   File? _beleg;
+  Map<String, dynamic>? _handyBeleg; // gewählter Beleg vom Handy (wird beim Speichern erledigt)
   List<_Zeile> _zeilen = [];
   bool _laeuft = false;
   String? _meldung;
@@ -115,10 +121,46 @@ class _EinkaufDialogState extends State<EinkaufDialog> {
     } else if (endung == '.txt') {
       _text.text = await datei.readAsString();
     }
+    if (_text.text.trim().isEmpty && const {'.jpg', '.jpeg', '.png'}.contains(endung)) await _textErkennen(datei);
     if (_text.text.trim().isNotEmpty) {
       _uebernehmen(kassenzettelLesen(_text.text));
     } else {
-      setState(() => _meldung = 'Bild gewählt – mit „Mit KI erkennen“ auslesen (braucht ein Bildmodell, Einstellungen → KI).');
+      setState(() => _meldung = 'Im Bild wurde kein Text erkannt – „Mit KI erkennen“ versuchen oder Zeilen von Hand eintragen.');
+    }
+  }
+
+  /// Texterkennung offline (Windows) für ein Belegfoto.
+  Future<void> _textErkennen(File bild) async {
+    setState(() {
+      _laeuft = true;
+      _meldung = 'Text wird erkannt …';
+    });
+    final t = await textErkennen(bild.path);
+    if (!mounted) return;
+    setState(() {
+      _laeuft = false;
+      if (t != null) _text.text = t;
+    });
+  }
+
+  /// Beleg vom Handy übernehmen: Foto laden, Text erkennen, Zeilen vorschlagen.
+  Future<void> _handyBelegWaehlen(Map<String, dynamic> b) async {
+    final f = File(p.join(_s.store!.ordner, '${b['datei']}'));
+    if (!f.existsSync()) {
+      setState(() => _meldung = 'Das Foto fehlt im Projektordner (${b['datei']}).');
+      return;
+    }
+    setState(() {
+      _beleg = f;
+      _handyBeleg = b;
+      _text.text = '';
+      if ('${b['text'] ?? ''}'.isNotEmpty) _haendler.text = '${b['text']}';
+    });
+    await _textErkennen(f);
+    if (_text.text.trim().isNotEmpty) {
+      _uebernehmen(kassenzettelLesen(_text.text));
+    } else {
+      setState(() => _meldung = 'Im Foto wurde kein Text erkannt – „Mit KI erkennen“ versuchen oder Zeilen von Hand eintragen.');
     }
   }
 
@@ -177,7 +219,11 @@ class _EinkaufDialogState extends State<EinkaufDialog> {
     }
     String? belegName;
     final beleg = _beleg;
-    if (beleg != null) {
+    final hb = _handyBeleg;
+    if (hb != null) {
+      belegName = p.basename('${hb['datei']}');
+      store.einstellungSetzen('belege_offen', [for (final x in belegeOffen(store)) if (x['datei'] != hb['datei']) x]);
+    } else if (beleg != null) {
       final ziel = Directory(p.join(store.ordner, 'belege'))..createSync(recursive: true);
       belegName = '${DateTime.now().millisecondsSinceEpoch}_${p.basename(beleg.path)}';
       beleg.copySync(p.join(ziel.path, belegName));
@@ -201,8 +247,33 @@ class _EinkaufDialogState extends State<EinkaufDialog> {
           SizedBox(
             width: 320,
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (belegeOffen(_s.store!).isNotEmpty) ...[
+                const Text('Belege vom Handy', style: TextStyle(fontWeight: FontWeight.w600)),
+                for (final b in belegeOffen(_s.store!))
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    selected: _handyBeleg?['datei'] == b['datei'],
+                    leading: const Icon(Icons.phone_iphone),
+                    title: Text('${b['text'] ?? 'Kassenbon'}'.isEmpty ? 'Kassenbon' : '${b['text']}'),
+                    subtitle: Text('${b['autor'] ?? ''} · ${'${b['zeit'] ?? ''}'.split('T').first}'),
+                    onTap: _laeuft ? null : () => _handyBelegWaehlen(b),
+                  ),
+                const Divider(),
+              ],
               Wrap(spacing: 8, runSpacing: 6, children: [
                 OutlinedButton.icon(onPressed: _belegWaehlen, icon: const Icon(Icons.receipt_long, size: 18), label: const Text('Beleg wählen …')),
+                if (_beleg != null && const {'.jpg', '.jpeg', '.png'}.contains(p.extension(_beleg!.path).toLowerCase()))
+                  OutlinedButton.icon(
+                    onPressed: _laeuft
+                        ? null
+                        : () async {
+                            await _textErkennen(_beleg!);
+                            if (_text.text.trim().isNotEmpty) _uebernehmen(kassenzettelLesen(_text.text));
+                          },
+                    icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                    label: const Text('Text erkennen (offline)'),
+                  ),
                 FilledButton.tonalIcon(
                   onPressed: _laeuft || (_beleg == null && _text.text.trim().isEmpty) ? null : _kiErkennen,
                   icon: _laeuft ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Sym.assistent, size: 18),

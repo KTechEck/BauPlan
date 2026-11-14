@@ -128,6 +128,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
           _kachel(Icons.speed, 'Messwert', () => _formular('messwert')),
           _kachel(Icons.inventory_2_outlined, 'Material', () => _formular('material')),
           _kachel(Icons.task_alt, 'Status', _statusErfassen),
+          _kachel(Icons.receipt_long, 'Kassenbon', _belegErfassen),
           _kachel(Icons.straighten, 'Aufmaß', () {
             final r = _raum;
             if (r == null || g == null) {
@@ -201,6 +202,27 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
     if (ergebnis == null) return;
     final foto = ergebnis.remove('_foto') as List<int>?;
     await k.erfasst({..._basis(), 'art': art, ...ergebnis}, foto: foto);
+  }
+
+  /// Kassenbon/Rechnung fotografieren: geht an den PC, dort werden die
+  /// Positionen ausgelesen und können korrigiert werden.
+  Future<void> _belegErfassen() async {
+    final bytes = await fotoAufnehmen(k);
+    if (bytes == null || !mounted) return;
+    final c = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('Kassenbon'),
+        content: TextField(controller: c, decoration: const InputDecoration(labelText: 'Händler / Notiz (optional)', hintText: 'z. B. Bauhaus')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Senden')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await k.erfasst({'art': 'beleg', 'geschoss': _geschoss?['id'], if (c.text.trim().isNotEmpty) 'text': c.text.trim()}, foto: bytes);
   }
 
   Future<void> _statusErfassen() async {

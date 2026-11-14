@@ -469,3 +469,13 @@ PC: _verkleidungWahl (Raum-Panel, Wand-Panel je Seite; Einträge Bibliothek, Sch
 Fertigmaß: endAbzuege() zieht je Messstrecke die Verkleidung der anstoßenden Wände ab (PC-Grundriss, Planstand slf/srf/fl/fr).
 App: Raum-Aufmaß + Wand-Blatt je Seite (Aufmaß-Ziele verkleidung, verkleidung_seite), Liste „Eigene Aufbauten“ aus dem Planstand (verkleidungen).
 Offen: PC-Grundriss Maße je Zoom ein-/ausblenden; Tims Projekt nach Build 14/15 prüfen.
+
+## Build 17 (in Arbeit, noch NICHT gebaut – Tim 14.11.: keine Builds zwischendrin, erst am Ende)
+- [x] Belege/Kassenzettel: lib/core/texterkennung.dart (offline über Windows.Media.Ocr per PowerShell, Wörter nach Zeilen gruppiert,
+      texterkennungBereinigen). Einkauf erfassen: Bilder werden automatisch erkannt, Knopf „Text erkennen (offline)“, Abschnitt „Belege vom Handy“
+      (Einstellung `belege_offen`, Fotos unter belege/; beim Speichern erledigt). App: Kachel „Kassenbon“ (Eingang art beleg). Tests test/belege_test.dart.
+- [ ] Nächste große Schritte laut Tim/Koordinator (PC und App, am Stück, Lastenheft maßgeblich):
+      1. Leitungen: Tiefe und Breite in der Wand (Schlitz/Unterputz), in Wandansicht und Bohrhilfe berücksichtigen.
+      2. Heizung + hydraulischer Abgleich (Heizkreise, Durchfluss, Ventilvoreinstellung), Heizkreise um Sperrflächen, Anbindeleitungen gebündelt.
+      3. Home Assistant live, Revisionsöffnungen, Rollen (Eigentümer / Mitarbeit / Gast).
+      Danach EIN Build (flutter clean), alles prüfen.
