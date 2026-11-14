@@ -6,6 +6,7 @@ import 'installation/installation_page.dart';
 import 'package:flutter/material.dart';
 
 import '../ipad/ipad_projekt.dart' show projektZumPc;
+import '../core/ipad_austausch.dart' show Ausleihe;
 
 import '../app/theme.dart';
 import '../state/app_state.dart';
@@ -104,9 +105,9 @@ class Shell extends StatelessWidget {
               ),
               if (state.touch)
                 TextButton.icon(
-                  onPressed: () => projektZumPc(context, store),
+                  onPressed: () => projektZumPc(context, state),
                   icon: const Icon(Icons.upload_outlined, color: Color(0xFFC9CDD1), size: 18),
-                  label: const Text('An PC schicken', style: TextStyle(color: Color(0xFFC9CDD1))),
+                  label: const Text('An PC zurückgeben', style: TextStyle(color: Color(0xFFC9CDD1))),
                 ),
               TextButton.icon(
                 onPressed: state.projektSchliessen,
@@ -115,6 +116,33 @@ class Shell extends StatelessWidget {
               ),
             ],
           ),
+          if (store.nurLesen)
+            Builder(builder: (context) {
+              final a = Ausleihe.lesen(store.ordner);
+              return Material(
+                color: const Color(0xFFFEF3C7),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(children: [
+                    const Icon(Icons.lock_outline, color: Color(0xFFB45309)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(a?.text ?? 'Projekt ist nur lesbar.', style: const TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.w600))),
+                    if (a?.amPc ?? false)
+                      TextButton(
+                        onPressed: () async {
+                          final ok = await frage(context,
+                              titel: 'Ausleihe aufheben?',
+                              text: 'Nur wenn das iPad das Projekt nicht mehr zurückgeben kann (verloren, kaputt, Stand verworfen). '
+                                  'Alles, was auf dem iPad seit der Ausleihe geändert wurde, geht dann verloren.',
+                              ja: 'Aufheben');
+                          if (ok) state.ausleiheAufheben();
+                        },
+                        child: const Text('Ausleihe aufheben …'),
+                      ),
+                  ]),
+                ),
+              );
+            }),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,

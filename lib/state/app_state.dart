@@ -109,49 +109,63 @@ class AppState extends ChangeNotifier {
     benutzer: (c) => store == null ? null : benutzerAus(store!.einstellung<List>('benutzer')).where((b) => b.code == c).firstOrNull?.auskunft,
     planFiltern: (b, nutzer) => utf8.encode(jsonEncode(planstandFuerBenutzer(Map<String, dynamic>.from(jsonDecode(utf8.decode(b)) as Map), nutzer))),
   )
-    ..projektZip = _projektZip
-    ..ipadStand = (d) {
-      final st = store;
-      if (st == null) return;
-      final f = File(ipadStandPfad(austauschOrdner(st)))..parent.createSync(recursive: true);
-      f.writeAsBytesSync(d);
-      notifyListeners();
-    };
+    ..projektAusleihen = _projektAusleihen
+    ..projektRueckgabe = _projektRueckgabe;
 
-  /// Ganzer Projektordner als ZIP für das iPad (ohne Sperrdatei, Sicherungen und Austausch).
-  Future<List<int>?> _projektZip() async {
+  /// Projekt an ein iPad ausleihen: Ausleihe vermerken, PC-Kopie nur lesbar, ganzen Ordner als ZIP liefern.
+  Future<(int, List<int>?, String?)> _projektAusleihen(String geraet, String name) async {
     final st = store;
-    if (st == null) return null;
+    if (st == null) return (503, null, 'Am PC ist kein Projekt geöffnet.');
+    final a = Ausleihe.lesen(st.ordner);
+    if (a != null && a.geraet != geraet) return (409, null, 'Das Projekt ist schon an „${a.name}“ ausgeliehen. Erst dort zurückgeben.');
     try {
       st.sicherungJetzt();
+      if (a == null) Ausleihe(geraet: geraet, name: name, seit: DateTime.now(), amPc: true).schreiben(st.ordner);
+      if (!st.nurLesen) st.nurLesenSetzen(true);
+      notifyListeners();
       final tmp = Directory.systemTemp.createTempSync('bauspur_ipad_');
       final datei = p.join(tmp.path, 'projekt.zip');
-      final r = await Process.run('tar', ['-a', '-c', '-f', datei, '--exclude=projekt.lock', '--exclude=backup', '--exclude=austausch', '-C', st.ordner, '.']);
-      if (r.exitCode != 0) return null;
+      final r = await Process.run('tar', ['-a', '-c', '-f', datei, '--exclude=projekt.lock', '--exclude=backup', '--exclude=austausch', '--exclude=$ausleiheDatei', '-C', st.ordner, '.']);
+      if (r.exitCode != 0) return (500, null, 'Packen fehlgeschlagen: ${r.stderr}');
       final b = File(datei).readAsBytesSync();
       tmp.deleteSync(recursive: true);
-      return b;
-    } catch (_) {
-      return null;
+      return (200, b, null);
+    } catch (e) {
+      return (500, null, '$e');
     }
   }
 
-  /// Stand vom iPad übernehmen: Sicherung, Projekt schließen, Datenbank ersetzen, wieder öffnen.
-  void ipadStandUebernehmen() {
+  /// Rückgabe vom iPad: prüfen, sichern, Dateien übernehmen, Ausleihe beenden, Projekt neu öffnen.
+  Future<String?> _projektRueckgabe(List<int> zip, String geraet) async {
     final st = store;
-    if (st == null) return;
-    final quelle = File(ipadStandPfad(austauschOrdner(st)));
-    if (!quelle.existsSync()) return;
-    st.sicherungJetzt();
+    if (st == null) return 'Am PC ist kein Projekt geöffnet – bitte das ausgeliehene Projekt öffnen.';
+    final a = Ausleihe.lesen(st.ordner);
+    if (a == null || a.geraet != geraet) return 'Das offene Projekt ist nicht an dieses iPad ausgeliehen.';
+    final daten = Uint8List.fromList(zip);
+    final fehler = rueckgabePruefen(daten);
+    if (fehler != null) return fehler;
     final ordner = st.ordner;
+    st.sicherungJetzt();
     projektSchliessen();
-    final ziel = p.join(ordner, datenbankDatei);
-    for (final rest in ['$ziel-wal', '$ziel-shm']) {
+    final db = p.join(ordner, datenbankDatei);
+    for (final rest in ['$db-wal', '$db-shm']) {
       if (File(rest).existsSync()) File(rest).deleteSync();
     }
-    quelle.copySync(ziel);
-    quelle.deleteSync();
+    projektEntpacken(daten, ordner);
+    Ausleihe.loeschen(ordner);
     projektOeffnen(ProjectStore.oeffnen(ordner));
+    eingangMeldung = 'Projekt vom iPad „${a.name}“ zurück – Stand übernommen (vorher gesichert).';
+    notifyListeners();
+    return null;
+  }
+
+  /// Ausleihe von Hand aufheben (iPad-Änderungen gehen dann verloren).
+  void ausleiheAufheben() {
+    final st = store;
+    if (st == null) return;
+    Ausleihe.loeschen(st.ordner);
+    st.nurLesenSetzen(false);
+    notifyListeners();
   }
 
   /// Störung beim Abgleich (Netzwerkordner oder Cloud nicht erreichbar), sonst null.
@@ -225,7 +239,7 @@ class AppState extends ChangeNotifier {
   /// Neue Erfassungen der App übernehmen (beim Öffnen und alle 30 s).
   void eingangPruefen() {
     final st = store;
-    if (st == null) return;
+    if (st == null || st.nurLesen) return; // ausgeliehen: Erfassungen warten bis zur Rückgabe
     try {
       final r = eingangUebernehmen(st);
       if (r.uebernommen > 0 || r.fehler > 0) {
@@ -238,6 +252,7 @@ class AppState extends ChangeNotifier {
   void projektOeffnen(ProjectStore s) {
     store?.schliessen();
     store = s;
+    if (Ausleihe.lesen(s.ordner)?.sperrt ?? false) s.nurLesenSetzen(true);
     _eingangTimer?.cancel();
     if (!_imTest && !touch) {
       _eingangTimer = Timer.periodic(const Duration(seconds: 30), (_) => abgleichen());

@@ -527,3 +527,11 @@ Touch: bauSpurTheme(touch) größere Ziele, AppState.touch (kein PC-Dienst/Timer
 Inhaltspakete: lib/core/inhaltspaket.dart (Format bauspur-bibliothek, Datenblätter base64), Bibliothek › Pakete (alle/Kategorie speichern, übernehmen mit Vergleich).
 Wohnfläche WoFlV: lib/ui/export/wohnflaeche_page.dart (Ausgabe › Wohnfläche; Dach-Höhenstaffel, Balkon-Anteil Einstellung balkon_anteil, Zubehörräume, raum.eigenschaften.wohnflaeche).
 Nicht getestet auf echtem iPad (kein Mac): erster Cloud-Build zeigt, ob alles läuft. Offen: iPad-Layout weiter verfeinern (Seitenleisten einklappen, Stift-Werkzeuge), KI-Assistent Stufe 2.
+
+## Build 20 (14.11.) – iPad und PC ohne Konflikte (Tim: keine gegenseitige Behinderung, Fehlbedienung ausschließen)
+Ausleihe (lib/core/ipad_austausch.dart, Datei ipad_ausleihe.json im Projektordner): iPad holt das Projekt (PcDienst GET projekt/zip mit x-bauspur-geraet),
+PC vermerkt die Ausleihe und schaltet die Datenbank auf PRAGMA query_only (ProjectStore.nurLesenSetzen) → am PC technisch keine Änderung möglich, gelbe Leiste.
+Zweites iPad wird abgewiesen (409). Rückgabe: iPad packt Datenbank + alle seit der Ausleihe geänderten Dateien (lib/core/zip_schreiben.dart, reines Dart), PUT
+projekt/rueckgabe; PC prüft Gerät und SQLite, sichert, entpackt (löscht nichts), hebt Ausleihe auf, öffnet neu. iPad-Kopie danach „zurückgegeben“ = nur lesen.
+Neu holen bei nicht zurückgegebener iPad-Kopie nur nach Warnung (alter Stand bleibt als _alt-Ordner). Eingang der Baustellen-App wartet während der Ausleihe.
+„Ausleihe aufheben …“ am PC nur mit Warnung (iPad-Änderungen verloren). Test test/ausleihe_test.dart (Ende-zu-Ende über den Dienst).

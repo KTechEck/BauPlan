@@ -403,6 +403,16 @@ class ProjectStore {
     _protokoll('objekttyp', id, 'aendern', {'name': name});
   }
 
+  bool _nurLesen = false;
+
+  /// Projekt nur lesbar (z. B. an das iPad ausgeliehen): SQLite lehnt jede Änderung ab.
+  bool get nurLesen => _nurLesen;
+
+  void nurLesenSetzen(bool v) {
+    db.execute('PRAGMA query_only = ${v ? 'ON' : 'OFF'}');
+    _nurLesen = v;
+  }
+
   /// Sicherung jetzt anlegen (backup/, die letzten 20 Stände bleiben).
   void sicherungJetzt() => _sicherungAnlegen(ordner);
 

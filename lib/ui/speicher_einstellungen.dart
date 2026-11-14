@@ -57,48 +57,24 @@ class _SpeicherEinstellungenState extends State<SpeicherEinstellungenAnsicht> {
     if (mounted) setState(() {});
   }
 
-  /// Volle BauSpur auf dem iPad: Projekt holt das iPad über WLAN, zurück kommt die Datenbank.
+  /// Volle BauSpur auf dem iPad: Ausleihe des Projekts (am PC solange nur lesbar).
   Widget _ipadKarte() {
     final st = state.store;
     if (st == null) return const SizedBox.shrink();
-    final vom = ipadStandVom(austauschOrdner(st));
+    final a = Ausleihe.lesen(st.ordner);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('iPad mit voller BauSpur', style: Theme.of(context).textTheme.titleMedium),
           const Text(
-            'Auf dem iPad „Projekt vom PC holen“ wählen (gleicher Kopplungscode wie oben). Nach der Arbeit schickt das iPad den Stand zurück; '
-            'übernommen wird er erst hier, vorher legt BauSpur eine Sicherung an. In der Zwischenzeit am PC nichts ändern, sonst gehen die PC-Änderungen verloren.',
+            'Auf dem iPad „Projekt vom PC holen“ (gleicher Kopplungscode wie oben). Solange das iPad das Projekt hat, ist es am PC nur lesbar – '
+            'so kann nie an zwei Stellen gleichzeitig geändert werden. Mit „An PC zurückgeben“ kommen Datenbank, Fotos und Dokumente zurück; '
+            'BauSpur sichert vorher und übernimmt den Stand automatisch. Ein zweites iPad bekommt das Projekt erst nach der Rückgabe.',
             style: TextStyle(fontSize: 12, color: BsFarben.textLeise),
           ),
           const SizedBox(height: 8),
-          if (vom == null)
-            const Text('Kein Stand vom iPad da.')
-          else
-            Wrap(spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text('Stand vom iPad von ${vom.day}.${vom.month}. ${vom.hour}:${vom.minute.toString().padLeft(2, '0')} liegt bereit.'),
-              FilledButton.icon(
-                onPressed: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('Stand vom iPad übernehmen?'),
-                      content: const Text('Der Projektstand am PC wird durch den vom iPad ersetzt. Vorher wird eine Sicherung angelegt (Einstellungen › Projekt und Geschosse).'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
-                        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Übernehmen')),
-                      ],
-                    ),
-                  );
-                  if (ok != true) return;
-                  state.ipadStandUebernehmen();
-                  if (mounted) setState(() {});
-                },
-                icon: const Icon(Icons.tablet_mac, size: 18),
-                label: const Text('Stand vom iPad übernehmen'),
-              ),
-            ]),
+          Text(a == null ? 'Nicht ausgeliehen – am PC frei bearbeitbar.' : a.text, style: TextStyle(fontWeight: FontWeight.w600, color: a == null ? null : const Color(0xFFB45309))),
         ]),
       ),
     );

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -7,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/ipad_austausch.dart';
 import '../core/speicher.dart';
+import '../core/zip_schreiben.dart';
+import '../state/app_state.dart';
 import '../data/project_store.dart';
 import '../mobil/ordner.dart';
 import '../ui/widgets.dart';
@@ -75,7 +76,17 @@ Future<PcSpeicher?> pcVerbindung(BuildContext context) async {
   return PcSpeicher(adresse.text.trim(), code: code.text.trim());
 }
 
-/// Ganzes Projekt vom PC holen und im Dokumente-Ordner ablegen. Liefert den Projektordner.
+/// Kennung dieses iPads (einmal erzeugt, im Dokumente-Ordner).
+Future<String> geraetKennung() async {
+  final f = File(p.join((await getApplicationDocumentsDirectory()).path, 'bauspur_geraet.txt'));
+  if (f.existsSync()) return f.readAsStringSync().trim();
+  final id = 'ipad-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+  f.writeAsStringSync(id);
+  return id;
+}
+
+/// Projekt vom PC ausleihen und im Dokumente-Ordner ablegen. Liefert den Projektordner.
+/// Am PC ist das Projekt danach nur lesbar, bis es zurückgegeben wird.
 Future<String?> projektVomPcHolen(BuildContext context) async {
   final pc = await pcVerbindung(context);
   if (pc == null || !context.mounted) return null;
@@ -83,39 +94,62 @@ Future<String?> projektVomPcHolen(BuildContext context) async {
     final info = await pc.pruefen();
     final name = '${info['projekt'] ?? ''}'.trim();
     if (name.isEmpty) throw StateError('Am PC ist kein Projekt geöffnet.');
-    final Uint8List? zip = await pc.projektHolen();
-    if (zip == null) throw StateError('Der PC hat das Projekt nicht geliefert.');
     final ziel = Directory(p.join((await getApplicationDocumentsDirectory()).path, name));
+    // Noch nicht zurückgegebene Ausleihe auf dem iPad? Sonst gingen die iPad-Änderungen verloren.
+    final alt = ziel.existsSync() ? Ausleihe.lesen(ziel.path) : null;
+    if (alt != null && !alt.amPc && !alt.zurueckgegeben) {
+      if (!context.mounted) return null;
+      final verwerfen = await frage(context,
+          titel: 'Noch nicht zurückgegeben',
+          text: 'Auf diesem iPad liegt „$name“ noch als Ausleihe mit Änderungen. Öffne das Projekt und wähle „An PC zurückgeben“.\n\n'
+              'Nur wenn du die Änderungen auf dem iPad wirklich verwerfen willst: trotzdem neu holen (der alte Stand bleibt als Ordner „…_alt“ liegen).',
+          ja: 'Trotzdem neu holen');
+      if (!verwerfen) return null;
+    }
+    final zip = await pc.projektAusleihen(await geraetKennung(), 'iPad');
     if (ziel.existsSync()) {
-      // alten Stand auf dem iPad zur Seite legen statt löschen
       final stempel = DateTime.now().toIso8601String().substring(0, 16).replaceAll(':', '');
       ziel.renameSync('${ziel.path}_alt_$stempel');
     }
     ziel.createSync(recursive: true);
     projektEntpacken(zip, ziel.path);
+    Ausleihe(geraet: await geraetKennung(), name: 'iPad', seit: DateTime.now(), amPc: false, pc: '${info['name'] ?? ''}').schreiben(ziel.path);
     return ziel.path;
   } catch (e) {
-    if (context.mounted) zeigeFehler(context, 'Projekt holen fehlgeschlagen: $e');
+    if (context.mounted) zeigeFehler(context, 'Projekt holen fehlgeschlagen: ${'$e'.replaceFirst('Bad state: ', '')}');
     return null;
   }
 }
 
-/// Projektstand (Datenbank) an den PC zurückschicken. Am PC wird er erst nach Bestätigung übernommen.
-Future<void> projektZumPc(BuildContext context, ProjectStore store) async {
+/// Projekt an den PC zurückgeben: Datenbank und alle seit der Ausleihe neuen oder
+/// geänderten Dateien (Fotos, Dokumente). Danach ist die iPad-Kopie nur lesbar.
+Future<void> projektZumPc(BuildContext context, AppState state) async {
+  final store = state.store!;
+  final a = Ausleihe.lesen(store.ordner);
+  if (a == null || a.amPc) {
+    zeigeFehler(context, 'Dieses Projekt ist kein vom PC ausgeliehenes. Erst „Projekt vom PC holen“.');
+    return;
+  }
+  if (a.zurueckgegeben) {
+    zeigeHinweis(context, 'Schon zurückgegeben. Zum Weiterarbeiten neu vom PC holen.');
+    return;
+  }
   final pc = await pcVerbindung(context);
   if (pc == null || !context.mounted) return;
   try {
-    store.db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-  } catch (_) {}
-  try {
-    final ok = await pc.projektZurueck(File(p.join(store.ordner, datenbankDatei)).readAsBytesSync());
-    if (!context.mounted) return;
-    if (ok) {
-      zeigeHinweis(context, 'An den PC geschickt. Am PC unter Einstellungen › Speicher und Abgleich „Stand vom iPad übernehmen“ wählen.');
-    } else {
-      zeigeFehler(context, 'Der PC hat den Stand nicht angenommen (Projekt dort geöffnet? Code des Eigentümers?).');
-    }
+    try {
+      store.db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (_) {}
+    final zip = ordnerPacken(store.ordner,
+        nach: a.seit.subtract(const Duration(minutes: 1)),
+        immer: {datenbankDatei},
+        aus: {'backup', 'austausch', 'projekt.lock', ausleiheDatei, '$datenbankDatei-shm'});
+    await pc.projektZurueckgeben(a.geraet, zip);
+    Ausleihe(geraet: a.geraet, name: a.name, seit: a.seit, amPc: false, zurueckgegeben: true, pc: a.pc).schreiben(store.ordner);
+    store.nurLesenSetzen(true);
+    state.geaendert();
+    if (context.mounted) zeigeHinweis(context, 'Zurückgegeben – der PC hat den Stand übernommen. Diese iPad-Kopie ist jetzt nur zum Lesen.');
   } catch (e) {
-    if (context.mounted) zeigeFehler(context, 'Senden fehlgeschlagen: $e');
+    if (context.mounted) zeigeFehler(context, 'Zurückgeben fehlgeschlagen: ${'$e'.replaceFirst('Bad state: ', '')}');
   }
 }
