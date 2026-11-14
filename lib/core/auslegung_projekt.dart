@@ -299,6 +299,7 @@ List<LeitungsStueck> leitungsStuecke(ProjectStore store, {String? Function(Strin
   final aus = <LeitungsStueck>[];
   String nm(String? id, String sonst) => id == null ? sonst : (name?.call(id) ?? sonst);
   final kreiseGezeichnet = <String>{};
+  final gewerkKuerzel = {for (final g in store.gewerke()) g.id: g.kuerzel};
   for (final o in store.alleObjekte()) {
     final t = lage.typen[o.typId];
     if (t == null) continue;
@@ -348,6 +349,17 @@ List<LeitungsStueck> leitungsStuecke(ProjectStore store, {String? Function(Strin
           woher: woher,
           geschaetzt: false,
         ));
+      case 'EK' || 'AK' when gewerkKuerzel[t.gewerkId] == 'AU':
+        if (!erfasst) aus.add((art: 'Kabel', bezeichnung: '${e['kabel'] ?? 'NYY-J 3x1,5'}', laengeM: m, woher: woher, geschaetzt: false));
+        aus.add((
+          art: 'Leerrohr',
+          bezeichnung: t.kuerzel == 'EK' ? 'Kabelschutzrohr DN 50 (erdverlegt)' : 'UV-beständiges Installationsrohr außen',
+          laengeM: m,
+          woher: woher,
+          geschaetzt: false,
+        ));
+      case 'RG' || 'BW' when gewerkKuerzel[t.gewerkId] == 'AU':
+        aus.add((art: 'Rohr', bezeichnung: nm(e['rohr'] as String?, t.kuerzel == 'RG' ? 'KG-Rohr ${e['dn'] ?? 'DN 100'} (Regenwasser)' : 'PE-Rohr ${e['dn'] ?? '25 mm'} (Bewässerung)'), laengeM: m, woher: woher, geschaetzt: false));
       case 'LK':
         aus.add((art: 'Luftkanal', bezeichnung: nm(e['rohr'] as String?, 'Luftkanal ${e['dimension'] ?? ''}'.trim()), laengeM: m, woher: woher, geschaetzt: false));
       default:

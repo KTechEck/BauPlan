@@ -412,4 +412,6 @@ const List<List<String>> migrationen = [
     "ALTER TABLE aufgabe ADD COLUMN art TEXT NOT NULL DEFAULT 'aufgabe'",
     'ALTER TABLE aufgabe ADD COLUMN objekt_id TEXT',
   ],
+  // Version 27 – Gewerk Außenanlagen (Außenlicht, Außensteckdosen, Erd-/Außenkabel, Regenwasser, Zisterne, Bewässerung …; Startbestand in _migrieren)
+  [],
 ];

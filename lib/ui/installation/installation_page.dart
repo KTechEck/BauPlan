@@ -41,6 +41,8 @@ import '../bauteile/bauelement_wahl.dart';
 import 'bad_dialog.dart';
 import 'typenschild_dialog.dart';
 import 'wasser_dialog.dart';
+import 'wlan_aussen.dart';
+import '../../core/wlan.dart' show WlanBand, WlanBandText;
 import '../symbol_editor.dart';
 import '../../core/rack.dart' show dosePort;
 import '../../core/fassade.dart' show deckenfeldMaterial, bodenstrahlerPruefen;
@@ -116,6 +118,9 @@ class _InstallationPageState extends State<InstallationPage> {
   final _fokus = FocusNode();
   bool _ansichtZiehen = false; // Leertaste + Ziehen
   double _massstab = 0.08;
+  WlanBand? _wlanBand; // WLAN-Abdeckung einblenden
+  String? _wlanSig;
+  List<(Punkt, double)> _wlanRaster = const [];
   Offset _verschiebung = const Offset(120, 120);
   bool _setzen = true;
   bool _ganzerRaum = false; // Fläche = ganzer Raum per Klick
@@ -1082,6 +1087,32 @@ class _InstallationPageState extends State<InstallationPage> {
             aktiv: false,
             onTap: () => badDialogZeigen(context, _s)),
         WerkzeugKnopf(
+            symbol: Icons.wifi,
+            text: 'WLAN',
+            tooltip: 'WLAN-Abdeckung der Access Points als Farbfläche (grün gut … rot kein Empfang)',
+            aktiv: _wlanBand != null,
+            onTap: () => setState(() {
+                  _wlanBand = _wlanBand == null ? WlanBand.g5 : null;
+                  _wlanSig = null;
+                })),
+        if (_wlanBand != null) ...[
+          DropdownButton<WlanBand>(
+            value: _wlanBand,
+            items: [for (final b in WlanBand.values) DropdownMenuItem(value: b, child: Text(b.label))],
+            onChanged: (b) => setState(() {
+              _wlanBand = b;
+              _wlanSig = null;
+            }),
+          ),
+          TextButton(onPressed: () => wlanDialog(context, _s, _wlanBand!), child: const Text('Auswertung …')),
+        ],
+        WerkzeugKnopf(
+            symbol: Icons.yard_outlined,
+            text: 'Außen',
+            tooltip: 'Außenbereich: Regenwasser, Zisterne, Bewässerung, Außenlicht, Außensteckdosen, Erd- und Außenkabel',
+            aktiv: false,
+            onTap: () => aussenDialog(context, _s)),
+        WerkzeugKnopf(
             symbol: Icons.water_drop_outlined,
             text: 'Wasser',
             tooltip: 'Wasser: Abwasser (DN, Gefälle), Trinkwasser-Hausanschluss, Wassermelder mit Absperrventil',
@@ -1291,6 +1322,28 @@ class _InstallationPageState extends State<InstallationPage> {
             onPointerPanZoomUpdate: (e) => setState(() => _verschiebung += e.panDelta),
             child: ClipRect(
               child: Stack(children: [
+                if (_wlanBand != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: WlanPainter(
+                          raster: () {
+                            final gid = _s.geschossId!;
+                            final aps = wlanAps(_s.store!, gid);
+                            final sig = '$_wlanBand|${aps.map((a) => '${a.p.x.round()},${a.p.y.round()},${a.dbm}').join(';')}|${d.waende.length}';
+                            if (sig != _wlanSig) {
+                              _wlanSig = sig;
+                              _wlanRaster = wlanRasterGeschoss(_s.store!, gid, _wlanBand!);
+                            }
+                            return _wlanRaster;
+                          }(),
+                          weite: 500,
+                          massstab: _massstab,
+                          verschiebung: _verschiebung,
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned.fill(
                   child: CustomPaint(
                     painter: FloorplanPainter(

@@ -1,3 +1,4 @@
+import '../core/aussen.dart' show aussenTypen;
 /// Startbestand an Gewerken und Objekttypen für ein neues Projekt.
 /// Farben als ARGB-Werte; in den Einstellungen änderbar.
 class GewerkVorlage {
@@ -71,6 +72,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('KL', 'Kältemittel- / Kondensatleitung', 'linie'),
   ]),
   GewerkVorlage('BS', 'Brandschutz', 0xFFC92A2A, 'solid', true, brandschutzTypen),
+  GewerkVorlage('AU', 'Außenanlagen', 0xFF5C940D, 'solid', true, aussenTypen),
   GewerkVorlage('AL', 'Allgemein', 0xFF6B7178, 'solid', true, [
     ('MP', 'Messpunkt / Warnhinweis', 'punkt'),
     ('WD', 'Wanddurchbruch / Kernbohrung', 'punkt'),

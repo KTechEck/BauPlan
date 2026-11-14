@@ -674,3 +674,13 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Dialog lib/ui/floorplan/keller_dialog.dart (Grundriss › Optionen „Keller, Sockel, Putzprofile, Fensterbänke …“): Einstellungen `keller_<geschossId>`, `sockel`,
   `putzprofile` (Zusatzmengen), Öffnung eigenschaften fb_aussen/fb_innen/laibung_aussen/laibung_innen; Bestellliste, CSV.
 - Tests test/build29_test.dart; 286 Tests grün.
+
+## Build 30 (14.11.) – WLAN-Abdeckung und Außenbereich
+- WLAN (lib/core/wlan.dart, lib/ui/installation/wlan_aussen.dart): Installation › „WLAN“ blendet die Ausleuchtung der Access Points (Typ AP, sendeleistung_dbm)
+  als Farbraster ein (2,4/5/6 GHz, Freiraumdämpfung + Wanddämpfung nach Wandtyp, Gebäude + 3 m außen), „Auswertung …“ je Raum (Anteil ≥ −67 dBm, schwächster Punkt).
+- Migration 27: Gewerk AU Außenanlagen (lib/core/aussen.dart aussenTypen): Außenleuchte, Poller, Bodeneinbaustrahler außen, Außensteckdose, Erdkabel, Außenkabel
+  auf Putz, Regenfallrohr, Regenwasser-/Grundleitung, Zisterne, Rigole, Bewässerungsleitung, Regner, Bewässerungsventil, Außenwasserhahn, Garten-, Wegfläche.
+- Installation › „Außen“: Regenwasser (Abfluss, Fallrohr-DN, Zisterne DIN 1989-1, Rigole), Bewässerung (Abdeckung der Gartenflächen, Zonen gegen l/min),
+  Licht und Strom außen (Wege-Ausleuchtung, insektenfreundlich, IP, RCD), Kabel außen (Erdkabel: Graben/Schutzrohr/Sand/Warnband; auf Putz: UV-Rohr/Schellen/IP-Dosen;
+  NYM-Warnungen). Einstellung `aussen`. Erd-/Außenkabel + Schutzrohr, Regenwasser- und Bewässerungsrohr laufen in die Kabel-/Rohrliste.
+- Tests test/build30_test.dart; 289 Tests grün.
