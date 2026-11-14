@@ -15,6 +15,9 @@ import '../data/austausch.dart';
 import '../data/bauelement_bibliothek.dart';
 import '../data/project_store.dart';
 import '../ui/bauteile/einkauf_dialog.dart' show besorgungFuerApp;
+import '../ui/tastenkuerzel.dart' show TastenBelegung;
+import '../core/inhaltspaket.dart' show paketeAusOrdner;
+import '../ui/widgets.dart' show MassEinheit;
 
 enum Modul {
   projekt('Projekt'),
@@ -39,6 +42,8 @@ enum Modul {
 /// gewähltes Geschoss. Widgets hören über ListenableBuilder darauf.
 class AppState extends ChangeNotifier {
   AppState(this.settings, {this.touch = false}) {
+    TastenBelegung.laden(settings);
+    MassEinheit.setzen(settings.darstellung['einheit'] as String?);
     // Auf dem Tablet läuft kein PC-Dienst (das iPad holt Projekte vom PC)
     if (!_imTest && !touch) Timer.run(speicherAnwenden);
     // Planstand für die App: Besorgungsliste und Geräte aus der Bibliothek mitgeben
@@ -249,6 +254,27 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Infos für die Glocke (z. B. automatisch geladene Inhaltspakete).
+  final List<String> infos = [];
+
+  /// Inhaltspakete aus dem eingestellten Ordner laden (nur neue Elemente).
+  void _paketeAutomatisch() {
+    final ordner = settings.darstellung['pakete_ordner'] as String?;
+    if (ordner == null) return;
+    try {
+      final stand = {for (final e in (settings.darstellung['pakete_stand'] as Map? ?? const {}).entries) '${e.key}': (e.value as num).toInt()};
+      final r = paketeAusOrdner(ordner, {for (final e in bibliothek.alle) e.id}, stand);
+      for (final e in r.neu.entries) {
+        for (final el in e.value) {
+          bibliothek.speichern(el);
+        }
+        infos.add('Inhaltspaket „${e.key}“: ${e.value.length} neue Elemente in die Bibliothek übernommen.');
+      }
+      settings.darstellung['pakete_stand'] = r.stand;
+      settings.speichern();
+    } catch (_) {}
+  }
+
   void projektOeffnen(ProjectStore s) {
     store?.schliessen();
     store = s;
@@ -265,6 +291,7 @@ class AppState extends ChangeNotifier {
       });
     }
     settings.merkeProjekt(s.ordner);
+    if (!_imTest && !touch) _paketeAutomatisch();
     final geb = s.gebaeude();
     geschossId = geb.isEmpty ? null : s.geschosse(geb.first.id).firstOrNull?.id;
     raumId = null;

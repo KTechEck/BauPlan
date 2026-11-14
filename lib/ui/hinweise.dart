@@ -4,6 +4,7 @@ import '../app/theme.dart';
 import '../core/ki.dart';
 import '../state/app_state.dart';
 import 'assistent/projektpruefung.dart';
+import 'bauteile/gewaehrleistung_dialog.dart' show gewaehrleistungBaldAus;
 
 /// Hinweise, Warnungen und erkannte Probleme gesammelt in der Kopfleiste
 /// (Glocke mit Zahl). Ein Klick öffnet sie als Fenster am rechten Rand –
@@ -18,7 +19,14 @@ class HinweisGlocke extends StatelessWidget {
     final status = Map<String, String>.from(store.einstellung<Map>('pruefung_status') ?? const {});
     try {
       final r = Regelwerte.ausJson(store.einstellung<Map>('regeln')?.cast<String, dynamic>());
-      return [for (final h in projektPruefen(store, r)) if ((status[h.schluessel] ?? 'offen') == 'offen') h];
+      return [
+        for (final h in [
+          ...projektPruefen(store, r),
+          for (final i in state.infos) PruefHinweis(bereich: 'Info', text: i),
+          for (final g in gewaehrleistungBaldAus(store)) PruefHinweis(bereich: 'Gewährleistung', text: '${g.produkt}: Gewährleistung läuft in den nächsten 60 Tagen ab.'),
+        ])
+          if ((status[h.schluessel] ?? 'offen') == 'offen') h
+      ];
     } catch (_) {
       return const [];
     }

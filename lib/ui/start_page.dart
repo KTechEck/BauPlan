@@ -10,9 +10,12 @@ import 'package:path/path.dart' as p;
 import '../app/theme.dart';
 import '../data/project_store.dart';
 import '../state/app_state.dart';
+import 'ersteinrichtung.dart';
 import 'widgets.dart';
 
 /// Startseite: zuletzt geöffnete Projekte, neues Projekt, Projekt öffnen.
+bool _ersteinrichtungGezeigt = false;
+
 class StartPage extends StatelessWidget {
   const StartPage({super.key, required this.state});
 
@@ -75,13 +78,15 @@ class StartPage extends StatelessWidget {
     await _oeffnen(context, ordner);
   }
 
-  Future<void> _neu(BuildContext context) async {
+  Future<void> _neu(BuildContext context, {String? vorlage}) async {
     final name = await texteingabe(context, titel: 'Neues Projekt', feld: 'Projektname', vorschlag: 'Wohnhaus');
     if (name == null || name.trim().isEmpty || !context.mounted) return;
     final eltern = await _ordner('Hier anlegen');
     if (eltern == null || !context.mounted) return;
     try {
-      state.projektOeffnen(ProjectStore.anlegen(elternOrdner: eltern, projektName: name));
+      final store = ProjectStore.anlegen(elternOrdner: eltern, projektName: name);
+      if (vorlage != null) vorlageAnwenden(store, vorlage);
+      state.projektOeffnen(store);
     } catch (e) {
       if (context.mounted) zeigeFehler(context, 'Anlegen fehlgeschlagen: $e');
     }
@@ -90,6 +95,13 @@ class StartPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final zuletzt = state.settings.zuletztGeoeffnet;
+    // Ersteinrichtung beim allerersten Start (nicht in Tests)
+    if (state.settings.darstellung['ersteinrichtung'] != true && !_ersteinrichtungGezeigt && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      _ersteinrichtungGezeigt = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) ersteinrichtung(context, state);
+      });
+    }
     return Scaffold(
       body: Column(
         children: [
@@ -142,6 +154,23 @@ class StartPage extends StatelessWidget {
                           onPressed: () => _neu(context),
                           icon: const Icon(Icons.add),
                           label: const Text('Neues Projekt'),
+                        ),
+                        if (vorlagenListe(state.settings).isNotEmpty)
+                          PopupMenuButton<String>(
+                            tooltip: 'Neues Projekt mit den Einstellungen einer Vorlage',
+                            onSelected: (v) => _neu(context, vorlage: v),
+                            itemBuilder: (_) => [
+                              for (final f in vorlagenListe(state.settings)) PopupMenuItem(value: f.path, child: Text(p.basenameWithoutExtension(f.path))),
+                            ],
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.copy_all_outlined, size: 18), SizedBox(width: 6), Text('Neues Projekt aus Vorlage')]),
+                            ),
+                          ),
+                        TextButton.icon(
+                          onPressed: () => ersteinrichtung(context, state),
+                          icon: const Icon(Icons.tune, size: 18),
+                          label: const Text('Ersteinrichtung'),
                         ),
                         OutlinedButton.icon(
                           onPressed: () => _ordnerWaehlen(context),

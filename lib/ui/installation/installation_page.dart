@@ -913,7 +913,7 @@ class _InstallationPageState extends State<InstallationPage> {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
     switch (e.logicalKey) {
       case LogicalKeyboardKey.f1:
-        tastenkuerzelZeigen(context);
+        tastenkuerzelZeigen(context, einstellungen: _s.settings);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.space:
         _ansichtZiehen = true;
@@ -932,7 +932,7 @@ class _InstallationPageState extends State<InstallationPage> {
         return KeyEventResult.handled;
       default:
     }
-    final k = e.logicalKey;
+    final k = TastenBelegung.uebersetzen(e.logicalKey);
     if (HardwareKeyboard.instance.isControlPressed && k == LogicalKeyboardKey.keyZ) {
       if (_rueckgaengig.isNotEmpty) {
         _rueckgaengig.removeLast()();
@@ -2036,8 +2036,8 @@ class _InstallationPageState extends State<InstallationPage> {
     return [
       const SizedBox(height: 8),
       Text(
-          'An der Wand, Seite ${raum?.name ?? 'außen'} · ${mmText(x)} mm von der linken Wandkante'
-          '${o.lage == 'durch Wand' ? ' · durch die ganze Wand (${mmText(w.dicke)} mm)' : ''}',
+          'An der Wand, Seite ${raum?.name ?? 'außen'} · ${massText(x)} von der linken Wandkante'
+          '${o.lage == 'durch Wand' ? ' · durch die ganze Wand (${massText(w.dicke)})' : ''}',
           style: const TextStyle(fontSize: 12)),
       TextButton.icon(
         onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
@@ -2608,7 +2608,7 @@ class _InstallationPageState extends State<InstallationPage> {
       ];
       return [
         const SizedBox(height: 8),
-        Text('Revisionsöffnung ${mmText(b)} × ${mmText(h)} mm${o.lage == null ? '' : ' · ${o.lage}'}', style: const TextStyle(fontSize: 12)),
+        Text('Revisionsöffnung ${mmText(b)} × ${massText(h)}${o.lage == null ? '' : ' · ${o.lage}'}', style: const TextStyle(fontSize: 12)),
         Text(dran.isEmpty ? 'Noch kein zugänglich zu haltendes Objekt in Reichweite.' : 'Erreichbar: ${dran.join(', ')}',
             style: const TextStyle(fontSize: 11, color: BsFarben.textLeise)),
       ];

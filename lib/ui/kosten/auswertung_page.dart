@@ -37,7 +37,7 @@ class _PlanIstAnsichtState extends State<PlanIstAnsicht> {
           for (final r in store.raeume(g.id)) (r, g),
     ];
     final zeilen = fortschritt(store.alleObjekte(), typen, raumId: _raumId, gewerkId: _gewerkId);
-    final kosten = kostenVergleich(store.kostenpositionen().where((k) => _gewerkId == null || k.gewerkId == _gewerkId));
+    final kosten = kostenVergleich(store.kostenpositionen().where((k) => (_gewerkId == null || k.gewerkId == _gewerkId) && (widget.state.settings.darstellung['eigenleistung_aus'] != true || (k.kostenart != 'Lohn' && !k.text.toLowerCase().contains('eigenleistung')))));
     final summe = KostenVergleich(null);
     for (final k in kosten) {
       summe

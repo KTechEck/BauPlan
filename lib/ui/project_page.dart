@@ -111,7 +111,7 @@ class _ProjectPageState extends State<ProjectPage> {
             ),
             FilledButton(onPressed: () => setState(() {}), child: const Text('Rechnen')),
             if (ergebnis != null)
-              Text('= ${mmText(ergebnis)} mm ${_nach.label}',
+              Text('= ${massText(ergebnis)} ${_nach.label}',
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           ],
         ),

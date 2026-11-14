@@ -149,8 +149,19 @@ class MmFeld extends StatelessWidget {
 
 int? mmWert(TextEditingController c) => c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
 
-/// 2135 → „2 135“
+/// Anzeigeeinheit für Maße (Benutzereinstellung darstellung.einheit: mm, cm, m).
+class MassEinheit {
+  static String aktuell = 'mm';
+  static void setzen(String? e) => aktuell = const {'mm', 'cm', 'm'}.contains(e) ? e! : 'mm';
+}
+
+/// Maß mit Einheit nach Einstellung, z. B. „2 135 mm“, „213,5 cm“, „2,135 m“.
+String massText(num mm) => '${mmText(mm)} ${MassEinheit.aktuell}';
+
+/// 2135 → „2 135“ (in cm: „213,5“, in m: „2,135“ – je nach Einstellung)
 String mmText(num mm) {
+  if (MassEinheit.aktuell == 'cm') return (mm / 10).toStringAsFixed(mm % 10 == 0 ? 0 : 1).replaceAll('.', ',').replaceAll('-', '−');
+  if (MassEinheit.aktuell == 'm') return (mm / 1000).toStringAsFixed(3).replaceAll('.', ',').replaceAll('-', '−');
   final s = mm.round().abs().toString();
   final buf = StringBuffer(mm < 0 ? '−' : '');
   for (var i = 0; i < s.length; i++) {

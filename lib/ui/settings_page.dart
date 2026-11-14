@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:file_selector/file_selector.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 
 import '../app/theme.dart';
@@ -7,6 +10,9 @@ import 'bibliothek.dart';
 import 'sensoren_page.dart';
 import 'assistent/ki_einstellungen.dart';
 import 'bauphysik/bauphysik_page.dart' show heizlastParameter, systemTemperaturen;
+import 'tastenkuerzel.dart';
+import '../core/updater.dart';
+import '../app/version.dart';
 import 'widgets.dart';
 import 'speicher_einstellungen.dart';
 import 'einstellungen_mehr.dart';
@@ -162,6 +168,126 @@ class _SettingsPageState extends State<SettingsPage> {
       const SizedBox(height: 8),
       const Text('Wie Geräte, Leitungen und Flächen in der Installation gezeichnet werden.'),
       const SizedBox(height: 16),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Expanded(child: Text('Maßeinheit in Plänen und Anzeigen (Eingaben bleiben in mm)')),
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: const [ButtonSegment(value: 'mm', label: Text('mm')), ButtonSegment(value: 'cm', label: Text('cm')), ButtonSegment(value: 'm', label: Text('m'))],
+                selected: {d['einheit'] as String? ?? 'mm'},
+                onSelectionChanged: (v) {
+                  MassEinheit.setzen(v.first);
+                  setzen('einheit', v.first);
+                },
+              ),
+            ]),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Hinweis „Foto vor dem Verdecken“'),
+              value: d['pflichtfoto_hinweis'] != false,
+              onChanged: (v) => setzen('pflichtfoto_hinweis', v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Bauablauf-Hinweise (dezent, in der Projektprüfung)'),
+              value: state.store?.einstellung<bool>('bauablauf_aus') != true,
+              onChanged: state.store == null
+                  ? null
+                  : (v) {
+                      state.store!.einstellungSetzen('bauablauf_aus', !v);
+                      state.geaendert();
+                      setState(() {});
+                    },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Eigenleistung / Lohnanteil in den Kosten zeigen'),
+              value: d['eigenleistung_aus'] != true,
+              onChanged: (v) => setzen('eigenleistung_aus', !v),
+            ),
+            TextButton.icon(
+              onPressed: () => tastenkuerzelZeigen(context, einstellungen: s),
+              icon: const Icon(Icons.keyboard_outlined, size: 18),
+              label: const Text('Tastenkürzel anpassen …'),
+            ),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Programm-Update ($bauspurBuild)', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Neue Versionen aus einem Ordner (OneDrive, NAS, USB). Jede Datei wird per SHA-256 geprüft, das Programm vorher gesichert.',
+                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+            Row(children: [
+              Expanded(child: Text(d['update_quelle'] == null ? 'Keine Update-Quelle gewählt' : 'Quelle: ${d['update_quelle']}', style: const TextStyle(fontSize: 13))),
+              TextButton(
+                onPressed: () async {
+                  final o = await getDirectoryPath(confirmButtonText: 'Update-Quelle');
+                  if (o != null) setzen('update_quelle', o);
+                },
+                child: const Text('Ordner …'),
+              ),
+            ]),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.tonalIcon(
+                onPressed: d['update_quelle'] == null
+                    ? null
+                    : () async {
+                        final u = updateSuchen('${d['update_quelle']}', bauspurBuild);
+                        if (u == null) {
+                          zeigeHinweis(context, 'Keine neuere Version in der Quelle.');
+                          return;
+                        }
+                        final fehler = await updatePruefen(u);
+                        if (!context.mounted) return;
+                        if (fehler.isNotEmpty) {
+                          zeigeFehler(context, 'Update nicht vollständig: ${fehler.take(3).join(', ')}');
+                          return;
+                        }
+                        final ok = await frage(context,
+                            titel: '${u.build} installieren?',
+                            text: 'Alle ${u.dateien.length} Dateien sind geprüft. BauSpur wird gesichert, beendet, aktualisiert und neu gestartet.',
+                            ja: 'Aktualisieren');
+                        if (!ok) return;
+                        final v = await updateVorbereiten(u, aktuell: bauspurBuild);
+                        await updateStarten(v.skript);
+                        exit(0);
+                      },
+                icon: const Icon(Icons.system_update_alt, size: 18),
+                label: const Text('Nach Update suchen'),
+              ),
+              OutlinedButton.icon(
+                onPressed: d['update_quelle'] == null
+                    ? null
+                    : () async {
+                        final quelle = '${d['update_quelle']}';
+                        final ziel = File(Platform.resolvedExecutable).parent.path;
+                        if (p.equals(quelle, ziel)) {
+                          await updateManifestSchreiben(quelle, bauspurBuild);
+                        } else {
+                          for (final f in Directory(ziel).listSync(recursive: true).whereType<File>()) {
+                            final n = File(p.join(quelle, p.relative(f.path, from: ziel)));
+                            n.parent.createSync(recursive: true);
+                            f.copySync(n.path);
+                          }
+                          await updateManifestSchreiben(quelle, bauspurBuild);
+                        }
+                        if (context.mounted) zeigeHinweis(context, '$bauspurBuild als Update in der Quelle bereitgestellt.');
+                      },
+                icon: const Icon(Icons.publish_outlined, size: 18),
+                label: const Text('Diese Version bereitstellen'),
+              ),
+            ]),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 12),
       Card(
         child: Padding(
           padding: const EdgeInsets.all(16),

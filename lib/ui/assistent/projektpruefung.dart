@@ -183,6 +183,8 @@ List<PruefHinweis> projektPruefen(ProjectStore store, Regelwerte r) {
       h.add(PruefHinweis(bereich: 'Schacht ${s.name}', text: t));
     }
   }
+  // Bauablauf (dezent, abschaltbar über Einstellung bauablauf_aus): verdeckt ohne passende Prüfung
+  if (store.einstellung<bool>('bauablauf_aus') != true) h.addAll(bauablaufPruefen(store, typen, gewerke));
   return h;
 }
 
@@ -218,4 +220,28 @@ String projektSteckbrief(ProjectStore store, List<PruefHinweis> regeln) {
     }
   }
   return b.toString();
+}
+
+
+/// Bauablauf-Hinweise: Leitungen schon verdeckt, aber die passende Prüfung fehlt
+/// (Druckprobe, Isolationsmessung, Dichtheit). Nur Hinweise, nie blockierend.
+List<PruefHinweis> bauablaufPruefen(ProjectStore store, Map<String, Objekttyp> typen, Map<String, String> gewerke) {
+  final arten = {for (final p in store.pruefprotokolle()) p.art};
+  bool hat(String s) => arten.any((a) => a.startsWith(s));
+  final verdeckt = [for (final o in store.alleObjekte()) if (o.status == ObjektStatus.verdeckt) o];
+  bool gibt(bool Function(Objekt) f) => verdeckt.any(f);
+  final h = <PruefHinweis>[];
+  if (!hat('Druckprobe Heizung') && gibt((o) => const {'HK', 'HR', 'VL', 'RL'}.contains(typen[o.typId]?.kuerzel))) {
+    h.add(const PruefHinweis(bereich: 'Bauablauf', text: 'Heizungsleitungen/Heizkreise sind verdeckt, aber es gibt kein Protokoll „Druckprobe Heizung/FBH“.'));
+  }
+  if (!hat('Druckprobe Trinkwasser') && gibt((o) => const {'KW', 'WW', 'ZI'}.contains(typen[o.typId]?.kuerzel))) {
+    h.add(const PruefHinweis(bereich: 'Bauablauf', text: 'Trinkwasserleitungen sind verdeckt, aber es gibt kein Protokoll „Druckprobe Trinkwasser“.'));
+  }
+  if (!hat('Dichtheitsprüfung Abwasser') && gibt((o) => typen[o.typId]?.kuerzel == 'AW')) {
+    h.add(const PruefHinweis(bereich: 'Bauablauf', text: 'Abwasserleitungen sind verdeckt, aber es gibt keine „Dichtheitsprüfung Abwasser“.'));
+  }
+  if (!hat('Isolationsmessung') && gibt((o) => gewerke[typen[o.typId]?.gewerkId] == 'EL' && typen[o.typId]?.geometrie == Geometrieart.linie)) {
+    h.add(const PruefHinweis(bereich: 'Bauablauf', text: 'Elektroleitungen sind verdeckt – Isolationsmessung vor dem Verputzen/Verschließen einplanen.'));
+  }
+  return h;
 }

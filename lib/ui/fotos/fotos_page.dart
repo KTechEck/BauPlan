@@ -21,6 +21,7 @@ import '../widgets.dart';
 import 'foto_markieren_page.dart';
 import 'foto_zuordnen_dialog.dart';
 import 'foto_extras.dart';
+import '../vorschaubild.dart';
 
 /// Modul Fotos: Fotos importieren, im Grundriss mit Blickrichtung verorten
 /// und Objekten zuordnen (z. B. Leerrohre vor dem Estrich).
@@ -207,7 +208,7 @@ class _FotosPageState extends State<FotosPage> {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
     switch (e.logicalKey) {
       case LogicalKeyboardKey.f1:
-        tastenkuerzelZeigen(context);
+        tastenkuerzelZeigen(context, einstellungen: _s.settings);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.space:
         _ansichtZiehen = true;
@@ -226,7 +227,7 @@ class _FotosPageState extends State<FotosPage> {
         return KeyEventResult.handled;
       default:
     }
-    final k = e.logicalKey;
+    final k = TastenBelegung.uebersetzen(e.logicalKey);
     if (HardwareKeyboard.instance.isControlPressed && k == LogicalKeyboardKey.keyZ) {
       if (_rueckgaengig.isNotEmpty) {
         _rueckgaengig.removeLast()();
@@ -481,8 +482,7 @@ class _FotosPageState extends State<FotosPage> {
               child: Stack(fit: StackFit.expand, children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: Image.file(File(_pfad(f)), fit: BoxFit.cover, cacheWidth: 320,
-                      errorBuilder: (_, __, ___) => Container(color: BsFarben.flaeche, child: const Icon(Icons.image_not_supported_outlined))),
+                  child: Vorschaubild(projektOrdner: _s.store!.ordner, datei: f.datei),
                 ),
                 if (!f.verortet)
                   const Positioned(

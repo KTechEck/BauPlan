@@ -1346,7 +1346,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return ListView(
       children: [
         const Text('Bemaßung', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-        Text('${mmText(b.laenge)} mm',
+        Text(massText(b.laenge),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
         TextField(
@@ -2440,7 +2440,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
   /// Tasten in den Eingabefeldern: Tab wechselt das Feld, Esc zurück zur Zeichnung.
   KeyEventResult _eingabeTaste(KeyEvent e, {required bool laenge}) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
-    final k = e.logicalKey;
+    final k = TastenBelegung.uebersetzen(e.logicalKey);
     if (k == LogicalKeyboardKey.tab) {
       (laenge ? _winkelFokus : _laengeFokus).requestFocus();
       final c = laenge ? _winkelCtrl : _laengeCtrl;
@@ -2603,10 +2603,10 @@ class _FloorplanPageState extends State<FloorplanPage> {
     }
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
     if (e.logicalKey == LogicalKeyboardKey.f1) {
-      tastenkuerzelZeigen(context);
+      tastenkuerzelZeigen(context, einstellungen: _s.settings);
       return KeyEventResult.handled;
     }
-    final k = e.logicalKey;
+    final k = TastenBelegung.uebersetzen(e.logicalKey);
     final strg = HardwareKeyboard.instance.isControlPressed;
     if (strg && k == LogicalKeyboardKey.keyZ) {
       _rueckgaengigMachen();
@@ -3471,7 +3471,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
     final m = _maus;
     final teile = <String>[
       'Bildschirm ca. 1 : ${(1 / (_massstab * 0.2645)).round()}',
-      if (m != null) 'x ${mmText(m.dx)} · y ${mmText(m.dy)} mm',
+      if (m != null) 'x ${mmText(m.dx)} · y ${massText(m.dy)}',
       if (_kettenStart != null) 'Tab: Länge und Winkel eingeben · Enter setzt · Esc beendet',
       if (_parallelFuer != null) 'Parallel ausrichten: Bezugswand anklicken · Esc bricht ab',
       if (_werkzeug == Werkzeug.raum) 'In eine erkannte Fläche klicken, um den Raum zu benennen',
@@ -3486,7 +3486,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
             : _massB == null
                 ? 'zweiten Punkt klicken'
                 : 'Maßlinie mit der Maus versetzen und klicken',
-      if (_versatz != Offset.zero) 'verschieben um x ${mmText(_versatz.dx)} · y ${mmText(_versatz.dy)} mm',
+      if (_versatz != Offset.zero) 'verschieben um x ${mmText(_versatz.dx)} · y ${massText(_versatz.dy)}',
       if (_auswahl.length > 1) '${_auswahl.length} Wände gewählt',
       'Ansicht schieben: rechte/mittlere Maustaste, Leertaste+Ziehen, Pfeiltasten · Mausrad: zoomen · Umschalt: rechtwinklig',
     ];
@@ -3575,7 +3575,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
         const SizedBox(height: 14),
         if (flaeche != null) zeile('Fläche (licht)', flaecheText(flaeche)),
         if (umfang != null) zeile('Umfang (licht)', meterText(umfang)),
-        if (lichteHoehe != null) zeile('lichte Höhe', '${mmText(lichteHoehe)} mm'),
+        if (lichteHoehe != null) zeile('lichte Höhe', massText(lichteHoehe)),
         const SizedBox(height: 6),
         _verkleidungWahl(
           label: 'Wandverkleidung im Raum (Vorgabe für alle Wände)',
@@ -3719,7 +3719,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
             ]),
             const SizedBox(height: 6),
             Text(
-                'Bezug: markiertes Ende – gemessen ab Achse, Innen- oder Außenecke · Wand ${mmText(w.laenge)} mm lang\n'
+                'Bezug: markiertes Ende – gemessen ab Achse, Innen- oder Außenecke · Wand ${massText(w.laenge)} lang\n'
                 'Enter setzt den Startpunkt · Esc bricht ab',
                 style: const TextStyle(fontSize: 11, color: BsFarben.textLeise)),
           ],
@@ -4088,8 +4088,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
       const SizedBox(height: 6),
       Text(
         (aussen - innen).abs() < 1
-            ? 'Achse ${mmText(w.laenge)} mm'
-            : 'Achse ${mmText(w.laenge)} · innen ${mmText(innen)} · außen ${mmText(aussen)} mm',
+            ? 'Achse ${massText(w.laenge)}'
+            : 'Achse ${mmText(w.laenge)} · innen ${mmText(innen)} · außen ${massText(aussen)}',
         style: const TextStyle(fontSize: 12, color: BsFarben.textLeise),
       ),
       const SizedBox(height: 8),
@@ -4134,7 +4134,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return ListView(
       children: [
         const Text('Wand', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-        Text('${mmText(w.laenge)} mm lang',
+        Text('${massText(w.laenge)} lang',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 16),
         Wrap(spacing: 8, runSpacing: 6, children: [

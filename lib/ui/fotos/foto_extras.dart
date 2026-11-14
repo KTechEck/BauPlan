@@ -7,6 +7,7 @@ import '../../app/theme.dart';
 import '../../data/models.dart';
 import '../../data/tagebuch_models.dart';
 import '../../state/app_state.dart';
+import '../vorschaubild.dart';
 
 String _d(DateTime t) => '${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')}.${t.year}';
 
@@ -87,7 +88,7 @@ Future<void> zeitleisteRaum(BuildContext context, AppState s) async {
             ListTile(
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
-                child: Image.file(File(p.join(store.ordner, f.datei)), width: 72, height: 54, fit: BoxFit.cover, errorBuilder: (c, e, st) => const Icon(Icons.image_outlined)),
+                child: Vorschaubild(projektOrdner: store.ordner, datei: f.datei, breite: 72, hoehe: 54),
               ),
               title: Text('Foto · ${_d(f.aufnahme.toLocal())}'),
               subtitle: Text(f.notiz ?? f.autor),

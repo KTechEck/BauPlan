@@ -235,10 +235,10 @@ class _DeckePageState extends State<DeckePage> {
 
   KeyEventResult _taste(FocusNode n, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
-    final k = e.logicalKey;
+    final k = TastenBelegung.uebersetzen(e.logicalKey);
     final strg = HardwareKeyboard.instance.isControlPressed;
     if (k == LogicalKeyboardKey.f1) {
-      tastenkuerzelZeigen(context);
+      tastenkuerzelZeigen(context, einstellungen: _s.settings);
     } else if (strg && k == LogicalKeyboardKey.keyZ) {
       if (_rueckgaengig.isNotEmpty) {
         _rueckgaengig.removeLast()();
@@ -312,7 +312,7 @@ class _DeckePageState extends State<DeckePage> {
                 icon: const Icon(Sym.umdrehen),
                 label: Text(_vonUnten ? 'von oben zeigen' : 'von unten zeigen'),
               ),
-              IconButton(tooltip: 'Tastenkürzel (F1)', onPressed: () => tastenkuerzelZeigen(context), icon: const Icon(Sym.hilfe)),
+              IconButton(tooltip: 'Tastenkürzel (F1)', onPressed: () => tastenkuerzelZeigen(context, einstellungen: _s.settings), icon: const Icon(Sym.hilfe)),
             ],
           ),
           body: Column(children: [
@@ -472,8 +472,8 @@ class _DeckePageState extends State<DeckePage> {
     return ListView(children: [
       Text('Deckenaufbau', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 8),
-      Text('Rohdecke ${mmText(_h.rohdecke)} mm (abs.)'),
-      Text('FFB ${mmText(_h.ffb)} mm → lichte Höhe ${mmText((raum.ukDecke ?? _h.rohdecke) - _h.ffb)} mm'),
+      Text('Rohdecke ${massText(_h.rohdecke)} (abs.)'),
+      Text('FFB ${massText(_h.ffb)} → lichte Höhe ${massText((raum.ukDecke ?? _h.rohdecke) - _h.ffb)}'),
       const SizedBox(height: 12),
       SpeicherFeld(
         key: ValueKey('uk-${raum.ukDecke}'),
@@ -493,7 +493,7 @@ class _DeckePageState extends State<DeckePage> {
       ),
       if (abhaengung != null) ...[
         const SizedBox(height: 8),
-        Text('Abhängehöhe ${mmText(abhaengung)} mm – Leuchten und Melder sitzen „in Decke“.',
+        Text('Abhängehöhe ${massText(abhaengung)} – Leuchten und Melder sitzen „in Decke“.',
             style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
       ],
       const Divider(height: 28),
@@ -779,7 +779,7 @@ class _DeckePageState extends State<DeckePage> {
       Text(t?.name ?? '', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
       Text(o.kennung, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
-      Text('Montagehöhe ${mmText(zAbs - _h.ffb)} mm über FFB'),
+      Text('Montagehöhe ${massText(zAbs - _h.ffb)} über FFB'),
       if (t?.kuerzel == 'PM' || t?.kuerzel == 'BM')
         Text('Erfassung Ø ca. ${meterText(erfassung((zAbs - _h.ffb).toDouble()).praesenz)} sitzend, ${meterText(erfassung((zAbs - _h.ffb).toDouble()).frontal)} frontal, ${meterText(erfassung((zAbs - _h.ffb).toDouble()).quer)} quer gehend'),
       if (t?.kuerzel == 'LE') ..._leuchtenFelder(o),

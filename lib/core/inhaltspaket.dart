@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'bauelemente.dart';
@@ -61,4 +62,28 @@ BibliothekPaket bibliothekPaketLesen(String text) {
     }
   }
   return (neu: neu, gleich: gleich, anders: anders);
+}
+
+/// Inhaltspakete automatisch aus einem Ordner laden: nur neue Elemente (gleiche
+/// ID schon vorhanden = bleibt unverändert), nur Dateien, die seit dem letzten
+/// Laden geändert wurden. [stand] = Datei → Änderungszeit (ms) des letzten Ladens.
+/// Liefert (neue Elemente je Paketname, neuer Stand).
+({Map<String, List<Bauelement>> neu, Map<String, int> stand}) paketeAusOrdner(String ordner, Set<String> vorhandeneIds, Map<String, int> stand) {
+  final neu = <String, List<Bauelement>>{};
+  final st = {...stand};
+  final d = Directory(ordner);
+  if (!d.existsSync()) return (neu: neu, stand: st);
+  final ids = {...vorhandeneIds};
+  for (final f in d.listSync().whereType<File>()) {
+    if (!f.path.toLowerCase().endsWith('.json')) continue;
+    final ms = f.lastModifiedSync().millisecondsSinceEpoch;
+    if (st[f.path] == ms) continue;
+    st[f.path] = ms;
+    try {
+      final pk = bibliothekPaketLesen(f.readAsStringSync());
+      final l = [for (final e in pk.elemente) if (ids.add(e.id)) e];
+      if (l.isNotEmpty) neu[pk.name] = l;
+    } catch (_) {}
+  }
+  return (neu: neu, stand: st);
 }

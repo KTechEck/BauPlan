@@ -643,3 +643,23 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Hydraulikschema, TAPPS2, Fotos nach Geschoss/Raum, Protokollen, Kabelliste, Gewährleistung, Belegen, Home-Assistant-YAML.
 - Gewährleistung je Produkt (lib/ui/bauteile/gewaehrleistung_dialog.dart, Einstellung `gewaehrleistung`, Vorschläge aus Einkäufen ≥ 50 €).
 - Tests test/build27_test.dart; 280 Tests grün.
+
+## Build 28 (14.11.) – Roadmap 10 (Bedienung, Export) + Laufendes – Gesamt-Roadmap damit abgearbeitet
+- Globale Suche (lib/ui/suche.dart): Strg+F / Strg+K oder Lupe in der Kopfleiste; Räume, Objekte (auch Typenschild), Aufgaben/Mängel, Tagebuch, Verteiler,
+  Stromkreise, Bibliothek, Fotos, Module; Enter öffnet den ersten Treffer.
+- Statusleiste vollständig (Shell: Geschoss mit Räumen/Objekten, offene Aufgaben/Mängel, Maßeinheit, Benutzer, nur-lesen, Build, gespeichert).
+- Maßeinheit mm/cm/m (MassEinheit in widgets.dart, massText = Zahl + Einheit; Einstellungen › Darstellung; Eingaben bleiben mm).
+- Tastenkürzel anpassen (TastenBelegung in tastenkuerzel.dart, darstellung.tasten; F1-Fenster mit Eingabefeldern, „Standard wiederherstellen“).
+- Ersteinrichtung beim ersten Start (lib/ui/ersteinrichtung.dart; darstellung.ersteinrichtung) + jederzeit über die Startseite.
+- Einstellungen als Vorlage (vorlagenSchluessel, Ordner vorlagen/ im Einstellungsordner; Ausgabe › „Einstellungen als Vorlage“, Startseite „Neues Projekt aus Vorlage“).
+- Plankopf (Ausgabe › „Plankopf …“, Bearbeiter/Firma/Änderungsstand/Anschrift) in Plan-PDFs und Stromlaufplänen.
+- Datenausgaben (lib/ui/export/daten_export.dart): CSV-Listen (Räume, Objekte, Stromkreise, Öffnungen, Aufgaben), DXF R12 je Geschoss (Ebenen je Zustand),
+  SVG je Geschoss, PNG-Pläne, Fotos nach Raum und nach Gewerk, Home-Assistant-Bereiche + customize.yaml.
+- Eigener Updater (lib/core/updater.dart: SHA-256 in Dart, Manifest bauspur_update.json, Sicherung des Programmordners, Austausch per PowerShell nach Beenden;
+  Einstellungen › Darstellung › Programm-Update: Quelle, „Nach Update suchen“, „Diese Version bereitstellen“).
+- Inhaltspakete automatisch (paketeAusOrdner; darstellung.pakete_ordner/pakete_stand) beim Öffnen eines Projekts, Meldung in der Glocke; Gewährleistung-Ablauf
+  ebenfalls dezent in der Glocke.
+- Vorschaubild-Cache (lib/ui/vorschaubild.dart, Projektordner/.vorschau/*.png) in Galerie und Zeitleiste.
+- Laufend: Bauablauf-Hinweise in der Projektprüfung (verdeckt ohne Druckprobe/Dichtheit/Isolationsmessung; Einstellung bauablauf_aus, Schalter in Darstellung),
+  Eigenleistung/Lohn in den Kosten ausblendbar (darstellung.eigenleistung_aus).
+- Tests test/build28_test.dart; 283 Tests grün.

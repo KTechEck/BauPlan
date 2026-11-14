@@ -79,7 +79,7 @@ class _KostenPageState extends State<KostenPage> {
   Widget _liste() {
     final store = _s.store!;
     final gewerke = {for (final g in store.gewerke()) g.id: g};
-    final alle = store.kostenpositionen();
+    final alle = [for (final k in store.kostenpositionen()) if (_s.settings.darstellung['eigenleistung_aus'] != true || (k.kostenart != 'Lohn' && !k.text.toLowerCase().contains('eigenleistung'))) k];
     final pos = alle
         .where((p) => (_filterStatus == null || p.status == _filterStatus) && (_filterGewerk == null || p.gewerkId == _filterGewerk))
         .toList();

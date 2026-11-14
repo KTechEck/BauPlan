@@ -19,6 +19,9 @@ import '../floorplan/floorplan_painter.dart';
 import '../installation/installation_page.dart' show ObjektPainter, wandStrecke;
 import '../symbol_editor.dart' show eigeneSymbole;
 import 'akte.dart';
+import '../../core/elektro.dart' show plankopf;
+import 'daten_export.dart';
+import '../ersteinrichtung.dart' show einstellungenAlsVorlage;
 import '../widgets.dart';
 import 'hausdoku.dart';
 import 'wohnflaeche_page.dart';
@@ -158,6 +161,50 @@ class _ExportPageState extends State<ExportPage> {
             label: const Text('Etiketten …'),
           ),
           OutlinedButton.icon(
+            onPressed: () async {
+              final store = _s.store!;
+              final k = Map<String, dynamic>.from(store.einstellung<Map>('plankopf') ?? const {});
+              final c = {for (final f in const ['ersteller', 'firma', 'revision', 'adresse']) f: TextEditingController(text: '${k[f] ?? ''}')};
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (d) => AlertDialog(
+                  title: const Text('Plankopf'),
+                  content: SizedBox(
+                    width: 420,
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      for (final (f, l) in const [('ersteller', 'Bearbeiter'), ('firma', 'Firma / Fachbetrieb'), ('revision', 'Änderungsstand'), ('adresse', 'Anschrift Objekt')])
+                        TextField(controller: c[f], decoration: InputDecoration(labelText: l)),
+                    ]),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Abbrechen')),
+                    FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('Speichern')),
+                  ],
+                ),
+              );
+              if (ok != true) return;
+              store.einstellungSetzen('plankopf', {for (final e in c.entries) if (e.value.text.trim().isNotEmpty) e.key: e.value.text.trim()});
+              _s.geaendert();
+            },
+            icon: const Icon(Icons.badge_outlined),
+            label: const Text('Plankopf …'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _laeuft ? null : _weitereAusgaben,
+            icon: const Icon(Icons.dataset_outlined),
+            label: const Text('Daten: CSV, DXF, SVG, PNG, Home Assistant …'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final name = await texteingabe(context, titel: 'Einstellungen als Vorlage', feld: 'Name der Vorlage', vorschlag: 'Meine Vorgaben');
+              if (name == null || name.trim().isEmpty) return;
+              final f = await einstellungenAlsVorlage(widget.state, name.trim());
+              if (context.mounted) zeigeHinweis(context, 'Vorlage gespeichert: ${p.basename(f)} – beim nächsten neuen Projekt auf der Startseite wählbar.');
+            },
+            icon: const Icon(Icons.copy_all_outlined),
+            label: const Text('Einstellungen als Vorlage'),
+          ),
+          OutlinedButton.icon(
             onPressed: () => Process.run('explorer', [exporte.path]),
             icon: const Icon(Sym.ordner),
             label: const Text('Ordner öffnen'),
@@ -235,6 +282,34 @@ class _ExportPageState extends State<ExportPage> {
     } finally {
       if (mounted) setState(() => _laeuft = false);
     }
+  }
+
+  Future<void> _weitereAusgaben() async {
+    final wahl = await showDialog<String>(
+      context: context,
+      builder: (c) => SimpleDialog(title: const Text('Daten ausgeben'), children: [
+        for (final (k, l, i) in const [
+          ('csv', 'Listen als CSV (Excel): Räume, Objekte, Stromkreise, Aufgaben, Öffnungen', Icons.table_view),
+          ('dxf', 'Grundrisse als DXF (CAD) je Geschoss', Icons.architecture),
+          ('svg', 'Grundrisse als SVG (Vektor) je Geschoss', Icons.polyline_outlined),
+          ('png', 'Grundriss- und Installationspläne als PNG', Icons.image_outlined),
+          ('fotos', 'Fotos sortiert nach Geschoss/Raum und nach Gewerk', Icons.photo_library_outlined),
+          ('ha', 'Home Assistant: Bereiche und Entitäten (YAML)', Icons.home_outlined),
+        ])
+          SimpleDialogOption(onPressed: () => Navigator.pop(c, k), child: ListTile(dense: true, leading: Icon(i), title: Text(l))),
+      ]),
+    );
+    if (wahl == null) return;
+    await _ausgabe('Ausgabe', () => datenAusgeben(_s.store!, wahl, plaene: PlanExport(
+          store: _s.store!,
+          geschossIds: const [],
+          gewerkIds: {for (final g in _s.store!.gewerke()) g.id},
+          grundriss: true,
+          installation: true,
+          kosten: false,
+          papier: Papier.a3,
+          massstab: 0,
+        )));
   }
 
   Future<void> _etiketten() async {
@@ -394,14 +469,16 @@ class PlanExport {
             child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, mainAxisAlignment: pw.MainAxisAlignment.center, children: [
               pw.Text(_t(store.name), style: fett),
               pw.Text(_t(inhalt), style: stil),
+              if ((plankopf(store)['adresse'] ?? '').isNotEmpty) pw.Text(_t(plankopf(store)['adresse']!), style: stil),
             ]),
           ),
         ),
         for (final (k, v) in [
           ('Maßstab', massstabText),
           ('Datum', '${heute.day}.${heute.month}.${heute.year}'),
-          ('Bearbeiter', store.benutzer),
-          ('Programm', 'BauSpur'),
+          ('Bearbeiter', (plankopf(store)['ersteller'] ?? '').isNotEmpty ? plankopf(store)['ersteller']! : store.benutzer),
+          if ((plankopf(store)['firma'] ?? '').isNotEmpty) ('Firma', plankopf(store)['firma']!),
+          ('Stand', (plankopf(store)['revision'] ?? '').isNotEmpty ? 'Rev. ${plankopf(store)['revision']}' : 'BauSpur'),
         ])
           pw.Container(
             width: 34 * PdfPageFormat.mm,

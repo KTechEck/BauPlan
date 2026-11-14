@@ -4,6 +4,7 @@ import 'kosten/kosten_page.dart';
 import 'export/export_page.dart';
 import 'installation/installation_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../ipad/ipad_projekt.dart' show projektZumPc;
 import '../core/ipad_austausch.dart' show Ausleihe;
@@ -20,7 +21,10 @@ import 'project_page.dart';
 import 'settings_page.dart';
 import 'tagebuch/tagebuch_page.dart';
 import 'verteiler/schrank_page.dart';
+import 'suche.dart';
 import 'widgets.dart';
+import '../data/tagebuch_models.dart';
+import '../app/version.dart';
 
 /// Hauptfenster: Kopfleiste, Modulleiste links, Inhalt, Statusleiste.
 class Shell extends StatelessWidget {
@@ -64,12 +68,22 @@ class Shell extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = state.store!;
     final geschoss = state.geschossId == null ? null : store.geschoss(state.geschossId!);
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () => sucheOeffnen(context, state),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () => sucheOeffnen(context, state),
+      },
+      child: Scaffold(
       body: Column(
         children: [
           Kopfleiste(
             titel: [store.name, if (geschoss != null) geschoss.name].join(' · '),
             rechts: [
+              IconButton(
+                tooltip: 'Suchen (Strg+F)',
+                onPressed: () => sucheOeffnen(context, state),
+                icon: const Icon(Icons.search, color: Color(0xFFC9CDD1)),
+              ),
               HinweisGlocke(state: state),
               PopupMenuButton<String>(
                 tooltip: 'Editoren und Bibliotheken',
@@ -159,21 +173,46 @@ class Shell extends StatelessWidget {
               border: Border(top: BorderSide(color: BsFarben.rand)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(store.ordner,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-                ),
-                const Text('Änderungen werden sofort gespeichert',
-                    style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-              ],
-            ),
+            child: _Statusleiste(state: state),
           ),
         ],
       ),
-    );
+    ));
+  }
+}
+
+/// Statusleiste: Projektordner, Geschoss, Mengen, offene Aufgaben/Mängel,
+/// Maßeinheit, Benutzer, PC-Dienst, Build, Speichern.
+class _Statusleiste extends StatelessWidget {
+  const _Statusleiste({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = state.store!;
+    const stil = TextStyle(fontSize: 12, color: BsFarben.textLeise);
+    final g = state.geschossId == null ? null : store.geschoss(state.geschossId!);
+    final aufgaben = store.aufgaben().where((a) => a.status != AufgabenStatus.erledigt).toList();
+    final maengel = aufgaben.where((a) => a.art == 'mangel').length;
+    final raeume = g == null ? 0 : store.raeume(g.id).length;
+    final objekte = g == null ? 0 : store.objekte(g.id).length;
+    Widget teil(IconData i, String t, {String? tip}) => Tooltip(
+          message: tip ?? t,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(i, size: 13, color: BsFarben.textLeise), const SizedBox(width: 4), Text(t, style: stil)]),
+          ),
+        );
+    return Row(children: [
+      Expanded(child: Tooltip(message: store.ordner, child: Text(store.ordner, overflow: TextOverflow.ellipsis, style: stil))),
+      if (g != null) teil(Icons.layers_outlined, '${g.kuerzel} · $raeume Räume · $objekte Objekte', tip: 'aktuelles Geschoss'),
+      teil(Icons.checklist, '${aufgaben.length} offen${maengel > 0 ? ', $maengel Mängel' : ''}', tip: 'offene Aufgaben und Mängel (Tagebuch)'),
+      teil(Icons.straighten, MassEinheit.aktuell, tip: 'Maßeinheit (Einstellungen › Darstellung)'),
+      teil(Icons.person_outline, store.benutzer, tip: 'Benutzer'),
+      if (store.nurLesen) teil(Icons.lock_outline, 'nur lesen', tip: 'Projekt ausgeliehen oder schreibgeschützt'),
+      teil(Icons.verified_outlined, bauspurBuild),
+      teil(Icons.save_outlined, 'gespeichert', tip: 'Änderungen werden sofort gespeichert'),
+    ]);
   }
 }
 

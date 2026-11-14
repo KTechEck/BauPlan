@@ -81,9 +81,9 @@ class _AufmassDialogState extends State<_AufmassDialog> {
                           ),
                           title: Text(_zielText(a)),
                           subtitle: Text([
-                            'gemessen ${mmText(wert)} mm',
-                            if (plan != null) 'Plan ${mmText(plan)} mm',
-                            if (diff != null) 'Δ ${diff >= 0 ? '+' : ''}${mmText(diff)} mm',
+                            'gemessen ${massText(wert)}',
+                            if (plan != null) 'Plan ${massText(plan)}',
+                            if (diff != null) 'Δ ${diff >= 0 ? '+' : ''}${massText(diff)}',
                             '${a['autor']}, ${_datum('${a['zeit']}')}',
                             if (a['ziel'] == 'diagonale' && diagonaleText(store, a) != null) diagonaleText(store, a)!,
                             if (a['text'] != null) '„${a['text']}“',

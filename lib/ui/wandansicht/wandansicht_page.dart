@@ -626,8 +626,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
         content: SizedBox(
           width: 460,
           child: ListView(shrinkWrap: true, children: [
-            Text('Anzeichnen: ${mmText(a.dx)} mm ab linker Wandkante, ${mmText(p.dy)} mm über FFB'
-                ' (von rechts ${mmText(_seite.laenge - a.dx)} mm, unter Rohdecke ${mmText(_h.rohdecke - a.dy)} mm)',
+            Text('Anzeichnen: ${massText(a.dx)} ab linker Wandkante, ${massText(p.dy)} über FFB'
+                ' (von rechts ${massText(_seite.laenge - a.dx)}, unter Rohdecke ${massText(_h.rohdecke - a.dy)})',
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             for (final t in treffer)
@@ -637,7 +637,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 leading: Icon(t.abstand < 100 ? Icons.dangerous_outlined : Icons.warning_amber, color: t.abstand < 100 ? const Color(0xFFB91C1C) : const Color(0xFFB45309)),
                 title: Text(t.teil.text),
                 subtitle: Text([
-                  t.abstand <= 0 ? 'liegt genau hier' : '${mmText(t.abstand)} mm bis zur Kante',
+                  t.abstand <= 0 ? 'liegt genau hier' : '${massText(t.abstand)} bis zur Kante',
                   if (!t.hoeheBekannt) 'Höhe nicht geplant – nur seitlicher Abstand',
                   if (t.teil.ueberdeckung != null) 'Vorderkante ${t.teil.ueberdeckung} mm tief' else if (t.teil.istLinie) 'Tiefe nicht eingetragen',
                   if (t.teil.breite > 0) '${t.teil.breite.round()} mm breit',
@@ -655,10 +655,10 @@ class _WandansichtPageState extends State<WandansichtPage> {
 
   KeyEventResult _taste(FocusNode n, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
-    final k = e.logicalKey;
+    final k = TastenBelegung.uebersetzen(e.logicalKey);
     final strg = HardwareKeyboard.instance.isControlPressed;
     if (k == LogicalKeyboardKey.f1) {
-      tastenkuerzelZeigen(context);
+      tastenkuerzelZeigen(context, einstellungen: _s.settings);
     } else if (strg && k == LogicalKeyboardKey.keyZ) {
       if (_rueckgaengig.isNotEmpty) {
         _rueckgaengig.removeLast()();
@@ -764,7 +764,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
           auswahl: gewaehlterZug != null || gewaehlt != null,
           bauen: () => gewaehlterZug != null ? _zugDetails(gewaehlterZug) : gewaehlt != null ? _details(gewaehlt) : const SizedBox(),
         );
-        final titel = 'Wandansicht · ${_seite.raum?.name ?? 'Außenseite'} · ${mmText(_seite.laenge)} mm';
+        final titel = 'Wandansicht · ${_seite.raum?.name ?? 'Außenseite'} · ${massText(_seite.laenge)}';
         return Scaffold(
           backgroundColor: BsFarben.flaeche,
           appBar: AppBar(
@@ -806,7 +806,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 }),
                 icon: const Icon(Icons.help_outline),
               ),
-              IconButton(tooltip: 'Tastenkürzel (F1)', onPressed: () => tastenkuerzelZeigen(context), icon: const Icon(Sym.hilfe)),
+              IconButton(tooltip: 'Tastenkürzel (F1)', onPressed: () => tastenkuerzelZeigen(context, einstellungen: _s.settings), icon: const Icon(Sym.hilfe)),
             ],
           ),
           body: Column(children: [
@@ -874,7 +874,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 Tooltip(
                   message: 'Leitung auf einer Bezugslinie (RFB, FFB, Rohdecke) anklicken = Übergabepunkt: BauSpur fragt, wohin es weitergeht.',
                   child: Text(
-                    'RFB ${mmText(_h.rfb)} · FFB ${mmText(_h.ffb)} · Meterriss ${mmText(_h.meterriss)} · Rohdecke ${mmText(_h.rohdecke)} mm',
+                    'RFB ${mmText(_h.rfb)} · FFB ${mmText(_h.ffb)} · Meterriss ${mmText(_h.meterriss)} · Rohdecke ${massText(_h.rohdecke)}',
                     style: const TextStyle(fontSize: 12, color: BsFarben.textLeise),
                   ),
                 ),
@@ -1059,8 +1059,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
       Text(typ?.name ?? '', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
       Text(o.kennung, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
       const SizedBox(height: 12),
-      Text('${mmText(x)} mm von der linken Wandkante'),
-      Text('${mmText(_seite.laenge - x)} mm von der rechten Wandkante'),
+      Text('${massText(x)} von der linken Wandkante'),
+      Text('${massText(_seite.laenge - x)} von der rechten Wandkante'),
       const SizedBox(height: 8),
       for (final b in Hoehenbezug.values) Text('${mmText(((z - _h.von(b)) * b.richtung).round())} ${b.label}'),
       const SizedBox(height: 16),
@@ -1099,7 +1099,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
       Text(o.kennung, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
       const SizedBox(height: 12),
       Text('Länge ${meterText(o.laenge)} (davon senkrecht ${meterText(senkrecht)})'),
-      Text('${pts.length} Punkte, von ${mmText(pts.first.dy - _h.ffb)} bis ${mmText(pts.last.dy - _h.ffb)} mm über FFB'),
+      Text('${pts.length} Punkte, von ${mmText(pts.first.dy - _h.ffb)} bis ${massText(pts.last.dy - _h.ffb)} über FFB'),
       ...leitungLageFelder(context, o, (neu) {
         final alt = store.objektAendern(o.id, {'eigenschaften': jsonEncode({...o.eigenschaften, ...neu}..removeWhere((_, v) => v == null))});
         _rueckgaengig.add(() => store.objektAendern(o.id, alt));
