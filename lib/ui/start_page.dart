@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+
+import '../ipad/ipad_projekt.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
@@ -144,8 +146,26 @@ class StartPage extends StatelessWidget {
                         OutlinedButton.icon(
                           onPressed: () => _ordnerWaehlen(context),
                           icon: const Icon(Icons.folder_open),
-                          label: const Text('Projektordner öffnen …'),
+                          label: Text(_mobil ? 'Projekt auf dem iPad öffnen …' : 'Projektordner öffnen …'),
                         ),
+                        if (_mobil) ...[
+                          FilledButton.tonalIcon(
+                            onPressed: () async {
+                              final ordner = await projektVomPcHolen(context);
+                              if (ordner != null && context.mounted) await _oeffnen(context, ordner);
+                            },
+                            icon: const Icon(Icons.download_for_offline_outlined),
+                            label: const Text('Projekt vom PC holen'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              await geraeteModusSetzen('baustelle');
+                              if (context.mounted) zeigeHinweis(context, 'Beim nächsten Start öffnet sich die Baustellen-App. App bitte schließen und neu öffnen.');
+                            },
+                            icon: const Icon(Icons.phone_iphone),
+                            label: const Text('Stattdessen Baustellen-App'),
+                          ),
+                        ],
                       ],
                     ),
                   ],

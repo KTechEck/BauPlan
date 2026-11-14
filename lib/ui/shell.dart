@@ -5,6 +5,8 @@ import 'export/export_page.dart';
 import 'installation/installation_page.dart';
 import 'package:flutter/material.dart';
 
+import '../ipad/ipad_projekt.dart' show projektZumPc;
+
 import '../app/theme.dart';
 import '../state/app_state.dart';
 import 'assistent/assistent_page.dart';
@@ -100,6 +102,12 @@ class Shell extends StatelessWidget {
                   PopupMenuItem(value: 'gewerke', child: ListTile(dense: true, leading: Icon(Icons.category_outlined), title: Text('Gewerke und Farben'))),
                 ],
               ),
+              if (state.touch)
+                TextButton.icon(
+                  onPressed: () => projektZumPc(context, store),
+                  icon: const Icon(Icons.upload_outlined, color: Color(0xFFC9CDD1), size: 18),
+                  label: const Text('An PC schicken', style: TextStyle(color: Color(0xFFC9CDD1))),
+                ),
               TextButton.icon(
                 onPressed: state.projektSchliessen,
                 icon: const Icon(Icons.logout, color: Color(0xFFFDBA74), size: 18),
@@ -116,6 +124,7 @@ class Shell extends StatelessWidget {
               ],
             ),
           ),
+          if (!state.touch)
           Container(
             decoration: const BoxDecoration(
               color: Colors.white,

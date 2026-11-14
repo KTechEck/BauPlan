@@ -19,7 +19,8 @@ class BsFarben {
   static const wandAbbruch = Color(0xFFE6A700);
 }
 
-ThemeData bauSpurTheme() {
+/// [touch]: Tablet mit Finger/Stift – größere Bedienelemente (mind. 44 pt).
+ThemeData bauSpurTheme({bool touch = false}) {
   final scheme = ColorScheme.fromSeed(
     seedColor: BsFarben.akzent,
     primary: BsFarben.akzent,
@@ -29,7 +30,9 @@ ThemeData bauSpurTheme() {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: BsFarben.flaeche,
-    visualDensity: VisualDensity.standard,
+    visualDensity: touch ? VisualDensity.comfortable : VisualDensity.standard,
+    materialTapTargetSize: touch ? MaterialTapTargetSize.padded : null,
+    iconButtonTheme: touch ? IconButtonThemeData(style: IconButton.styleFrom(minimumSize: const Size(44, 44))) : null,
     dividerColor: BsFarben.rand,
     // Gefüllte Felder mit Linie unten: die Beschriftung bleibt im Feld und
     // überlappt nicht mit dem Feld darüber (vorher „verzerrt“ bei engem Stapeln).

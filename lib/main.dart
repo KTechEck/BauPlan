@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'ipad/ipad_projekt.dart' show geraeteModus;
 
 import 'app/version.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +17,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Handy und Tablet (iPhone, iPad, Android): nur das Baustellen-Werkzeug (Erfassen + Nachschlagen), nicht das ganze Programm
   if (Platform.isIOS || Platform.isAndroid) {
+    // Tablet (iPad): volle BauSpur, für Touch und Stift angepasst – außer man hat die Baustellen-App gewählt
+    final v = ui.PlatformDispatcher.instance.views.first;
+    final tablet = (v.physicalSize / v.devicePixelRatio).shortestSide >= 600;
+    if (await geraeteModus(tablet: tablet) == 'voll') {
+      runApp(BauSpurApp(settings: await AppSettings.laden(), touch: true));
+      return;
+    }
     final e = await MobilEinstellungen.laden();
     runApp(MobilApp(ordner: FernOrdner(e, await getApplicationDocumentsDirectory()), einstellungen: e, puffer: await Puffer.laden()));
     return;

@@ -19,6 +19,7 @@ import '../floorplan/floorplan_painter.dart';
 import '../installation/installation_page.dart' show ObjektPainter, wandStrecke;
 import '../widgets.dart';
 import 'hausdoku.dart';
+import 'wohnflaeche_page.dart';
 
 /// Modul Export: Pläne (Grundriss, Installation je Gewerk) und Kostenliste als PDF.
 class ExportPage extends StatefulWidget {
@@ -111,7 +112,7 @@ class _ExportPageState extends State<ExportPage> {
           ),
         ),
         const SizedBox(height: 16),
-        Row(children: [
+        Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
           FilledButton.icon(
             onPressed: _laeuft || (_geschosse.isEmpty && !_kosten) ? null : _erstellen,
             icon: _laeuft
@@ -119,27 +120,28 @@ class _ExportPageState extends State<ExportPage> {
                 : const Icon(Sym.pdf),
             label: const Text('PDF erstellen'),
           ),
-          const SizedBox(width: 12),
           FilledButton.tonalIcon(
             onPressed: _laeuft ? null : _hausdoku,
             icon: const Icon(Icons.menu_book_outlined),
             label: const Text('Hausdokumentation (komplett)'),
           ),
-          const SizedBox(width: 12),
           OutlinedButton.icon(
             onPressed: _laeuft ? null : _zip,
             icon: const Icon(Icons.archive_outlined),
             label: const Text('Projekt als ZIP'),
           ),
-          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => WohnflaechePage(state: widget.state))),
+            icon: const Icon(Icons.square_foot),
+            label: const Text('Wohnfläche (WoFlV)'),
+          ),
           OutlinedButton.icon(
             onPressed: () => Process.run('explorer', [exporte.path]),
             icon: const Icon(Sym.ordner),
             label: const Text('Ordner öffnen'),
           ),
           if (_letzteDatei != null) ...[
-            const SizedBox(width: 12),
-            Flexible(child: Text('Erstellt: ${p.basename(_letzteDatei!)}', overflow: TextOverflow.ellipsis)),
+              Flexible(child: Text('Erstellt: ${p.basename(_letzteDatei!)}', overflow: TextOverflow.ellipsis)),
           ],
         ]),
         const SizedBox(height: 24),

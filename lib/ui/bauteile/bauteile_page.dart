@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/bauelemente.dart';
+import '../../core/inhaltspaket.dart';
 import '../../core/ki.dart';
 import '../../core/pdf_text.dart';
 import '../../data/bauelement_bibliothek.dart';
@@ -174,6 +175,55 @@ class _BauteilePageState extends State<BauteilePage> {
     setState(() => _auswahl = e.id);
   }
 
+  /// Bibliothek (oder eine Kategorie) mit Datenblättern als Inhaltspaket speichern.
+  Future<void> _paketExport({required bool nurKategorie}) async {
+    final bib = _s.bibliothek;
+    final liste = nurKategorie ? bib.inKategorie(_kategorie) : bib.alle;
+    final name = nurKategorie ? 'BauSpur-${_kategorie.label.split(' ').first}' : 'BauSpur-Bibliothek';
+    final ort = await getSaveLocation(suggestedName: '$name.bauspur-paket.json', acceptedTypeGroups: const [XTypeGroup(label: 'Inhaltspaket', extensions: ['json'])]);
+    if (ort == null) return;
+    final blaetter = <String, Uint8List>{};
+    for (final e in liste) {
+      final f = bib.datenblattDatei(e);
+      if (f != null && f.existsSync() && f.lengthSync() < 15 * 1024 * 1024) blaetter[e.datenblatt!] = f.readAsBytesSync();
+    }
+    await File(ort.path).writeAsString(bibliothekPaket(liste, name: name, datenblaetter: blaetter));
+    if (mounted) zeigeHinweis(context, '${liste.length} Elemente (${blaetter.length} Datenblätter) gespeichert: ${ort.path}');
+  }
+
+  /// Inhaltspaket übernehmen: neue Elemente kommen dazu, abweichende auf Wunsch überschreiben.
+  Future<void> _paketImport() async {
+    final datei = await openFile(acceptedTypeGroups: const [XTypeGroup(label: 'Inhaltspaket', extensions: ['json'])]);
+    if (datei == null) return;
+    try {
+      final paket = bibliothekPaketLesen(await File(datei.path).readAsString());
+      final bib = _s.bibliothek;
+      final v = paketVergleichen(paket.elemente, bib.alle);
+      var ueberschreiben = false;
+      if (v.anders.isNotEmpty && mounted) {
+        ueberschreiben = await frage(context,
+            titel: 'Paket „${paket.name}“',
+            text: '${v.neu.length} neue Elemente, ${v.gleich.length} schon vorhanden, ${v.anders.length} weichen von deiner Bibliothek ab.\n\nAbweichende mit dem Stand aus dem Paket überschreiben?',
+            ja: 'Überschreiben');
+      }
+      for (final e in [...v.neu, if (ueberschreiben) ...v.anders]) {
+        bib.speichern(e);
+      }
+      for (final d in paket.datenblaetter.entries) {
+        final f = File(p.join(bib.datenblattOrdner.path, d.key));
+        if (!f.existsSync()) {
+          f.parent.createSync(recursive: true);
+          f.writeAsBytesSync(d.value);
+        }
+      }
+      _s.geaendert();
+      setState(() {});
+      if (mounted) zeigeHinweis(context, '${v.neu.length} neu${ueberschreiben ? ', ${v.anders.length} überschrieben' : ''} aus „${paket.name}“.');
+    } on FormatException catch (e) {
+      if (mounted) zeigeFehler(context, e.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final liste = _bib
@@ -312,6 +362,19 @@ class _BauteilePageState extends State<BauteilePage> {
                 onPressed: _einkauf,
                 icon: const Icon(Icons.receipt_long, size: 18),
                 label: const Text('Einkauf erfassen …'),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Inhaltspakete: Bibliothek weitergeben oder übernehmen',
+                onSelected: (a) => a == 'import' ? _paketImport() : _paketExport(nurKategorie: a == 'kategorie'),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'alle', child: ListTile(dense: true, leading: Icon(Icons.inventory_2_outlined), title: Text('Ganze Bibliothek als Paket speichern …'))),
+                  PopupMenuItem(value: 'kategorie', child: ListTile(dense: true, leading: const Icon(Icons.filter_alt_outlined), title: Text('Nur „${_kategorie.label}“ als Paket …'))),
+                  const PopupMenuItem(value: 'import', child: ListTile(dense: true, leading: Icon(Icons.unarchive_outlined), title: Text('Paket übernehmen …'))),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.inventory_2_outlined, size: 18), SizedBox(width: 4), Text('Pakete')]),
+                ),
               ),
               IconButton(
                 tooltip: 'Besorgungsliste: was laut Plan gebraucht wird und noch fehlt',

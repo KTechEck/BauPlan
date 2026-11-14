@@ -1,22 +1,30 @@
-
 import 'package:flutter/gestures.dart';
 
 /// Touch-Bedienung für die Zeichenflächen (iPad): zwei Finger verschieben und
 /// zoomen, ein Finger tippt oder zieht wie die Maus. Der erste Fingerdruck
 /// wird kurz zurückgehalten, damit beim Aufsetzen des zweiten Fingers nichts
 /// gesetzt oder gezeichnet wird. Maus und Stift (Apple Pencil) gehen sofort durch.
+/// Sobald ein Stift benutzt wurde, zeichnet nur noch der Stift; ein Finger
+/// verschiebt dann die Ansicht (Handballen setzt nichts mehr).
 class ZweiFinger {
   final _p = <int, Offset>{};
   PointerDownEvent? _wartend;
   bool _geste = false;
 
+  /// Ein Stift wurde benutzt: Finger zeichnen nicht mehr.
+  bool stiftGesehen = false;
+
   bool get aktiv => _p.length >= 2;
 
   /// true = Ereignis übernommen (Touch); sonst normal behandeln.
   bool runter(PointerDownEvent e) {
+    if (e.kind == PointerDeviceKind.stylus || e.kind == PointerDeviceKind.invertedStylus) stiftGesehen = true;
     if (e.kind != PointerDeviceKind.touch) return false;
     _p[e.pointer] = e.localPosition;
-    if (_p.length == 1) {
+    if (stiftGesehen) {
+      _wartend = null;
+      _geste = true;
+    } else if (_p.length == 1) {
       _wartend = e;
       _geste = false;
     } else {
@@ -39,7 +47,10 @@ class ZweiFinger {
   ({Offset verschiebung, double faktor, Offset mitte})? zweiFinger(PointerMoveEvent e) {
     if (!_p.containsKey(e.pointer)) return null;
     if (!aktiv) {
+      final alt = _p[e.pointer]!;
       _p[e.pointer] = e.localPosition;
+      // Stiftbetrieb: ein Finger verschiebt die Ansicht
+      if (stiftGesehen && _geste) return (verschiebung: e.localPosition - alt, faktor: 1.0, mitte: e.localPosition);
       return null;
     }
     final ids = _p.keys.take(2).toList();

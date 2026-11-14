@@ -10,8 +10,11 @@ import '../ui/start_page.dart';
 import 'theme.dart';
 
 class BauSpurApp extends StatefulWidget {
-  const BauSpurApp({super.key, this.settings});
+  const BauSpurApp({super.key, this.settings, this.touch = false});
   final AppSettings? settings;
+
+  /// Tablet mit Finger/Stift: größere Bedienelemente, kein PC-Dienst.
+  final bool touch;
 
   @override
   State<BauSpurApp> createState() => _BauSpurAppState();
@@ -26,9 +29,9 @@ class _BauSpurAppState extends State<BauSpurApp> {
     super.initState();
     final vorab = widget.settings;
     if (vorab != null) {
-      _state = AppState(vorab);
+      _state = AppState(vorab, touch: widget.touch);
     } else {
-      AppSettings.laden().then((s) => setState(() => _state = AppState(s)));
+      AppSettings.laden().then((s) => setState(() => _state = AppState(s, touch: widget.touch)));
     }
     // Beim Beenden die Projektsperre freigeben.
     _lifecycle = AppLifecycleListener(onExitRequested: () async {
@@ -51,7 +54,7 @@ class _BauSpurAppState extends State<BauSpurApp> {
     return MaterialApp(
       title: 'BauSpur',
       debugShowCheckedModeBanner: false,
-      theme: bauSpurTheme(),
+      theme: bauSpurTheme(touch: widget.touch),
       home: state == null
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : ListenableBuilder(

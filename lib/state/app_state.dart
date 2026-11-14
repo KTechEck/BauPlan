@@ -38,8 +38,9 @@ enum Modul {
 /// Zentraler Zustand der Anwendung: offenes Projekt, gewähltes Modul,
 /// gewähltes Geschoss. Widgets hören über ListenableBuilder darauf.
 class AppState extends ChangeNotifier {
-  AppState(this.settings) {
-    if (!_imTest) Timer.run(speicherAnwenden);
+  AppState(this.settings, {this.touch = false}) {
+    // Auf dem Tablet läuft kein PC-Dienst (das iPad holt Projekte vom PC)
+    if (!_imTest && !touch) Timer.run(speicherAnwenden);
     // Planstand für die App: Besorgungsliste und Geräte aus der Bibliothek mitgeben
     zusatzEinkauf = (_) => besorgungFuerApp(this);
     bauelementLesen = (st, id) => bibliothek.fuerProjekt(st, id)?.toJson();
@@ -49,6 +50,9 @@ class AppState extends ChangeNotifier {
   }
 
   final AppSettings settings;
+
+  /// Tablet mit Finger/Stift (volle BauSpur auf dem iPad).
+  final bool touch;
 
   /// Bauelemente-Bibliothek dieses PCs (Fenster, Türen, Geräte …).
   late final BauelementBibliothek bibliothek = BauelementBibliothek(Directory(p.join(settings.ordner.path, 'bauelemente')));
@@ -235,7 +239,7 @@ class AppState extends ChangeNotifier {
     store?.schliessen();
     store = s;
     _eingangTimer?.cancel();
-    if (!_imTest) {
+    if (!_imTest && !touch) {
       _eingangTimer = Timer.periodic(const Duration(seconds: 30), (_) => abgleichen());
       Timer.run(() {
         try {

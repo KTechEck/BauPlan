@@ -518,3 +518,12 @@ Grundriss, Installation, Wandansicht. PC-Seite für iPad mit voller BauSpur: PcD
 lib/core/ipad_austausch.dart, AppState._projektZip/ipadStandUebernehmen, Karte in Speicher und Abgleich. Tim 14.11.: iPad erst NACH dem Test von PC/iPhone.
 Offen iPad: main.dart Tablet → volle BauSpur (BauSpurApp) statt MobilApp, Start-Seite „Projekt vom PC holen“ (PcSpeicher.projektHolen + projektEntpacken),
 „Stand an den PC schicken“ (projektZurueck), iPad-Layout (größere Ziele, Seitenleisten einklappen, Stift). Außerdem offen: Inhaltspakete, Wohnflächen-Aufstellung.
+
+## Build 19 (14.11.)
+iPad = volle BauSpur (Tim: Umfang wie PC, iPad-optimiert): main.dart Tablet → BauSpurApp(touch: true), Modus-Datei bauspur_modus.txt (lib/ipad/ipad_projekt.dart:
+geraeteModus/geraeteModusSetzen, Umschalter auf der Start-Seite bzw. in der Baustellen-App unter Mehr), Start-Seite „Projekt vom PC holen“ (PcSpeicher.projektHolen,
+projektEntpacken, alter iPad-Stand wird umbenannt), Kopfleiste „An PC schicken“ (projektZurueck → PC: Speicher und Abgleich „Stand vom iPad übernehmen“).
+Touch: bauSpurTheme(touch) größere Ziele, AppState.touch (kein PC-Dienst/Timer), Statusleiste aus, ZweiFinger mit Stiftbetrieb (nach Apple Pencil zeichnet nur der Stift).
+Inhaltspakete: lib/core/inhaltspaket.dart (Format bauspur-bibliothek, Datenblätter base64), Bibliothek › Pakete (alle/Kategorie speichern, übernehmen mit Vergleich).
+Wohnfläche WoFlV: lib/ui/export/wohnflaeche_page.dart (Ausgabe › Wohnfläche; Dach-Höhenstaffel, Balkon-Anteil Einstellung balkon_anteil, Zubehörräume, raum.eigenschaften.wohnflaeche).
+Nicht getestet auf echtem iPad (kein Mac): erster Cloud-Build zeigt, ob alles läuft. Offen: iPad-Layout weiter verfeinern (Seitenleisten einklappen, Stift-Werkzeuge), KI-Assistent Stufe 2.

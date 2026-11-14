@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../kontext.dart';
+import '../../ipad/ipad_projekt.dart' show geraeteModusSetzen;
 import '../planstand.dart';
 import 'erfassen.dart';
 import 'abgleich.dart';
@@ -268,6 +269,19 @@ class MehrSeite extends StatelessWidget {
         title: Text('${k.wartend} Erfassung(en) warten auf Übertragung'),
         trailing: TextButton(onPressed: k.abgleichen, child: const Text('Jetzt')),
       ),
+      if (mobilGeraet(context) == MobilGeraet.tablet)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.tablet_mac),
+          title: const Text('Volle BauSpur auf dem iPad'),
+          subtitle: const Text('Ganzer Umfang wie am PC, für Finger und Stift angepasst (nach Neustart)'),
+          onTap: () async {
+            await geraeteModusSetzen('voll');
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Beim nächsten Start öffnet sich die volle BauSpur. App bitte schließen und neu öffnen.')));
+            }
+          },
+        ),
       const Divider(),
       Text('Einstellungen', style: Theme.of(context).textTheme.titleMedium),
       TextFormField(
