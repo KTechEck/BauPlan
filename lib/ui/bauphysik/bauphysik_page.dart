@@ -425,6 +425,8 @@ class _AufbautenAnsichtState extends State<AufbautenAnsicht> {
                 ('Bodenplatte', Gegen.erdreich, ['Estrich:60', 'Dämm:100', 'Beton:250']),
                 ('Kellerdecke', Gegen.unbeheizt, ['Estrich:50', 'Dämm:40', 'Beton:180', 'Dämm:100']),
                 ('Oberste Decke / Dach', Gegen.aussen, ['Gipskarton:13', 'Dämm:240', 'Holz:22']),
+                ('Terrasse (Betonplatte)', Gegen.aussen, ['Fliese:30', 'Splitt:40', 'XPS:100', 'Dichtschl:3', 'Beton:150']),
+                ('Bad mit FBH und Abdichtung', Gegen.beheizt, ['Fliese:10', 'Dichtschl:3', 'Estrich:65', 'Dämm:30', 'Beton:180']),
               ])
                 OutlinedButton(
                   onPressed: () {

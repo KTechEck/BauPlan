@@ -194,6 +194,7 @@ class ProjectStore {
           }
           _objekttypErgaenzen('EL', 'TO', 'Türöffner / Motorschloss', 'punkt');
         }
+        if (version == 24) _objekttypErgaenzen('AL', 'AD', 'Abgehängtes Deckenfeld / Schattenfuge', 'flaeche');
         version++;
         db.userVersion = version;
         db.execute('COMMIT');

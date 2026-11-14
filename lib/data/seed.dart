@@ -79,6 +79,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('KM', 'Kamin / Schornstein', 'flaeche'),
     ('RO', 'Revisionsöffnung', 'flaeche'),
     ('MS', 'Montageschiene (Rohre, Kabel)', 'linie'),
+    ('AD', 'Abgehängtes Deckenfeld / Schattenfuge', 'flaeche'),
   ]),
 ];
 

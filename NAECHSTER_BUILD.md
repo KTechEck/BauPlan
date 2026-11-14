@@ -611,3 +611,19 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Dämmhinweise, Kühloption mit Taupunkt (Einstellung `lueftung`).
 - Kühlung & Klima: Taupunkt, Kühl-Vorlauf ≥ Taupunkt+2 K, Kühllast-Richtwert je Raum (Fenster nach Richtung/Fc), Gerätegröße, Vergleich mit Klimageräten (Einstellung `klima`).
 - Tests test/build25_test.dart; 274 Tests grün.
+
+## Build 26 (14.11.) – Roadmap 7 (Grundriss, Fassade)
+- WDVS/Fassade/Balkon (lib/core/fassade.dart, lib/ui/floorplan/fassade_dialog.dart; Grundriss › Optionen „WDVS, Fassade und Balkon …“): Außenwände automatisch
+  (aussenSeiten), Dämmfläche, Platten mit Verschnitt, Dübel mit Randzonen, Sockel/Sockelschiene, Laibungen, Kanten-/Anputz-/Tropfkantenprofile, Gewebe, U-Wert
+  vorher/nachher mit GEG, Montageblöcke für Anbauteile außen, Durchdringungen (WD und Leitungen durch Außenwände), Balkon-Hinweise. „WDVS im Plan zeigen“
+  (WdvsPainter, Darstellung wdvs_zeigen). Einstellung `wdvs`.
+- Aufbauten: Vorlagen „Terrasse (Betonplatte)“ und „Bad mit FBH und Abdichtung“ (Schnitt gab es schon). Bodeneinbaustrahler: LE eigenschaften einbau/einbautiefe,
+  Prüfung gegen den Bodenaufbau des Raums bis zur Abdichtung/Dämmung (bodenstrahlerPruefen).
+- Migration 25: AL AD „Abgehängtes Deckenfeld / Schattenfuge“ (abhaengung_mm, schattenfuge_mm, led_fuge; Material GK/CD/UD/Abhänger/Schattenfugenprofil).
+- Oberflächen: Sockelleisten je Raum (Länge ohne Türen, Stäbe, Innen-/Außenecken, Endkappen; raum.eigenschaften.sockelleiste, Bad/WC standardmäßig aus).
+- Türen: Türart Drehtür/wandbündig/Schiebetür/Taschentür/Pendeltür (oeffnung.eigenschaften.tuerart) mit eigener Darstellung und Hinweisen (Platz, Tasche ohne
+  Leitungen, Wanddicke); Schwelle/Höhensprung zwischen Räumen bzw. Außentür-Hinweis im Öffnungspanel.
+- PDF als Planvorlage (lib/core/pdf_bild.dart: Windows.Data.Pdf per PowerShell → PNG, 200 dpi; Maßstab 1:… setzt den Vorlagenmaßstab direkt, sonst kalibrieren).
+- Eigene Symbole (lib/ui/symbol_editor.dart: Linie/Kreis/Rechteck/Text auf ±20-Raster; Einstellungen `eigene_symbole`, `symbol_zuordnung`), in Installation und PDF-Plänen;
+  „Eigenes Symbol für diesen Typ …“ im Objektpanel.
+- Tests test/build26_test.dart (inkl. echter PDF-Umwandlung unter Windows); 277 Tests grün.

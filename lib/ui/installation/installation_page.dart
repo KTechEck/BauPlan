@@ -41,7 +41,10 @@ import '../bauteile/bauelement_wahl.dart';
 import 'bad_dialog.dart';
 import 'typenschild_dialog.dart';
 import 'wasser_dialog.dart';
+import '../symbol_editor.dart';
 import '../../core/rack.dart' show dosePort;
+import '../../core/fassade.dart' show deckenfeldMaterial, bodenstrahlerPruefen;
+import '../bauphysik/bauphysik_page.dart' show aufbauten;
 import 'heizkreise_dialog.dart';
 import '../../core/bad.dart' show badObjektMasse;
 import '../../core/gebaeude.dart' show treppeAuslegen, gelaenderHinweise;
@@ -1309,6 +1312,10 @@ class _InstallationPageState extends State<InstallationPage> {
                 Positioned.fill(
                   child: CustomPaint(
                     painter: ObjektPainter(
+                      eigeneSymbole: {
+                        for (final e in (_s.store!.einstellung<Map>('symbol_zuordnung') ?? const {}).entries)
+                          if (eigeneSymbole(_s.store!).where((x) => x.id == e.value).firstOrNull case final es?) '${e.key}': es,
+                      },
                       darstellung: _s.settings.darstellung,
                       abmasse: _abmasse(d),
                       objekte: [
@@ -2342,6 +2349,98 @@ class _InstallationPageState extends State<InstallationPage> {
     ];
   }
 
+  /// Abgehängtes Deckenfeld (Abhängung, Schattenfuge, Material) und Einbauort/-tiefe von Leuchten (Bodeneinbaustrahler).
+  List<Widget> _ausbauFelder(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
+    final k = d.typen[o.typId]?.kuerzel;
+    final store = _s.store!;
+    void setzen(Map<String, Object?> w) {
+      final neu = {...o.eigenschaften, ...w}..removeWhere((k, v) => v == null);
+      aendern({'eigenschaften': jsonEncode(neu)});
+    }
+
+    Widget zahl(String key, String label, num vorgabe) => SizedBox(
+          width: 130,
+          child: SpeicherFeld(
+            key: ValueKey('af-$key-${o.id}-${o.eigenschaften[key]}'),
+            initialValue: '${o.eigenschaften[key] ?? vorgabe}',
+            decoration: InputDecoration(labelText: label, suffixText: 'mm', isDense: true),
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onFieldSubmitted: (t) => setzen({key: int.tryParse(t)}),
+          ),
+        );
+    if (k == 'AD' && o.punkte.length >= 3) {
+      final f = polygonFlaeche(o.punkte).abs() / 1e6;
+      var u = 0.0;
+      for (var i = 0; i < o.punkte.length; i++) {
+        u += (o.punkte[(i + 1) % o.punkte.length] - o.punkte[i]).laenge / 1000;
+      }
+      final sf = ((o.eigenschaften['schattenfuge_mm'] as num?) ?? 15).toInt();
+      final m = deckenfeldMaterial(f, u, schattenfugeMm: sf);
+      return [
+        const SizedBox(height: 10),
+        Text('Abgehängtes Deckenfeld', style: Theme.of(context).textTheme.titleSmall),
+        Wrap(spacing: 8, runSpacing: 8, children: [zahl('abhaengung_mm', 'Abhängehöhe', 150), zahl('schattenfuge_mm', 'Schattenfuge', 15)]),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('LED-Band in der Schattenfuge'),
+          value: o.eigenschaften['led_fuge'] == true,
+          onChanged: (v) => setzen({'led_fuge': v ? true : null}),
+        ),
+        Text('${f.toStringAsFixed(1).replaceAll('.', ',')} m² · GK ${m.gk.toStringAsFixed(1).replaceAll('.', ',')} m², CD-Profil ${m.cd.ceil()} m, UD ${m.ud.toStringAsFixed(1).replaceAll('.', ',')} m, '
+            '${m.abhaenger} Abhänger${m.schattenfuge > 0 ? ', Schattenfugenprofil ${m.schattenfuge.toStringAsFixed(1).replaceAll('.', ',')} m' : ''}'
+            '${o.eigenschaften['led_fuge'] == true ? ', LED ${u.toStringAsFixed(1).replaceAll('.', ',')} m' : ''}',
+            style: const TextStyle(fontSize: 12)),
+        const Text('Im Hohlraum: Leitungen, Einbauleuchten (Einbautiefe ≤ Abhängehöhe − 20 mm), Revisionsöffnung für Netzteile.',
+            style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+      ];
+    }
+    if (k == 'LE') {
+      final einbau = o.eigenschaften['einbau'] as String? ?? 'decke';
+      final w = <Widget>[
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('leb-${o.id}-$einbau'),
+              initialValue: einbau,
+              isDense: true,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Einbauort', isDense: true),
+              items: const [
+                DropdownMenuItem(value: 'decke', child: Text('Decke')),
+                DropdownMenuItem(value: 'wand', child: Text('Wand')),
+                DropdownMenuItem(value: 'boden', child: Text('Boden (Bodeneinbaustrahler)')),
+                DropdownMenuItem(value: 'aufbau', child: Text('Aufbau / Pendel')),
+              ],
+              onChanged: (v) => setzen({'einbau': v}),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (einbau != 'aufbau') zahl('einbautiefe', 'Einbautiefe', einbau == 'boden' ? 110 : 70),
+        ]),
+      ];
+      if (einbau == 'boden') {
+        final raum = o.raumId == null ? null : store.raeume(o.geschossId).where((r) => r.id == o.raumId).firstOrNull;
+        final aufbau = aufbauten(store).where((a) => a.id == raum?.eigenschaften['boden_aufbau']).firstOrNull;
+        if (aufbau == null) {
+          w.add(const Text('Bodenaufbau des Raums fehlt (Bauphysik › Boden- und Deckenaufbauten, Raum › Boden-Aufbau) – Einbautiefe nicht prüfbar.',
+              style: TextStyle(fontSize: 12, color: BsFarben.textLeise)));
+        } else {
+          final mat = {for (final m in store.materialien()) m.id: m.name.toLowerCase()};
+          final idx = aufbau.schichten.indexWhere((x) => RegExp(r'abdicht|bitumen|folie|dämm|eps|xps|pur|dichtschl').hasMatch(mat[x.$1] ?? ''));
+          final r = bodenstrahlerPruefen([for (final x in aufbau.schichten) x.$2], ((o.eigenschaften['einbautiefe'] as num?) ?? 110).toDouble(),
+              abdichtungIndex: idx < 0 ? null : idx, aussen: raum?.art != RaumArt.raum);
+          for (final h in r.hinweise) {
+            w.add(Text('• $h', style: TextStyle(fontSize: 12, color: !r.passt && h.startsWith('Einbautiefe') ? const Color(0xFFB91C1C) : BsFarben.textLeise)));
+          }
+        }
+      }
+      return w;
+    }
+    return const [];
+  }
+
   /// Reserve (UP-Dose, Leerrohr), Leerrohr-Ziel, Port der Netzwerkdose, Kamera-/Melderbereich, Zutritt.
   List<Widget> _netzFelder(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
     final k = d.typen[o.typId]?.kuerzel;
@@ -2869,6 +2968,16 @@ class _InstallationPageState extends State<InstallationPage> {
       ..._revisionFelder(o, d, aendern),
       ..._badFelder(o, d, aendern),
       ..._netzFelder(o, d, aendern),
+      ..._ausbauFelder(o, d, aendern),
+      if (d.typen[o.typId]?.geometrie == Geometrieart.punkt)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => symbolEditor(context, _s, typId: o.typId, typName: d.typen[o.typId]?.name),
+            icon: const Icon(Icons.draw_outlined, size: 18),
+            label: Text(symbolFuerTyp(_s.store!, o.typId) == null ? 'Eigenes Symbol für diesen Typ …' : 'Eigenes Symbol bearbeiten …'),
+          ),
+        ),
       if (d.typen[o.typId]?.geometrie == Geometrieart.punkt) ...[
         const SizedBox(height: 8),
         Row(children: [
@@ -2950,7 +3059,11 @@ class ObjektPainter extends CustomPainter {
     this.freiePlaetze = const [],
     this.darstellung = const {},
     this.abmasse = const {},
+    this.eigeneSymbole = const {},
   });
+
+  /// Eigene Symbole je Objekttyp (Einstellung `symbol_zuordnung`).
+  final Map<String, EigenesSymbol> eigeneSymbole;
 
   /// Reale Abmaße (Breite, Tiefe in mm) je Objekt aus dem zugeordneten Produkt.
   final Map<String, (double, double)> abmasse;
@@ -3248,8 +3361,12 @@ class ObjektPainter extends CustomPainter {
               ..color = farbe);
             mitte = m0;
           }
-          geraetSymbol(canvas, mitte, rad, _beschriftung == 'keiner' ? '' : (typ?.kuerzel ?? '?'), farbe,
-              richtung: richtung, deckkraft: _deckkraft, quadrat: _quadrat);
+          if (eigeneSymbole[o.typId] case final es?) {
+            eigenesSymbolZeichnen(canvas, es, mitte, rad, farbe);
+          } else {
+            geraetSymbol(canvas, mitte, rad, _beschriftung == 'keiner' ? '' : (typ?.kuerzel ?? '?'), farbe,
+                richtung: richtung, deckkraft: _deckkraft, quadrat: _quadrat);
+          }
           if (o.eigenschaften['reserve'] == true) _text(canvas, 'Reserve', mitte + Offset(-rad, rad + 2), farbe, groesse: 9);
           if (gewaehlt) {
             canvas.drawCircle(mitte, rad + 4, Paint()

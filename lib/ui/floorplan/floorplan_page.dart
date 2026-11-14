@@ -41,6 +41,8 @@ import 'geschoss_3d.dart';
 import 'einbaudetail_page.dart';
 import 'floorplan_painter.dart';
 import 'statik.dart';
+import 'fassade_dialog.dart';
+import '../../core/pdf_bild.dart';
 import '../../core/gebaeude.dart';
 import '../../core/leitung_wand.dart' show geschossStapel;
 
@@ -176,6 +178,51 @@ class _FloorplanPageState extends State<FloorplanPage> {
     final geloest = {for (final e in (store.einstellung<List>('geschoss_verknuepfung_geloest') ?? const [])) '$e'};
     WandAchse2 achse(Wand w) => (id: w.id, a: Punkt(w.x1.toDouble(), w.y1.toDouble()), b: Punkt(w.x2.toDouble(), w.y2.toDouble()), dicke: w.dicke);
     return wandVerknuepfungen([for (final w in oben) achse(w)], [for (final w in store.waende(unten.id)) achse(w)], geloest: geloest);
+  }
+
+  /// Hinweise zu Sondertüren: Tasche braucht freie Wand ohne Leitungen, Schiebetür Platz zum Schieben.
+  List<Widget> _tuerHinweise(Oeffnung o, Wand? w) {
+    final art = o.eigenschaften['tuerart'] as String? ?? 'dreh';
+    if (w == null || (art != 'tasche' && art != 'schiebe')) return const [];
+    final h = <String>[];
+    final weg = o.bandRechts ? o.breite : -o.breite;
+    final von = math.min(o.abstand + (o.bandRechts ? o.breite : 0), o.abstand + (o.bandRechts ? o.breite : 0) + weg).toDouble();
+    final bis = math.max(o.abstand + (o.bandRechts ? o.breite : 0), o.abstand + (o.bandRechts ? o.breite : 0) + weg).toDouble();
+    if (von < 0 || bis > w.laenge) h.add('Zu wenig Wand neben der Öffnung – Blatt braucht ${mmText(o.breite)} Platz (Anschlag wechseln?).');
+    final andere = (_plan?.oeffnungen ?? const <Oeffnung>[]).where((x) => x.id != o.id && x.wandId == w.id && x.abstand < bis && x.abstand + x.breite > von);
+    if (andere.isNotEmpty) h.add('Im Schiebebereich liegt eine weitere Öffnung.');
+    if (art == 'tasche') {
+      h.add('Taschenwand: im Taschenbereich keine Dosen, Leitungen oder Dübel (Wanddicke ≥ 100 mm für Schiebetürkasten).');
+      if (w.dicke < 100) h.add('Wand nur ${w.dicke} mm dick – Schiebetürkasten braucht meist 100–125 mm.');
+    }
+    return [for (final t in h) Padding(padding: const EdgeInsets.only(top: 4), child: Text('• $t', style: const TextStyle(fontSize: 12, color: Color(0xFFB45309))))];
+  }
+
+  /// Schwelle/Höhensprung: Fertigfußböden der beiden Räume an der Tür.
+  List<Widget> _schwellenHinweise(Oeffnung o, Wand? w) {
+    final store = _s.store!;
+    final plan = _plan;
+    if (w == null || plan == null || w.laenge < 1) return const [];
+    final g = store.geschoss(w.geschossId);
+    if (g == null) return const [];
+    final ux = (w.x2 - w.x1) / w.laenge, uy = (w.y2 - w.y1) / w.laenge;
+    final t = o.abstand + o.breite / 2;
+    final mx = w.x1 + ux * t, my = w.y1 + uy * t;
+    final d = w.dicke / 2 + 80;
+    Raum? raumAn(double x, double y) => store.raeume(w.geschossId).where((r) => r.umriss != null && punktInPolygon(Punkt(x, y), r.umriss!)).firstOrNull;
+    final a = raumAn(mx - uy * d, my + ux * d), b = raumAn(mx + uy * d, my - ux * d);
+    int ffb(Raum? r) => r?.ffb ?? g.hoehen.ffb;
+    final h = <String>[];
+    final aussen = a == null || b == null || a.art != RaumArt.raum || b.art != RaumArt.raum;
+    final diff = (ffb(a) - ffb(b)).abs();
+    if (o.art == OeffnungsArt.balkontuer || (aussen && o.art == OeffnungsArt.tuer)) {
+      h.add('Außentür/Balkontür: Abdichtung 150 mm über Belag hochführen (DIN 18531) oder barrierefrei ≤ 20 mm mit Rinne vor der Tür.');
+    }
+    if (diff > 0 && !aussen) {
+      h.add('Höhensprung ${mmText(diff)} zwischen ${a.name} und ${b.name} – ${diff <= 20 ? 'Übergangsprofil/Anpassungsprofil' : (diff <= 40 ? 'Rampenprofil' : 'Stufe – Estrich anpassen oder Rampe')}.');
+    }
+    if (h.isEmpty) return const [];
+    return [for (final x in h) Padding(padding: const EdgeInsets.only(top: 4), child: Text('• $x', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)))];
   }
 
   /// Statik-Helfer im Wandpanel: tragend, steht auf Wand darunter, Stürze über Öffnungen.
@@ -1569,11 +1616,44 @@ class _FloorplanPageState extends State<FloorplanPage> {
 
   Future<void> _vorlageLaden() async {
     final datei = await openFile(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Bilder und DXF', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'dxf']),
+      XTypeGroup(label: 'Bilder, PDF und DXF', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'pdf', 'dxf']),
     ]);
     if (datei == null || !mounted) return;
     final store = _s.store!;
     final alt = store.planvorlage(_s.geschossId!);
+    if (datei.path.toLowerCase().endsWith('.pdf')) {
+      final m = await texteingabe(context,
+          titel: 'PDF als Planvorlage', feld: 'Maßstab des Plans 1 : … (leer = danach kalibrieren)', vorschlag: '100');
+      if (!mounted || m == null) return;
+      final seite = await texteingabe(context, titel: 'PDF als Planvorlage', feld: 'Seite', vorschlag: '1');
+      if (!mounted || seite == null) return;
+      final s = (int.tryParse(seite.trim()) ?? 1) - 1;
+      final ziel = p.join(Directory.systemTemp.path, 'bauspur_pdf', '${p.basenameWithoutExtension(datei.path)}_S${s + 1}.png');
+      zeigeHinweis(context, 'PDF wird umgewandelt …');
+      final r = await pdfSeiteAlsPng(datei.path, ziel, seite: s, dpi: 200);
+      if (!mounted) return;
+      if (r == null) {
+        zeigeFehler(context, 'Die PDF-Seite ließ sich nicht umwandeln (geht nur unter Windows). Alternativ die Seite als Bild exportieren.');
+        return;
+      }
+      final massstab = int.tryParse(m.trim());
+      final id = store.planvorlageAnlegen(_s.geschossId!, r.png, umProPx: massstab == null ? 10000 : umProPxAusMassstab(r.dpi, massstab));
+      _rueckgaengig.add(() {
+        store.planvorlageLoeschen(id);
+        if (alt != null) store.planvorlageWiederherstellen(alt.id);
+      });
+      _s.geaendert();
+      if (massstab == null) {
+        zeigeHinweis(context, 'PDF-Seite geladen. Jetzt kalibrieren: zwei Punkte mit bekanntem Abstand anklicken.');
+        setState(() {
+          _vorlageModus = 1;
+          _kalibrierPunkte = [];
+        });
+      } else {
+        zeigeHinweis(context, 'PDF-Seite ${s + 1} von ${r.seiten} geladen (1:$massstab). Maßstab bei Bedarf über „Kalibrieren“ prüfen.');
+      }
+      return;
+    }
     if (_istDxf(datei.path)) {
       DxfZeichnung d;
       try {
@@ -1996,6 +2076,24 @@ class _FloorplanPageState extends State<FloorplanPage> {
               label: const Text('Aufschlagseite wechseln'),
             ),
           ]),
+        if (o.art == OeffnungsArt.tuer) ...[
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: ValueKey('tuerart-${o.id}-${o.eigenschaften['tuerart']}'),
+            initialValue: o.eigenschaften['tuerart'] as String? ?? 'dreh',
+            decoration: const InputDecoration(labelText: 'Türart'),
+            items: const [
+              DropdownMenuItem(value: 'dreh', child: Text('Drehtür')),
+              DropdownMenuItem(value: 'wandbuendig', child: Text('wandbündige Tür (verdeckte Zarge)')),
+              DropdownMenuItem(value: 'schiebe', child: Text('Schiebetür vor der Wand')),
+              DropdownMenuItem(value: 'tasche', child: Text('Taschen-/Schiebetür in der Wand')),
+              DropdownMenuItem(value: 'pendel', child: Text('Pendeltür')),
+            ],
+            onChanged: (v) => aendern({'eigenschaften': jsonEncode({...o.eigenschaften, 'tuerart': v})}),
+          ),
+          ..._tuerHinweise(o, w),
+        ],
+        if (o.art == OeffnungsArt.tuer || o.art == OeffnungsArt.balkontuer) ..._schwellenHinweise(o, w),
         if (o.art != OeffnungsArt.durchbruch && o.art != OeffnungsArt.nische) ...[
           const Divider(height: 24),
           BauelementWahl(
@@ -2938,6 +3036,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   _s.settings.speichern();
                 case 'statiker':
                   statikerMappeErstellen(context, _s);
+                case 'fassade':
+                  if (_s.geschossId != null) fassadeDialog(context, _s);
                 case 'dach':
                   if (_s.geschossId != null) {
                     dachBearbeiten(context, _s.store!, _s.geschossId!, () {
@@ -2969,6 +3069,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
               const PopupMenuDivider(),
               CheckedPopupMenuItem(value: 'unterlage', checked: _unterlage, child: const Text('Geschoss darunter einblenden (Wände, Verknüpfung)')),
               const PopupMenuItem(value: 'statiker', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Mappe für den Statiker (PDF) …'))),
+              const PopupMenuItem(value: 'fassade', child: ListTile(dense: true, leading: Icon(Icons.home_work_outlined), title: Text('WDVS, Fassade und Balkon …'))),
             ],
           ),
           IconButton(tooltip: 'Alles zeigen', onPressed: _einpassen, icon: const Icon(Sym.allesZeigen)),
@@ -3331,6 +3432,22 @@ class _FloorplanPageState extends State<FloorplanPage> {
                     massstab: _massstab,
                     verschiebung: _verschiebung,
                     warnung: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (_s.settings.darstellung['wdvs_zeigen'] == true)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ClipRect(
+                child: CustomPaint(
+                  painter: WdvsPainter(
+                    waende: plan.waende,
+                    seiten: aussenSeiten(plan.waende, _s.store!.raeume(_s.geschossId!)),
+                    dicke: ((_s.store!.einstellung<Map>('wdvs') ?? const {})['dicke'] as num? ?? 160).toInt(),
+                    massstab: _massstab,
+                    verschiebung: _verschiebung,
                   ),
                 ),
               ),

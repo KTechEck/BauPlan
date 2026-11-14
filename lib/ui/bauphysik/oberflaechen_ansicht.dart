@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
 import '../../core/bauelemente.dart';
+import '../../core/fassade.dart' show sockelleisten, eckenZaehlen;
 import '../../core/oberflaechen.dart';
 import '../../core/raumerkennung.dart';
 import '../../data/models.dart';
@@ -73,9 +74,53 @@ class _OberflaechenAnsichtState extends State<OberflaechenAnsicht> {
                     style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
                 const SizedBox(height: 12),
                 for (final a in Flaechenart.values) _flaeche(r, a),
+                _sockelleisten(r),
               ]),
       ),
     ]);
+  }
+
+  /// Sockelleisten des Raums: Länge ohne Türen, Stäbe, Ecken, Endkappen.
+  Widget _sockelleisten(Raum r) {
+    final store = _s.store!;
+    final waende = {for (final w in store.waende(r.geschossId)) w.id: w};
+    final tueren = <double>[];
+    for (final o in store.oeffnungen(r.geschossId)) {
+      if (o.art != OeffnungsArt.tuer && o.art != OeffnungsArt.balkontuer && o.art != OeffnungsArt.durchbruch) continue;
+      final w = waende[o.wandId];
+      if (w == null) continue;
+      final l = math.max(1.0, math.sqrt(math.pow(w.x2 - w.x1, 2) + math.pow(w.y2 - w.y1, 2)));
+      final t = (o.abstand + o.breite / 2) / l;
+      final m = Punkt(w.x1 + (w.x2 - w.x1) * t, w.y1 + (w.y2 - w.y1) * t);
+      final u = r.umriss!;
+      var nah = double.infinity;
+      for (var i = 0; i < u.length; i++) {
+        final p = u[i], q = u[(i + 1) % u.length];
+        final d = q - p;
+        final l2 = d.skalar(d);
+        if (l2 < 1) continue;
+        final s = ((m - p).skalar(d) / l2).clamp(0.0, 1.0);
+        nah = math.min(nah, (p + d * s - m).laenge);
+      }
+      if (nah <= w.dicke / 2 + 30) tueren.add(o.breite.toDouble());
+    }
+    final (innen, aussen) = eckenZaehlen([for (final p in r.umriss!) (p.x, p.y)]);
+    final aktiv = r.eigenschaften['sockelleiste'] != false && !RegExp(r'bad|dusch|wc').hasMatch(r.name.toLowerCase()) || r.eigenschaften['sockelleiste'] == true;
+    final s = sockelleisten(umfangMm: r.umfang ?? 0, tuerbreitenMm: tueren, innenecken: innen, aussenecken: aussen);
+    return Card(
+      child: SwitchListTile(
+        value: aktiv,
+        onChanged: (v) {
+          store.raumEigenschaftenSetzen(r.id, {...r.eigenschaften, 'sockelleiste': v});
+          _s.geaendert();
+          setState(() {});
+        },
+        title: const Text('Sockelleisten'),
+        subtitle: Text(aktiv
+            ? '${s.laenge.toStringAsFixed(1).replaceAll('.', ',')} m (mit 8 % Verschnitt) = ${s.staebe} Stäbe à 2,4 m · ${s.innenecken} Innenecken, ${s.aussenecken} Außenecken, ${s.endkappen} Endkappen'
+            : 'keine (z. B. gefliester Sockel)'),
+      ),
+    );
   }
 
   double _flaecheM2(Raum r, Flaechenart a) {

@@ -181,7 +181,7 @@ class FloorplanPainter extends CustomPainter {
     final wandNach = {for (final w in waende) w.id: w};
     for (final o in oeffnungen) {
       final w = wandNach[o.wandId];
-      if (w != null) _oeffnung(canvas, w, o.abstand, o.breite, o.art, o.bandRechts, o.aufgehenLinks, o.id == oeffnungAuswahl);
+      if (w != null) _oeffnung(canvas, w, o.abstand, o.breite, o.art, o.bandRechts, o.aufgehenLinks, o.id == oeffnungAuswahl, tuerart: o.eigenschaften['tuerart'] as String? ?? 'dreh');
     }
     final ov = oeffnungVorschau;
     if (ov != null && wandNach[ov.$1] != null) {
@@ -548,7 +548,7 @@ class FloorplanPainter extends CustomPainter {
 
   /// Öffnung in einer Wand: Lücke freistellen, Laibungen, Symbol.
   void _oeffnung(Canvas canvas, Wand w, int abstand, int breite, OeffnungsArt art, bool bandRechts,
-      bool aufgehenLinks, bool gewaehlt, {bool vorschau = false}) {
+      bool aufgehenLinks, bool gewaehlt, {bool vorschau = false, String tuerart = 'dreh'}) {
     final l = w.laenge;
     if (l < 1) return;
     final a = Offset(w.x1.toDouble(), w.y1.toDouble());
@@ -585,6 +585,35 @@ class FloorplanPainter extends CustomPainter {
     canvas.drawLine(pt(t0, h), pt(t0, -h), linie);
     canvas.drawLine(pt(t1, h), pt(t1, -h), linie);
     switch (art) {
+      case OeffnungsArt.tuer when tuerart == 'schiebe' || tuerart == 'tasche':
+        final seite = aufgehenLinks ? 1.0 : -1.0;
+        final blatt = Paint()
+          ..color = vorschau ? BsFarben.akzent : farbe
+          ..strokeWidth = gewaehlt ? 2.4 : 1.8;
+        if (tuerart == 'schiebe') {
+          // Schiebetür vor der Wand: Blatt parallel zur Wand, Laufschiene doppelt so lang
+          final q = seite * (h + 25);
+          canvas.drawLine(pt(t0, q), pt(t1, q), blatt);
+          final weg = bandRechts ? -breite.toDouble() : breite.toDouble();
+          canvas.drawLine(pt(math.min(t0, t0 + weg), q + seite * 15), pt(math.max(t1, t1 + weg), q + seite * 15), Paint()
+            ..color = farbe.withValues(alpha: 0.6)
+            ..strokeWidth = 0.8);
+          final pf = pt((t0 + t1) / 2 + weg / 4, q + seite * 40), pz = pt((t0 + t1) / 2 + weg / 2, q + seite * 40);
+          canvas.drawLine(pf, pz, Paint()..color = farbe..strokeWidth = 1);
+        } else {
+          // Taschentür: Blatt läuft in die Wand (gestrichelt), Tasche auf der Bandseite
+          final weg = bandRechts ? breite.toDouble() : -breite.toDouble();
+          final a0 = bandRechts ? t1 : t0, a1 = a0 + weg;
+          final d = pt(a1, 0) - pt(a0, 0);
+          final len = d.distance;
+          if (len > 1) {
+            final u2 = d / len;
+            for (var t = 0.0; t < len; t += 7) {
+              canvas.drawLine(pt(a0, 0) + u2 * t, pt(a0, 0) + u2 * math.min(len, t + 4), blatt);
+            }
+          }
+          canvas.drawLine(pt(t0, 0), pt(t1, 0), Paint()..color = farbe.withValues(alpha: 0.4)..strokeWidth = 0.8);
+        }
       case OeffnungsArt.tuer || OeffnungsArt.balkontuer:
         if (art == OeffnungsArt.balkontuer) {
           // Verglasung wie beim Fenster, dazu der Flügelaufschlag
@@ -616,6 +645,22 @@ class FloorplanPainter extends CustomPainter {
               ..style = PaintingStyle.stroke
               ..strokeWidth = 0.9
               ..color = farbe.withValues(alpha: 0.7));
+        if (tuerart == 'pendel') {
+          // Pendeltür: Aufschlag auf beide Seiten
+          final dp2 = a + u * band + nl * (-seite * h);
+          final be2 = dp2 + nl * (-seite * breite.toDouble());
+          canvas.drawLine(_s(dp2), _s(be2), Paint()..color = farbe.withValues(alpha: 0.5)..strokeWidth = 1.2);
+          final s2 = math.atan2((be2 - dp2).dy, (be2 - dp2).dx);
+          canvas.drawArc(Rect.fromCircle(center: _s(dp2), radius: r), s2, -sweep, false,
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 0.9
+                ..color = farbe.withValues(alpha: 0.5));
+        }
+        if (tuerart == 'wandbuendig') {
+          // wandbündige Tür: Zarge flächenbündig – dicker Strich auf der Aufschlagseite
+          canvas.drawLine(pt(t0, seite * h), pt(t1, seite * h), Paint()..color = farbe..strokeWidth = 2.6);
+        }
       case OeffnungsArt.fenster:
         final glas = Paint()
           ..color = vorschau ? BsFarben.akzent : farbe

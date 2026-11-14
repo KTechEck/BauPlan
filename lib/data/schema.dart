@@ -405,4 +405,6 @@ const List<List<String>> migrationen = [
   [],
   // Version 24 – Kamera, Zutrittsleser, Türsprechstelle (Netzwerk), Türöffner/Motorschloss (Elektro; Startbestand in _migrieren)
   [],
+  // Version 25 – Abgehängtes Deckenfeld mit Schattenfuge (Allgemein; Startbestand in _migrieren)
+  [],
 ];

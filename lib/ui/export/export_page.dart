@@ -17,6 +17,7 @@ import '../../data/project_store.dart';
 import '../../state/app_state.dart';
 import '../floorplan/floorplan_painter.dart';
 import '../installation/installation_page.dart' show ObjektPainter, wandStrecke;
+import '../symbol_editor.dart' show eigeneSymbole;
 import '../widgets.dart';
 import 'hausdoku.dart';
 import 'wohnflaeche_page.dart';
@@ -424,6 +425,10 @@ class PlanExport {
     grundrissPainter.paint(canvas, logisch);
     if (mitObjekten) {
       ObjektPainter(
+        eigeneSymbole: {
+          for (final e in (store.einstellung<Map>('symbol_zuordnung') ?? const {}).entries)
+            if (eigeneSymbole(store).where((x) => x.id == e.value).firstOrNull case final es?) '${e.key}': es,
+        },
         objekte: sichtbareObjekte,
         typen: typen,
         gewerke: {for (final x in store.gewerke()) x.id: x},
