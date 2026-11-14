@@ -61,6 +61,7 @@ class FloorplanPainter extends CustomPainter {
     this.vorschauWinkel,
     this.massVoreinstellung = MassAnzeige.innenAussen,
     this.fangText,
+    this.fangLinie,
     this.bemassungen = const [],
     this.winkel = const [],
     this.weissHintergrund = false,
@@ -105,6 +106,7 @@ class FloorplanPainter extends CustomPainter {
   final String? vorschauWinkel;
   final MassAnzeige massVoreinstellung;
   final String? fangText; // Fangart am Cursor, z. B. „Mitte“
+  final (Offset, Offset)? fangLinie; // Hilfslinie (Flucht/Verlängerung), gestrichelt
   final List<Bemassung> bemassungen;
   final List<WinkelBild> winkel;
   final bool weissHintergrund; // für Druck/PDF: weiß, ohne Raster
@@ -203,6 +205,20 @@ class FloorplanPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..color = BsFarben.akzentDunkel);
+    }
+    if (fangLinie case (final la, final lb)) {
+      final a = _s(la), b = _s(lb);
+      final d = b - a;
+      final l = d.distance;
+      if (l > 1) {
+        final hp = Paint()
+          ..color = BsFarben.akzentDunkel.withValues(alpha: 0.7)
+          ..strokeWidth = 1;
+        final u = d / l;
+        for (var t = 0.0; t < l; t += 9) {
+          canvas.drawLine(a + u * t, a + u * math.min(l, t + 5), hp);
+        }
+      }
     }
     final ende = vorschauEnde ?? m;
     if (start != null && ende != null && start != ende) {
@@ -824,6 +840,7 @@ class FloorplanPainter extends CustomPainter {
       old.vorschauWinkel != vorschauWinkel ||
       old.massVoreinstellung != massVoreinstellung ||
       old.fangText != fangText ||
+      old.fangLinie != fangLinie ||
       old.bemassungen != bemassungen ||
       old.winkel != winkel ||
       old.vorlage != vorlage ||

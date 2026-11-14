@@ -16,6 +16,7 @@ import '../../data/bauelement_bibliothek.dart';
 import '../../state/app_state.dart';
 import '../bibliothek.dart' show MaterialienAnsicht, WandtypenAnsicht;
 import '../sensoren_page.dart' show SensorenAnsicht;
+import '../verteiler/auslegung_page.dart';
 import '../widgets.dart';
 import 'anschluss_editor.dart';
 import 'bauelement_skizze.dart';
@@ -380,6 +381,11 @@ class _BauteilePageState extends State<BauteilePage> {
                 tooltip: 'Besorgungsliste: was laut Plan gebraucht wird und noch fehlt',
                 onPressed: () => besorgungslisteZeigen(context, _s),
                 icon: const Icon(Icons.shopping_cart_outlined),
+              ),
+              IconButton(
+                tooltip: 'Kabel- und Rohrliste mit Längen für den Einkauf',
+                onPressed: () => AuslegungPage.oeffnen(context, _s, reiter: 2),
+                icon: const Icon(Icons.cable),
               ),
               IconButton(
                 tooltip: 'Bisherige Einkäufe',

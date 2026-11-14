@@ -131,6 +131,7 @@ class _EinkaufSeiteState extends State<EinkaufSeite> {
       'art': 'einkauf',
       if (e['quelle'] != 'bedarf') 'position': e['id'],
       if (e['element'] != null) 'element': e['element'],
+      if (e['leitung'] != null) 'leitung': e['leitung'],
       'menge': e['menge'],
       'text': e['text'],
       'erledigt': erledigt,

@@ -395,7 +395,18 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
     case 'einkauf':
       final id = e['position'] as String?;
       final element = e['element'] as String?;
-      if (element != null) {
+      final leitung = e['leitung'] as String?;
+      if (leitung != null) {
+        // Kabel-/Rohrliste: abgehakt = gekauft (Meter merken)
+        final m = Map<String, dynamic>.from(store.einstellung<Map>('leitung_gekauft') ?? const {});
+        if (e['erledigt'] == false) {
+          m.remove(leitung);
+        } else {
+          m[leitung] = (e['menge'] as num?)?.toDouble() ?? 0;
+        }
+        store.einstellungSetzen('leitung_gekauft', m);
+        hinweise.add('${e['text'] ?? 'Leitung'} ${e['erledigt'] == false ? 'wieder offen' : 'gekauft'} ($autor)');
+      } else if (element != null) {
         // Besorgungsliste: abgehakt = gekauft, Bestand erhöhen (bzw. zurücknehmen)
         final m = Map<String, dynamic>.from(store.einstellung<Map>('bestand') ?? const {});
         final menge = (e['menge'] as num?)?.toDouble() ?? 1;

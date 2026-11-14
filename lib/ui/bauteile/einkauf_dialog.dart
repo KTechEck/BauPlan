@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/bauelemente.dart';
+import '../../core/auslegung.dart';
+import '../../core/auslegung_projekt.dart';
 import '../../core/einkauf.dart';
 import '../../core/kanal_montage.dart';
 import '../installation/kanal_felder.dart';
@@ -554,7 +556,30 @@ List<Map<String, dynamic>> besorgungFuerApp(AppState s) => [
               'bestand': r.bestand,
               if (r.element.notiz.isNotEmpty) 'notiz': r.element.notiz,
             },
-          }
+          },
+      // Kabel- und Rohrliste (Längen aus dem Plan)
+      ...() {
+        final store = s.store!;
+        final v = auslegungVorgaben(store);
+        final gekauft = leitungGekauft(store);
+        return [
+          for (final l in leitungsliste(leitungsStuecke(store, name: (id) => s.bibliothek.fuerProjekt(store, id)?.anzeige)))
+            if (l.einkauf(v.zuschlag) > (gekauft[leitungSchluessel(l)] ?? 0))
+              {
+                'id': 'l-${leitungSchluessel(l)}',
+                'quelle': 'bedarf',
+                'leitung': leitungSchluessel(l),
+                'text': l.bezeichnung,
+                'menge': l.einkauf(v.zuschlag),
+                'einheit': 'm',
+                'haendler': 'ohne Händler',
+                'status': 'geplant',
+                'herkunft': l.geschaetzt > 0 ? 'Kabel-/Rohrliste (teils geschätzt)' : 'Kabel-/Rohrliste',
+                'kategorie': l.art,
+                'produkt': {'name': l.bezeichnung, 'bedarf': l.einkauf(v.zuschlag)},
+              },
+        ];
+      }(),
     ];
 
 /// Besorgungsliste als Dialog mit Speichern als CSV.

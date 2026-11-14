@@ -23,6 +23,7 @@ import '../../state/app_state.dart';
 import '../../core/ha_live.dart';
 import '../floorplan/floorplan_painter.dart' show abstandZuStrecke;
 import '../widgets.dart';
+import 'auslegung_page.dart';
 import 'ets_abgleich_page.dart';
 import 'ha_live_page.dart';
 import 'stromlaufplan_ansicht.dart';
@@ -493,6 +494,21 @@ class _SchrankPageState extends State<SchrankPage> {
               },
               icon: const Icon(Sym.hinzufuegen),
               label: const Text('Stromkreis'),
+            ),
+          if (_ansicht == 1)
+            OutlinedButton.icon(
+              onPressed: () async {
+                await AuslegungPage.oeffnen(context, _s);
+                if (mounted) setState(() {});
+              },
+              icon: const Icon(Icons.cable, size: 18),
+              label: const Text('Kabelauslegung …'),
+            ),
+          if (_ansicht == 1)
+            OutlinedButton.icon(
+              onPressed: () => AuslegungPage.oeffnen(context, _s, reiter: 2),
+              icon: const Icon(Icons.format_list_numbered, size: 18),
+              label: const Text('Kabel-/Rohrliste'),
             ),
           if (_ansicht == 6)
             FilledButton.icon(

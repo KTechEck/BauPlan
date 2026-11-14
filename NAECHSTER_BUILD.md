@@ -535,3 +535,17 @@ Zweites iPad wird abgewiesen (409). Rückgabe: iPad packt Datenbank + alle seit 
 projekt/rueckgabe; PC prüft Gerät und SQLite, sichert, entpackt (löscht nichts), hebt Ausleihe auf, öffnet neu. iPad-Kopie danach „zurückgegeben“ = nur lesen.
 Neu holen bei nicht zurückgegebener iPad-Kopie nur nach Warnung (alter Stand bleibt als _alt-Ordner). Eingang der Baustellen-App wartet während der Ausleihe.
 „Ausleihe aufheben …“ am PC nur mit Warnung (iPad-Änderungen verloren). Test test/ausleihe_test.dart (Ende-zu-Ende über den Dienst).
+
+## Build 21 (14.11.) – Roadmap Priorität 1
+Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenfolge Prio 1, dann Abschnitte 1–10, „Später/Optional“ nicht.
+- Wandzeichnen: gerade Verlängerung (180°) der Wand am Kettenstart hat Vorrang vor allen anderen Fängen (`_verlaengerungsFang`, Fangbreite 14–40 px,
+  rastet an Wandenden auf der Flucht und an kreuzenden Wandachsen ein, sonst Raster), Umschalt schaltet ab. Gestrichelte Hilfslinie für Verlängerung,
+  „Verlängerung Wand“ und „Flucht zu Wandende“ (FloorplanPainter.fangLinie).
+- Kabel- und Rohrauslegung: lib/core/auslegung.dart (Iz nach DIN VDE 0298-4 Cu/PVC je Verlegeart A1–E, Häufung, Temperatur, Spannungsfall, Schleifen-
+  impedanz/Abschaltbedingung, Vorschlag Querschnitt+LS; Rohre: Spitzendurchfluss DIN 1988-300, Heizung aus Leistung/Spreizung, v/R-Grenzen, Rohrmaße MV/Cu/Edelstahl),
+  lib/core/auslegung_projekt.dart (Einstellungen `auslegung`, `kabel_auslegung` je Stromkreis, Länge gezeichnet/geschätzt/von Hand; Objekt.eigenschaften
+  leistung_w, entnahmen, innen_mm, dimension, rohr_system). Seite lib/ui/verteiler/auslegung_page.dart (Verteiler › Stromkreise › „Kabelauslegung …“).
+- Kabel-/Rohrliste: alle gezeichneten Kabel/Leerrohre/Rohre/Kanäle/Heizrohr + geschätzte Stromkreise, Zuschlag, Ringgrößen, Abhaken (Einstellung
+  `leitung_gekauft`), CSV und HTML-Abhakliste nach exporte/, auch in der Einkaufsliste der iPhone-App (Eingang einkauf mit `leitung`).
+  Erreichbar über Verteiler › Stromkreise und Bibliothek (Kabel-Symbol).
+- Test test/auslegung_test.dart; 253 Tests grün.

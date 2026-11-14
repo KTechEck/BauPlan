@@ -138,6 +138,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
   int _winkelBezug = 1; // Winkelmaß am 0 Achsscheitel, 1 Innenecke, 2 Außenecke
   bool _bemassungenSichtbar = true; // eigene Bemaßungen und Winkel zeigen (Projekteinstellung)
   String? _fangText; // was gerade gefangen wird (Anzeige am Cursor)
+  (Offset, Offset)? _fangLinie; // gestrichelte Hilfslinie zum Fang (Flucht/Verlängerung)
   Wand? _fangWand; // Wand unter dem Fangpunkt
   Offset? _massA, _massB; // Bemaßung im Entstehen
   String? _massAuswahl; // gewählte Bemaßung
@@ -345,9 +346,18 @@ class _FloorplanPageState extends State<FloorplanPage> {
   Offset _fangen(Offset welt, List<Wand> waende) {
     _fangText = null;
     _fangWand = null;
+    _fangLinie = null;
     final radius = 10 / _massstab;
     final plan = _plan;
     final messen = _werkzeug == Werkzeug.mass;
+
+    // 0. Gerade Verlängerung (180°) der Wand, an deren Ende die Kette beginnt:
+    //    hat Vorrang vor dem Einrasten an Nachbarwänden (Umschalt schaltet ab).
+    final kette = _kettenStart;
+    if (!messen && kette != null && !HardwareKeyboard.instance.isShiftPressed) {
+      final v = _verlaengerungsFang(welt, kette, waende, radius);
+      if (v != null) return v;
+    }
 
     Offset? naechster(Iterable<(Offset, String, double)> kandidaten) {
       Offset? treffer;
@@ -457,13 +467,96 @@ class _FloorplanPageState extends State<FloorplanPage> {
     }
 
     // 6. Verlängerung einer Wandachse über ihr Ende hinaus
+    Wand? fluchtWand;
     final flucht = naechster([
       for (final w in waende)
         if (_aufVerlaengerung(welt, w) case final f?) (f, 'Verlängerung Wand', radius),
     ]);
-    if (flucht != null && (start == null || _winkelFang == 0)) return rund(flucht);
+    if (flucht != null && (start == null || _winkelFang == 0)) {
+      fluchtWand = waende.where((w) => _aufVerlaengerung(welt, w) == flucht).firstOrNull;
+      if (fluchtWand != null) {
+        final a = Offset(fluchtWand.x1.toDouble(), fluchtWand.y1.toDouble());
+        final b = Offset(fluchtWand.x2.toDouble(), fluchtWand.y2.toDouble());
+        _fangLinie = ((flucht - a).distance < (flucht - b).distance ? a : b, rund(flucht));
+      }
+      return rund(flucht);
+    }
 
     return _rasterFang(welt);
+  }
+
+  /// Fang auf der geraden Verlängerung (180°) einer Wand, die am Kettenstart
+  /// endet. Liegt auf der Flucht ein Wandende oder kreuzt sie eine Wandachse,
+  /// rastet der Punkt dort ein, sonst im Raster entlang der Flucht.
+  Offset? _verlaengerungsFang(Offset welt, Offset kette, List<Wand> waende, double radius) {
+    Offset? u;
+    Wand? basis;
+    var besteQuer = double.infinity;
+    double t = 0;
+    for (final w in waende) {
+      final a = Offset(w.x1.toDouble(), w.y1.toDouble()), b = Offset(w.x2.toDouble(), w.y2.toDouble());
+      final Offset anderes;
+      if ((a - kette).distance < 1) {
+        anderes = b;
+      } else if ((b - kette).distance < 1) {
+        anderes = a;
+      } else {
+        continue;
+      }
+      final l = (kette - anderes).distance;
+      if (l < 1) continue;
+      final r = (kette - anderes) / l;
+      final v = welt - kette;
+      final tt = v.dx * r.dx + v.dy * r.dy;
+      if (tt < radius) continue;
+      final quer = (v.dx * r.dy - v.dy * r.dx).abs();
+      // Fangbreite: mindestens 14 px, weiter draußen bis ~4°, höchstens 40 px
+      final tol = math.max(14 / _massstab, math.min(tt * 0.07, 40 / _massstab));
+      if (quer < tol && quer < besteQuer) {
+        besteQuer = quer;
+        u = r;
+        basis = w;
+        t = tt;
+      }
+    }
+    if (u == null || basis == null) return null;
+    final richtung = u;
+    // Einrastziele auf der Flucht: Wandenden genau auf der Linie, Kreuzung mit Wandachsen
+    double? ziel;
+    String text = 'Verlängerung 180°';
+    var bester = radius * 1.5;
+    for (final w in waende) {
+      if (w.id == basis.id) continue;
+      final a = Offset(w.x1.toDouble(), w.y1.toDouble()), b = Offset(w.x2.toDouble(), w.y2.toDouble());
+      for (final p in [a, b]) {
+        final v = p - kette;
+        final s = v.dx * richtung.dx + v.dy * richtung.dy;
+        final q = (v.dx * richtung.dy - v.dy * richtung.dx).abs();
+        if (s > 1 && q < 1 && (s - t).abs() < bester) {
+          bester = (s - t).abs();
+          ziel = s;
+          text = 'Verlängerung 180° bis Wandende';
+        }
+      }
+      // Schnitt der Flucht mit der Achse von w (innerhalb der Wand)
+      final d = b - a;
+      final kreuz = richtung.dx * d.dy - richtung.dy * d.dx;
+      if (kreuz.abs() < 1e-6 * d.distance) continue;
+      final ak = a - kette;
+      final s = (ak.dx * d.dy - ak.dy * d.dx) / kreuz;
+      final g = (ak.dx * richtung.dy - ak.dy * richtung.dx) / kreuz;
+      if (s > 1 && g >= -0.001 && g <= 1.001 && (s - t).abs() < bester) {
+        bester = (s - t).abs();
+        ziel = s;
+        text = 'Verlängerung 180° bis Wand';
+      }
+    }
+    final laenge = ziel ?? math.max(1, (t / _rasterMm).round()) * _rasterMm.toDouble();
+    final e = kette + richtung * laenge;
+    final p = Offset(e.dx.roundToDouble(), e.dy.roundToDouble());
+    _fangText = '$text · ${mmText(laenge)}';
+    _fangLinie = (kette - richtung * basis.laenge, p);
+    return p;
   }
 
   /// Punkt auf einer Wand: [t] entlang der Achse, [quer] links (positiv) der Richtung.
@@ -603,22 +696,29 @@ class _FloorplanPageState extends State<FloorplanPage> {
     final tol = 8 / _massstab;
     final frei = start == null ? (true, true) : (x != start.dx, y != start.dy);
     double? fx, fy;
+    Offset? qx, qy;
     var bx = tol, by = tol;
     for (final w in _plan?.waende ?? const <Wand>[]) {
       for (final (px, py) in [(w.x1.toDouble(), w.y1.toDouble()), (w.x2.toDouble(), w.y2.toDouble())]) {
         if (frei.$1 && (welt.dx - px).abs() < bx && (welt.dy - py).abs() > tol) {
           bx = (welt.dx - px).abs();
           fx = px;
+          qx = Offset(px, py);
         }
         if (frei.$2 && (welt.dy - py).abs() < by && (welt.dx - px).abs() > tol) {
           by = (welt.dy - py).abs();
           fy = py;
+          qy = Offset(px, py);
         }
       }
     }
     if (fx != null) x = fx;
     if (fy != null) y = fy;
-    if (fx != null || fy != null) _fangText = 'Flucht zu Wandende';
+    if (fx != null || fy != null) {
+      _fangText = 'Flucht zu Wandende';
+      final q = qy ?? qx;
+      if (q != null) _fangLinie = (q, Offset(x, y));
+    }
     return Offset(x, y);
   }
 
@@ -1939,7 +2039,10 @@ class _FloorplanPageState extends State<FloorplanPage> {
       setState(() {
         _maus = _werkzeug == Werkzeug.wand || _werkzeug == Werkzeug.mass ? _fangen(welt, _planLaden().waende) : null;
         _oeffnungVorschau = _werkzeug == Werkzeug.oeffnung ? _oeffnungVorschauBerechnen(welt, _planLaden()) : null;
-        if (_maus == null) _fangText = null;
+        if (_maus == null) {
+          _fangText = null;
+          _fangLinie = null;
+        }
       });
     }
     _randPruefen();
@@ -3035,6 +3138,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   massVoreinstellung: _massVoreinstellung,
                   fangText: (_werkzeug == Werkzeug.wand || _werkzeug == Werkzeug.mass) && _abstandWand == null
                       ? _fangText
+                      : null,
+                  fangLinie: (_werkzeug == Werkzeug.wand || _werkzeug == Werkzeug.mass) && _abstandWand == null
+                      ? _fangLinie
                       : null,
                   bemassungen: _bemassungenSichtbar ? [for (final b in plan.bemassungen) if (!b.versteckt) b] : const [],
                   massAuswahl: _massAuswahl,
