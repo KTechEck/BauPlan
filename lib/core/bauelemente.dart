@@ -49,6 +49,7 @@ enum BauelementKategorie {
   verbinder('Verbindungselement (Fitting, Verschraubung, Halter)', BauelementGruppe.haustechnik, _verbinder),
   armatur('Armatur / Ventil', BauelementGruppe.haustechnik, _armatur),
   daemmstoff('Dämmstoff', BauelementGruppe.material, _daemmstoff),
+  verkleidung('Wandverkleidung / Vorsatzschale', BauelementGruppe.material, _verkleidung),
   baustoff('Baustoff (Mauerwerk, Putz, Platten …)', BauelementGruppe.material, _baustoff),
   dichtstoff('Dichtung / Fuge (Kompriband, Schaum, Folie)', BauelementGruppe.material, _dichtstoff),
   kabel('Kabel / Leitung', BauelementGruppe.material, _kabel),
@@ -381,6 +382,16 @@ const _armatur = [
 const _lager = [
   FeldDef('einheit', 'Einheit', typ: FeldTyp.auswahl, optionen: ['Stk', 'm', 'm²', 'm³', 'Platte', 'Rolle', 'Packung', 'Sack', 'Eimer', 'Kartusche', 'kg', 'l']),
   FeldDef('gebinde', 'Gebinde / Packungsinhalt', typ: FeldTyp.text, hilfe: 'z. B. 10 Platten à 1,25 × 0,6 m, Ring 100 m'),
+];
+
+const _verkleidung = [
+  FeldDef('dicke', 'Dicke gesamt (je Wandseite)', einheit: 'mm', hilfe: 'zählt beim Fertigmaß'),
+  FeldDef('unterkonstruktion', 'Unterkonstruktion', typ: FeldTyp.auswahl, optionen: ['keine (direkt)', 'CW-Profil 50', 'CW-Profil 75', 'CW-Profil 100', 'Holzlattung', 'Direktabhänger', 'Ansetzbinder (Batzen)']),
+  FeldDef('uk_dicke', 'Dicke Unterkonstruktion', einheit: 'mm'),
+  FeldDef('beplankung', 'Beplankung', typ: FeldTyp.auswahl, optionen: ['GK 12,5', 'GKB 2 × 12,5', 'GKF (Feuerschutz)', 'GKI (imprägniert)', 'Gipsfaser', 'OSB', 'Zementplatte', 'Putz', 'Fliese auf Putz']),
+  FeldDef('lagen', 'Lagen Beplankung', einheit: 'Lagen'),
+  FeldDef('daemmung', 'Dämmung im Hohlraum', typ: FeldTyp.text, hilfe: 'z. B. Mineralwolle 40 mm'),
+  FeldDef('oberflaeche', 'Oberfläche', typ: FeldTyp.text, hilfe: 'z. B. Q2 gespachtelt, Fliesen'),
 ];
 
 const _daemmstoff = [

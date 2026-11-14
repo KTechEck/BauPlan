@@ -110,6 +110,7 @@ IconData kategorieSymbol(BauelementKategorie k) => switch (k) {
       BauelementKategorie.verbinder => Icons.plumbing,
       BauelementKategorie.armatur => Icons.tune,
       BauelementKategorie.daemmstoff => Icons.layers_outlined,
+      BauelementKategorie.verkleidung => Icons.view_column_outlined,
       BauelementKategorie.baustoff => Icons.foundation,
       BauelementKategorie.dichtstoff => Icons.format_color_fill,
       BauelementKategorie.kabel => Icons.cable,

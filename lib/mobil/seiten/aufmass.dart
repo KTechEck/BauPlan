@@ -20,7 +20,7 @@ Future<({int wert, String text})?> massEingeben(BuildContext context, {required 
 
 class _MassEingabe extends StatefulWidget {
   const _MassEingabe({required this.titel, required this.plan, this.bisher, this.hinweis, this.verkleidung = 0});
-  final int verkleidung; // je Wandseite; fertig gemessen = Rohbau − 2 × Verkleidung
+  final int verkleidung; // Abzug beider Enden; fertig gemessen = Rohbau − Abzug
   final String titel;
   final num plan;
   final int? bisher;
@@ -47,7 +47,7 @@ class _MassEingabeState extends State<_MassEingabe> {
   int? get _mm {
     final z = double.tryParse(_ctrl.text.trim().replaceAll(',', '.'));
     if (z == null || z <= 0) return null;
-    return (z * switch (_einheit) { 'm' => 1000, 'cm' => 10, _ => 1 }).round() + (_istFertig ? 2 * widget.verkleidung : 0);
+    return (z * switch (_einheit) { 'm' => 1000, 'cm' => 10, _ => 1 }).round() + (_istFertig ? widget.verkleidung : 0);
   }
 
   @override
@@ -89,7 +89,7 @@ class _MassEingabeState extends State<_MassEingabe> {
             SegmentedButton<bool>(
               segments: [
                 const ButtonSegment(value: false, label: Text('Rohbau gemessen')),
-                ButtonSegment(value: true, label: Text('fertig (−${2 * widget.verkleidung} mm)')),
+                ButtonSegment(value: true, label: Text('fertig (−${widget.verkleidung} mm)')),
               ],
               selected: {_istFertig},
               onSelectionChanged: (v) => setState(() => _istFertig = v.first),
@@ -130,7 +130,7 @@ Future<void> wandLaengeMessen(BuildContext context, MobilKontext k, Map<String, 
       plan: plan,
       bisher: bisher?.wert,
       hinweis: 'Von Ecke zu Ecke an der Wandoberfläche messen.',
-      verkleidung: k.verkleidung((links ? wand['rl'] : wand['rr']) as String?));
+      verkleidung: seitenAbzugVoll(wand, links));
   if (r == null) return;
   await k.massSenden(ziel: 'wand', objekt: wand, feld: 'laenge', wert: r.wert, plan: plan, seite: seite, bezug: 'innen', raum: (links ? wand['rl'] : wand['rr']) as String?, text: r.text);
 }
@@ -197,7 +197,24 @@ List<RaumSeite> raumSeiten(Map<String, dynamic> geschoss, String raumId) {
 String raumSeiteFeld(RaumSeite r, String raumId) => r.voll ? 'laenge' : 'laenge_$raumId';
 
 ({String text, Color farbe}) raumSeiteAnzeige(MobilKontext k, RaumSeite r, String raumId) =>
-    massAnzeige(k, r.wand, raumSeiteFeld(r, raumId), r.t2 - r.t1, seite: r.links ? 'l' : 'r', bezug: r.voll ? 'innen' : null, abzug: k.fertigAbzug(raumId));
+    massAnzeige(k, r.wand, raumSeiteFeld(r, raumId), r.t2 - r.t1, seite: r.links ? 'l' : 'r', bezug: r.voll ? 'innen' : null,
+        abzug: k.einstellungen.massart == 'fertig' ? seitenAbzug(r, raumId) : 0);
+
+/// Fertigmaß-Abzug einer ganzen Wandseite (Verkleidung der anstoßenden Wände, vom PC gerechnet).
+int seitenAbzugVoll(Map<String, dynamic> wand, bool links) {
+  final f = wand[links ? 'fl' : 'fr'];
+  return f is List ? f.fold<int>(0, (s, x) => s + ((x as num?)?.round() ?? 0)) : 0;
+}
+
+/// Fertigmaß-Abzug einer Raumstrecke.
+int seitenAbzug(RaumSeite r, String raumId) {
+  final st = r.wand[r.links ? 'sl' : 'sr'] as List? ?? const [];
+  final ab = r.wand[r.links ? 'slf' : 'srf'] as List? ?? const [];
+  for (var i = 0; i < st.length && i < ab.length; i++) {
+    if ((st[i] as List)[0] == raumId) return (ab[i] as List).fold<int>(0, (s, x) => s + ((x as num?)?.round() ?? 0));
+  }
+  return seitenAbzugVoll(r.wand, r.links);
+}
 
 /// Gängige Wandverkleidungen (Dicke je Wandseite in mm).
 const verkleidungVorlagen = <(String, int)>[
@@ -209,24 +226,49 @@ const verkleidungVorlagen = <(String, int)>[
   ('Fliesen auf Putz', 25),
 ];
 
+/// Auswahl einer Verkleidung: eigene Aufbauten aus der Bibliothek (vom PC),
+/// Schnellwahl oder eigene Dicke; bei Wandseiten zusätzlich „wie Raum“.
+Future<({String art, int dicke, String? element})?> _verkleidungDialog(BuildContext context, MobilKontext k, String titel, int aktuell, {bool wieRaum = false}) {
+  final dicke = TextEditingController(text: '$aktuell');
+  final eigene = [for (final e in (k.plan.daten['verkleidungen'] as List? ?? const [])) Map<String, dynamic>.from(e as Map)];
+  return showDialog<({String art, int dicke, String? element})>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: Text(titel),
+      content: SizedBox(
+        width: 360,
+        child: ListView(shrinkWrap: true, children: [
+          if (wieRaum) ListTile(dense: true, title: const Text('wie Raum'), onTap: () => Navigator.pop(c, (art: 'wie Raum', dicke: 0, element: null))),
+          if (eigene.isNotEmpty) const Padding(padding: EdgeInsets.only(top: 6), child: Text('Eigene Aufbauten (Bibliothek)', style: TextStyle(fontWeight: FontWeight.w600))),
+          for (final e in eigene)
+            ListTile(dense: true, title: Text('${e['name']}'), trailing: Text('${e['dicke']} mm'), onTap: () => Navigator.pop(c, (art: '${e['name']}', dicke: (e['dicke'] as num).round(), element: e['id'] as String?))),
+          const Padding(padding: EdgeInsets.only(top: 6), child: Text('Schnellwahl', style: TextStyle(fontWeight: FontWeight.w600))),
+          for (final (art, d) in verkleidungVorlagen)
+            ListTile(dense: true, title: Text(art), trailing: Text('$d mm'), onTap: () => Navigator.pop(c, (art: art, dicke: d, element: null))),
+          TextField(controller: dicke, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Eigener Aufbau: Dicke je Wandseite', suffixText: 'mm')),
+          const Text('Neue Aufbauten dauerhaft am PC anlegen: Bibliothek › „Wandverkleidung / Vorsatzschale“.', style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+        ]),
+      ),
+      actions: [FilledButton(onPressed: () => Navigator.pop(c, (art: 'eigener Aufbau', dicke: int.tryParse(dicke.text.trim()) ?? 0, element: null)), child: const Text('Eigene Dicke übernehmen'))],
+    ),
+  );
+}
+
 /// Wandverkleidung eines Raums wählen (geht als Aufmaß an den PC).
 Future<void> verkleidungWaehlen(BuildContext context, MobilKontext k, Map<String, dynamic> raum) async {
   final aktuell = k.verkleidung(raum['id'] as String?);
-  final dicke = TextEditingController(text: '$aktuell');
-  final w = await showDialog<(String, int)>(
-    context: context,
-    builder: (c) => AlertDialog(
-      title: Text('Wandverkleidung ${raum['name']}'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        for (final (art, d) in verkleidungVorlagen)
-          ListTile(dense: true, title: Text(art), trailing: Text('$d mm'), onTap: () => Navigator.pop(c, (art, d))),
-        TextField(controller: dicke, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'eigene Dicke je Wandseite', suffixText: 'mm')),
-      ]),
-      actions: [FilledButton(onPressed: () => Navigator.pop(c, ('eigene', int.tryParse(dicke.text.trim()) ?? 0)), child: const Text('Eigene übernehmen'))],
-    ),
-  );
+  final w = await _verkleidungDialog(context, k, 'Wandverkleidung ${raum['name']}', aktuell);
   if (w == null) return;
-  await k.massSenden(ziel: 'verkleidung', objekt: raum, feld: 'verkleidung', wert: w.$2, plan: aktuell, raum: raum['id'] as String?, text: w.$1);
+  await k.massSenden(ziel: 'verkleidung', objekt: raum, feld: 'verkleidung', wert: w.dicke, plan: aktuell, raum: raum['id'] as String?, text: w.art, extra: {if (w.element != null) 'element': w.element});
+}
+
+/// Verkleidung einer einzelnen Wandseite (überschreibt den Raum).
+Future<void> verkleidungSeiteWaehlen(BuildContext context, MobilKontext k, Map<String, dynamic> wand, bool links) async {
+  final v = wand[links ? 'vl' : 'vr'] as Map?;
+  final aktuell = (v?['dicke'] as num?)?.round() ?? k.verkleidung((links ? wand['rl'] : wand['rr']) as String?);
+  final w = await _verkleidungDialog(context, k, 'Verkleidung ${seitenName(k.plan, wand, links)}', aktuell, wieRaum: true);
+  if (w == null) return;
+  await k.massSenden(ziel: 'verkleidung_seite', objekt: wand, feld: 'verkleidung', wert: w.dicke, plan: aktuell, seite: links ? 'l' : 'r', text: w.art, extra: {if (w.element != null) 'element': w.element});
 }
 
 bool raumSeiteGemessen(MobilKontext k, RaumSeite r, String raumId) =>
@@ -241,7 +283,7 @@ Future<void> raumSeiteMessen(BuildContext context, MobilKontext k, RaumSeite r, 
       plan: plan,
       bisher: k.gemessen(r.wand, 'laenge_$raumId', seite: seite)?.wert,
       hinweis: 'Die Wand läuft weiter in einen anderen Raum: hier von Wand zu Wand im Raum messen.',
-      verkleidung: k.verkleidung(raumId));
+      verkleidung: seitenAbzug(r, raumId));
   if (e == null) return;
   await k.massSenden(ziel: 'raumseite', objekt: r.wand, feld: 'laenge_$raumId', wert: e.wert, plan: plan, seite: seite, raum: raumId, text: e.text, extra: {'von': r.t1.round(), 'bis': r.t2.round()});
 }

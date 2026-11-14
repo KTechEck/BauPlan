@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../app/version.dart';
+import '../core/bauelemente.dart';
 import '../core/speicher.dart';
 import '../data/app_settings.dart';
 import '../data/austausch.dart';
@@ -39,6 +40,9 @@ class AppState extends ChangeNotifier {
     // Planstand für die App: Besorgungsliste und Geräte aus der Bibliothek mitgeben
     zusatzEinkauf = (_) => besorgungFuerApp(this);
     bauelementLesen = (st, id) => bibliothek.fuerProjekt(st, id)?.toJson();
+    verkleidungenLesen = (st) => [
+          for (final e in bibliothek.auswahl(st, BauelementKategorie.verkleidung)) {'id': e.id, 'name': e.anzeige, 'dicke': e.zahl('dicke')?.round() ?? 0},
+        ];
   }
 
   final AppSettings settings;

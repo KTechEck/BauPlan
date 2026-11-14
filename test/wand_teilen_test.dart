@@ -115,4 +115,29 @@ void main() {
     expect(stuecke.single.value.$2 - stuecke.single.value.$1, closeTo(3700, 2)); // 4000 − 2 × 150
     s.schliessen();
   });
+
+  test('Verkleidung je Raum und je Wandseite: Fertigmaß zieht die anstoßenden Wände ab', () {
+    final tmp = Directory.systemTemp.createTempSync('pr');
+    final s = ProjectStore.anlegen(elternOrdner: tmp.path, projektName: 'P');
+    final g = s.geschosse(s.gebaeude().single.id).single.id;
+    const e = [(0, 0), (4000, 0), (4000, 3000), (0, 3000)];
+    for (var i = 0; i < 4; i++) {
+      s.wandAnlegen(geschossId: g, x1: e[i].$1, y1: e[i].$2, x2: e[(i + 1) % 4].$1, y2: e[(i + 1) % 4].$2, dicke: 240);
+    }
+    final rid = s.raumAnlegen(geschossId: g, name: 'Bad', kuerzel: 'B', flaeche: s.flaechenErkennen(g).single);
+    s.raumEigenschaftenSetzen(rid, {'verkleidung': {'art': 'GK auf UK', 'dicke': 62}});
+    final w = s.waende(g), r = s.raeume(g).single;
+    final mm = wandMasse(w, s.raeume(g));
+    final oben = w.first;
+    final links = mm[oben.id]!.raumLinks == rid;
+    final g0 = mm[oben.id]!.grenzen;
+    (int, int) ab() => endAbzuege(w, mm, verkleidungSeiten(s), oben, links, links ? g0.linksA : g0.rechtsA, links ? g0.linksB : g0.rechtsB, r);
+    expect(ab(), (62, 62));
+    // rechte Wand: Raumseite ohne Verkleidung
+    final rechts = w[1];
+    verkleidungSeiteSetzen(s, rechts.id, mm[rechts.id]!.raumLinks == rid, {'art': 'keine', 'dicke': 0});
+    final (a, b) = ab();
+    expect(a + b, 62);
+    s.schliessen();
+  });
 }

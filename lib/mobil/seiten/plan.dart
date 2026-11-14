@@ -223,6 +223,22 @@ Future<void> wandBlatt(BuildContext context, MobilKontext k, Map<String, dynamic
             ];
           }(),
           massZeile('Wanddicke', w, 'dicke', w['d'] as num? ?? 0, () => wandDickeMessen(c, k, w)),
+          for (final links in [true, false])
+            if ((links ? w['rl'] : w['rr']) != null)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.view_column_outlined),
+                title: Text('Verkleidung ${seitenName(k.plan, w, links)}'),
+                subtitle: Text(((links ? w['vl'] : w['vr']) as Map?) == null
+                    ? 'wie Raum (${k.verkleidung((links ? w['rl'] : w['rr']) as String?)} mm)'
+                    : '${((links ? w['vl'] : w['vr']) as Map)['art']} · ${((links ? w['vl'] : w['vr']) as Map)['dicke']} mm'),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () async {
+                  await verkleidungSeiteWaehlen(c, k, w, links);
+                  setState(() {});
+                },
+              ),
           if (oeffnungen.isNotEmpty) ...[
             const Divider(),
             for (final o in oeffnungen) ...[
@@ -317,7 +333,8 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
             ListTile(
               leading: const Icon(Icons.layers_outlined),
               title: const Text('Wandverkleidung'),
-              subtitle: Text(k.verkleidung('$id') == 0 ? 'keine – Maße sind Rohbaumaße' : '${k.verkleidung('$id')} mm je Wandseite · Anzeige ${k.einstellungen.massart == 'fertig' ? 'fertig' : 'Rohbau'}'),
+              subtitle: Text('${k.verkleidung('$id') == 0 ? 'keine (Vorgabe für alle Wände)' : '${(k.plan.raum('$id')?.$1['verkleidung'] as Map?)?['art'] ?? ''} ${k.verkleidung('$id')} mm je Wandseite'} · '
+                  'Anzeige ${k.einstellungen.massart == 'fertig' ? 'fertig' : 'Rohbau'} · einzelne Wände: Wand antippen'),
               trailing: Switch(
                 value: k.einstellungen.massart == 'fertig',
                 onChanged: (v) => setState(() {
@@ -712,7 +729,7 @@ class _PlanPainter extends CustomPainter {
         final kk = k;
         final anz = kk == null
             ? (text: mmCm(plan), farbe: massGrob)
-            : massAnzeige(kk, w, 'laenge', plan, seite: links ? 'l' : 'r', bezug: 'innen', abzug: kk.fertigAbzug(raum));
+            : massAnzeige(kk, w, 'laenge', plan, seite: links ? 'l' : 'r', bezug: 'innen', abzug: kk.einstellungen.massart == 'fertig' ? seitenAbzugVoll(w, links) : 0);
         final s = links ? 1.0 : -1.0;
         final p = zuBild((a + b) / 2 + nl * (s * (d / 2 + 9 * schrift / (m * zoom))));
         _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF));

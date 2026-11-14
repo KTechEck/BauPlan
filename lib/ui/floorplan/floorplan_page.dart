@@ -19,6 +19,7 @@ import '../../core/dach.dart' show wohnflaeche;
 import '../../core/dxf.dart';
 import '../../core/raumerkennung.dart';
 import '../../core/wandmasse.dart';
+import '../../data/bauelement_bibliothek.dart';
 import '../../data/models.dart';
 import '../../data/project_store.dart';
 import '../../state/app_state.dart';
@@ -263,17 +264,28 @@ class _FloorplanPageState extends State<FloorplanPage> {
         // Fertigmaße: Wandverkleidung des Raums an beiden Enden abziehen
         if (store.einstellung<String>('massart') != 'fertig') return roh;
         final mm = wandMasse(waende, raeume, verbindenStandard: _eckenVerbinden);
-        final verk = {for (final r in raeume) r.id: raumVerkleidung(r)};
+        final seiten = verkleidungSeiten(store);
+        final raumNach = {for (final r in raeume) r.id: r};
+        double fertig(Wand w, bool links, double laenge) {
+          final m = mm[w.id];
+          final r = raumNach[links ? m?.raumLinks : m?.raumRechts];
+          if (m == null || r == null) return laenge;
+          final g = m.grenzen;
+          final (a1, a2) = endAbzuege(waende, mm, seiten, w, links, links ? g.linksA : g.rechtsA, links ? g.linksB : g.rechtsB, r);
+          return laenge - a1 - a2;
+        }
         return {
-          for (final e in roh.entries)
-            e.key: (e.value.$1 - 2 * (verk[mm[e.key]?.raumLinks] ?? 0), e.value.$2 - 2 * (verk[mm[e.key]?.raumRechts] ?? 0)),
+          for (final w in waende)
+            if (roh[w.id] != null) w.id: (fertig(w, true, roh[w.id]!.$1), fertig(w, false, roh[w.id]!.$2)),
         };
       }(),
       raumStuecke: () {
         // Wände an mehreren Räumen (oder nur teilweise an einem): je Raum seine lichte Strecke
         final mm = wandMasse(waende, raeume, verbindenStandard: _eckenVerbinden);
         final namen = {for (final r in raeume) r.id: r.name};
-        final verk = store.einstellung<String>('massart') == 'fertig' ? {for (final r in raeume) r.id: raumVerkleidung(r)} : const <String, int>{};
+        final fertigModus = store.einstellung<String>('massart') == 'fertig';
+        final seiten = verkleidungSeiten(store);
+        final raumNach = {for (final r in raeume) r.id: r};
         final aus = <String, List<(double, double, double, String)>>{};
         for (final w in waende) {
           final m = mm[w.id];
@@ -291,8 +303,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
             final teil = st.length > 1 || st.values.any((x) => (x.$1 - ta).abs() > 5 || (x.$2 - tb).abs() > 5);
             if (!teil) continue;
             for (final e in st.entries) {
-              final v = (verk[e.key] ?? 0).toDouble();
-              l.add((e.value.$1 + v, e.value.$2 - v, seite, namen[e.key] ?? ''));
+              var (v1, v2) = (0, 0);
+              if (fertigModus && raumNach[e.key] != null) (v1, v2) = endAbzuege(waende, mm, seiten, w, seite > 0, e.value.$1, e.value.$2, raumNach[e.key]!);
+              l.add((e.value.$1 + v1, e.value.$2 - v2, seite, namen[e.key] ?? ''));
             }
           }
           if (l.isNotEmpty) aus[w.id] = l;
@@ -3121,25 +3134,16 @@ class _FloorplanPageState extends State<FloorplanPage> {
         if (umfang != null) zeile('Umfang (licht)', meterText(umfang)),
         if (lichteHoehe != null) zeile('lichte Höhe', '${mmText(lichteHoehe)} mm'),
         const SizedBox(height: 6),
-        Row(children: [
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              key: ValueKey('verk-${r.id}-${raumVerkleidung(r)}'),
-              initialValue: raumVerkleidung(r),
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Wandverkleidung (je Seite)', isDense: true),
-              items: [
-                for (final (art, d) in const [('keine (Rohbau)', 0), ('Putz', 15), ('GK direkt geklebt', 25), ('GK auf Unterkonstruktion', 62), ('Vorsatzschale 75 + GK', 90)])
-                  DropdownMenuItem(value: d, child: Text('$art · $d mm')),
-                if (![0, 15, 25, 62, 90].contains(raumVerkleidung(r))) DropdownMenuItem(value: raumVerkleidung(r), child: Text('eigene · ${raumVerkleidung(r)} mm')),
-              ],
-              onChanged: (d) {
-                store.raumEigenschaftenSetzen(r.id, {...r.eigenschaften, 'verkleidung': {'art': '', 'dicke': d ?? 0}});
-                _s.geaendert();
-              },
-            ),
-          ),
-        ]),
+        _verkleidungWahl(
+          label: 'Wandverkleidung im Raum (Vorgabe für alle Wände)',
+          aktuell: r.eigenschaften['verkleidung'] is Map ? Map<String, dynamic>.from(r.eigenschaften['verkleidung'] as Map) : null,
+          setzen: (v) {
+            final e = {...r.eigenschaften};
+            v == null ? e.remove('verkleidung') : e['verkleidung'] = v;
+            store.raumEigenschaftenSetzen(r.id, e);
+            _s.geaendert();
+          },
+        ),
         Row(children: [
           const Expanded(child: Text('Maße im Grundriss als Fertigmaß (aus = Rohbau)', style: TextStyle(fontSize: 12))),
           Switch(
@@ -3511,6 +3515,55 @@ class _FloorplanPageState extends State<FloorplanPage> {
     );
   }
 
+  /// Auswahl einer Wandverkleidung: eigene Aufbauten aus der Bibliothek,
+  /// Schnellwahl, „Eigener Aufbau …“ (öffnet die Bibliothek); bei Wandseiten
+  /// zusätzlich „wie Raum“.
+  Widget _verkleidungWahl({required String label, required Map<String, dynamic>? aktuell, required void Function(Map<String, dynamic>?) setzen, bool wieRaum = false}) {
+    final store = _s.store!;
+    final elemente = _s.bibliothek.auswahl(store, BauelementKategorie.verkleidung);
+    const schnell = [('Putz', 15), ('GK direkt geklebt', 25), ('GK auf Unterkonstruktion', 62), ('Vorsatzschale 75 + GK', 90)];
+    String wert(Map<String, dynamic>? v) => v == null
+        ? (wieRaum ? 'raum' : 'keine')
+        : v['element'] != null
+            ? 'e:${v['element']}'
+            : ((v['dicke'] as num?) ?? 0) == 0
+                ? 'keine'
+                : 's:${v['art'] ?? ''}|${v['dicke']}';
+    final items = <String, String>{
+      if (wieRaum) 'raum': 'wie Raum',
+      'keine': 'keine (Rohbau)',
+      for (final e in elemente) 'e:${e.id}': '${e.anzeige} · ${e.zahl('dicke')?.round() ?? 0} mm',
+      for (final (art, d) in schnell) 's:$art|$d': '$art · $d mm',
+    };
+    final w = wert(aktuell);
+    if (!items.containsKey(w)) items[w] = '${aktuell?['art'] ?? 'eigene'} · ${aktuell?['dicke'] ?? 0} mm';
+    items['neu'] = 'Eigener Aufbau … (in der Bibliothek anlegen)';
+    return DropdownButtonFormField<String>(
+      key: ValueKey('verk-$label-$w-${elemente.length}'),
+      initialValue: w,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label, isDense: true),
+      items: [for (final e in items.entries) DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))],
+      onChanged: (v) {
+        if (v == null) return;
+        if (v == 'neu') {
+          zeigeHinweis(context, 'Bibliothek › Material › „Wandverkleidung / Vorsatzschale“: neuen Aufbau anlegen (Dicke angeben), danach hier auswählen.');
+          _s.modulWaehlen(Modul.bauteile);
+          return;
+        }
+        if (v == 'raum') return setzen(null);
+        if (v == 'keine') return setzen(wieRaum ? {'art': 'keine', 'dicke': 0} : null);
+        if (v.startsWith('e:')) {
+          final e = elemente.firstWhere((x) => x.id == v.substring(2));
+          BauelementBibliothek.insProjekt(store, e);
+          return setzen({'element': e.id, 'art': e.anzeige, 'dicke': e.zahl('dicke')?.round() ?? 0});
+        }
+        final t = v.substring(2).split('|');
+        setzen({'art': t[0], 'dicke': int.tryParse(t[1]) ?? 0});
+      },
+    );
+  }
+
   /// Zeigt, ob und was auf der Baustelle gemessen wurde (Aufmaß vom Handy).
   Widget _aufmassZeile(String id) {
     final store = _s.store!;
@@ -3671,6 +3724,20 @@ class _FloorplanPageState extends State<FloorplanPage> {
             _s.geaendert();
           },
         ),
+        const SizedBox(height: 8),
+        for (final links in [true, false])
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _verkleidungWahl(
+              label: 'Verkleidung ${WandSeite.berechnen(w, plan.waende, plan.raeume, _eckenVerbinden, links).raum?.name ?? (links ? 'Seite A' : 'Seite B')}',
+              aktuell: verkleidungSeiten(store)['${w.id}|${links ? 'l' : 'r'}'],
+              wieRaum: true,
+              setzen: (v) {
+                verkleidungSeiteSetzen(store, w.id, links, v);
+                _s.geaendert();
+              },
+            ),
+          ),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 4, children: [
           OutlinedButton.icon(

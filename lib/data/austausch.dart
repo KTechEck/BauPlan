@@ -42,6 +42,9 @@ List<Map<String, dynamic>> Function(ProjectStore store)? zusatzEinkauf;
 /// Bauelement aus Projekt oder Bibliothek als JSON – gesetzt vom Programm.
 Map<String, dynamic>? Function(ProjectStore store, String id)? bauelementLesen;
 
+/// Wandverkleidungen aus der Bibliothek (id, name, dicke) – gesetzt vom Programm.
+List<Map<String, dynamic>> Function(ProjectStore store)? verkleidungenLesen;
+
 /// Lesekopie des Projekts für die App (Version 2: Maße, Höhen, Wandseiten,
 /// Bemaßungen, Aufmaß, Aufgaben, Einkaufsliste nach Lastenheft).
 Map<String, dynamic> planstandErzeugen(ProjectStore store) {
@@ -63,6 +66,25 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
         raumName[r.id] = r.name;
       }
       final masse = wandMasse(waende, raeume, verbindenStandard: verbinden);
+      final seitenVk = verkleidungSeiten(store);
+      final raumNach = {for (final r in raeume) r.id: r};
+      List<List<int>> abz(Wand w, bool links, Map<String, (double, double)> st) => [
+            for (final e in st.entries)
+              if (raumNach[e.key] != null)
+                () {
+                  final (a, b) = endAbzuege(waende, masse, seitenVk, w, links, e.value.$1, e.value.$2, raumNach[e.key]!);
+                  return [a, b];
+                }()
+              else
+                [0, 0],
+          ];
+      List<int> abzVoll(Wand w, bool links) {
+        final m = masse[w.id]!;
+        final r = raumNach[links ? m.raumLinks : m.raumRechts];
+        if (r == null) return const [0, 0];
+        final (a, b) = endAbzuege(waende, masse, seitenVk, w, links, links ? m.grenzen.linksA : m.grenzen.rechtsA, links ? m.grenzen.linksB : m.grenzen.rechtsB, r);
+        return [a, b];
+      }
       final wandNach = {for (final w in waende) w.id: w};
       final hoeheRaum = {for (final r in raeume) r.id: r.hoehen(g)};
       int ffbVon(String? raumId) => (hoeheRaum[raumId] ?? g.hoehen).ffb;
@@ -90,6 +112,13 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
               if (masse[w.id]!.raumRechts != null) 'rr': masse[w.id]!.raumRechts,
               'sl': [for (final e in masse[w.id]!.stueckeLinks.entries) [e.key, e.value.$1.round(), e.value.$2.round()]],
               'sr': [for (final e in masse[w.id]!.stueckeRechts.entries) [e.key, e.value.$1.round(), e.value.$2.round()]],
+              // Fertigmaß: Abzüge (Verkleidung der anstoßenden Wände) je Raumstück und für die ganze Seite
+              'slf': abz(w, true, masse[w.id]!.stueckeLinks),
+              'srf': abz(w, false, masse[w.id]!.stueckeRechts),
+              'fl': abzVoll(w, true),
+              'fr': abzVoll(w, false),
+              if (seitenVk['${w.id}|l'] != null) 'vl': seitenVk['${w.id}|l'],
+              if (seitenVk['${w.id}|r'] != null) 'vr': seitenVk['${w.id}|r'],
               if (gemessen[w.id] != null) 'gemessen': gemessen[w.id],
               if (brandschutz[w.id] != null) 'brandschutz': brandschutz[w.id],
               if (w.gesperrt) 'gesperrt': true,
@@ -151,6 +180,7 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
     'geschosse': geschosse,
     'einkauf': _einkaufFuerApp(store, raumName, gewerkName, produkte),
     'aufmass': [for (final a in aufmassListe(store)) if (a['status'] == 'offen') a],
+    'verkleidungen': verkleidungenLesen?.call(store) ?? const [],
     'aufgaben': [
       for (final a in store.aufgaben())
         if (a.status != AufgabenStatus.erledigt)

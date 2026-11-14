@@ -146,7 +146,8 @@ String aufmassFeldText(String ziel, String feld) => switch ((ziel, feld)) {
       ('schraege', 'kniestock') => 'Dachschräge: Kniestock',
       ('schraege', 'tiefe') => 'Dachschräge: Tiefe bis waagrechte Decke',
       ('schraege', 'decke') => 'Dachschräge: Höhe waagrechte Decke',
-      ('verkleidung', _) => 'Wandverkleidung (je Seite)',
+      ('verkleidung', _) => 'Wandverkleidung im Raum',
+      ('verkleidung_seite', _) => 'Wandverkleidung dieser Wandseite',
       ('objekt', 'h') => 'Höhe Gerät über FFB',
       ('objekt', 'x') => 'Gerät ab Wandecke',
       _ => feld,
@@ -178,6 +179,7 @@ void aufmassAblegen(ProjectStore store, Map<String, dynamic> e) {
     if (e['wand'] != null) 'wand': e['wand'],
     if (e['ecken'] != null) 'ecken': e['ecken'],
     if (e['feld_json'] != null) 'feld_json': e['feld_json'],
+    if (e['element'] != null) 'element': e['element'],
     'autor': e['autor'] ?? 'App',
     'zeit': e['zeit'] ?? DateTime.now().toIso8601String(),
     'status': 'offen',
@@ -267,6 +269,8 @@ double? aufmassPlanwert(ProjectStore store, Map<String, dynamic> a) {
     case 'verkleidung':
       final r = _raum(store, id);
       return r == null ? null : ((r.$1.eigenschaften['verkleidung'] as Map?)?['dicke'] as num?)?.toDouble() ?? 0;
+    case 'verkleidung_seite':
+      return ((verkleidungSeiten(store)['$id|${a['seite']}'])?['dicke'] as num?)?.toDouble() ?? 0;
     case 'schraege':
       final r = _raum(store, id);
       if (r == null) return null;
@@ -391,7 +395,7 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
   final id = a['id_ziel'] as String?;
   final feld = a['feld'] as String? ?? '';
   final wert = (a['wert'] as num?)?.round();
-  if (id == null || wert == null || wert < 0 || (wert == 0 && a['ziel'] != 'verkleidung' && !(a['ziel'] == 'sparren' && (feld == 'neu' || feld.startsWith('pos_') || feld == 'erster')))) {
+  if (id == null || wert == null || wert < 0 || (wert == 0 && a['ziel'] != 'verkleidung' && a['ziel'] != 'verkleidung_seite' && !(a['ziel'] == 'sparren' && (feld == 'neu' || feld.startsWith('pos_') || feld == 'erster')))) {
     return 'Kein gültiger Wert.';
   }
   final plan = aufmassPlanwert(store, a);
@@ -476,7 +480,9 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
     case 'verkleidung':
       final r = _raum(store, id);
       if (r == null) return 'Raum nicht gefunden.';
-      store.raumEigenschaftenSetzen(id, {...r.$1.eigenschaften, 'verkleidung': {'art': a['text'] ?? '', 'dicke': wert}});
+      store.raumEigenschaftenSetzen(id, {...r.$1.eigenschaften, 'verkleidung': {'art': a['text'] ?? '', 'dicke': wert, if (a['element'] != null) 'element': a['element']}});
+    case 'verkleidung_seite':
+      verkleidungSeiteSetzen(store, id, a['seite'] == 'l', a['text'] == 'wie Raum' ? null : {'art': a['text'] ?? '', 'dicke': wert, if (a['element'] != null) 'element': a['element']});
     case 'schraege':
       final r = _raum(store, id);
       if (r == null) return 'Raum nicht gefunden.';
@@ -570,3 +576,53 @@ void wandDickeMitInnenmass(ProjectStore store, Wand w, void Function() aendern) 
 int raumVerkleidung(Raum r) => ((r.eigenschaften['verkleidung'] as Map?)?['dicke'] as num?)?.round() ?? 0;
 
 int _rund(double v) => (v / 20).round(); // 2 cm Raster für den Vergleich gleicher Kanten
+
+// ------------------------------------------------------------ Wandverkleidung
+
+/// Verkleidung je Wandseite (überschreibt die Raumvorgabe): Projekteinstellung
+/// `verkleidung_seiten` mit „wandId|l/r“ → {element, art, dicke}.
+Map<String, Map<String, dynamic>> verkleidungSeiten(ProjectStore store) => {
+      for (final e in (store.einstellung<Map>('verkleidung_seiten') ?? const {}).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map),
+    };
+
+void verkleidungSeiteSetzen(ProjectStore store, String wandId, bool links, Map<String, dynamic>? wert) {
+  final m = verkleidungSeiten(store);
+  final k = '$wandId|${links ? 'l' : 'r'}';
+  wert == null ? m.remove(k) : m[k] = wert;
+  store.einstellungSetzen('verkleidung_seiten', m);
+}
+
+/// Wirksame Verkleidung (mm) einer Wandseite: eigene Angabe, sonst die des Raums.
+int verkleidungDicke(Map<String, Map<String, dynamic>> seiten, Wand w, bool links, Raum? raum) {
+  final s = seiten['${w.id}|${links ? 'l' : 'r'}'];
+  if (s != null) return (s['dicke'] as num?)?.round() ?? 0;
+  return raum == null ? 0 : raumVerkleidung(raum);
+}
+
+/// Abzüge an beiden Enden einer lichten Raumkante (für das Fertigmaß): die
+/// Verkleidung der Wände, an die die Kante an ihren Enden stößt (je deren
+/// raumseitige Wandseite).
+(int, int) endAbzuege(List<Wand> waende, Map<String, WandMasse> mm, Map<String, Map<String, dynamic>> seiten, Wand w, bool links, double t1, double t2, Raum raum) {
+  final l = math.max(1.0, w.laenge);
+  final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+  final s = (links ? 1 : -1) * w.dicke / 2;
+  int abzug(double t) {
+    final px = w.x1 + ux * t + uy * s, py = w.y1 + uy * t - ux * s;
+    for (final o in waende) {
+      if (o.id == w.id || o.laenge < 1) continue;
+      final dx = (o.x2 - o.x1).toDouble(), dy = (o.y2 - o.y1).toDouble();
+      final l2 = dx * dx + dy * dy;
+      final tt = (((px - o.x1) * dx + (py - o.y1) * dy) / l2).clamp(0.0, 1.0);
+      final ex = o.x1 + dx * tt - px, ey = o.y1 + dy * tt - py;
+      if (math.sqrt(ex * ex + ey * ey) > o.dicke / 2 + 6) continue;
+      // parallele Nachbarstücke derselben Linie zählen nicht
+      if ((dx * uy - dy * ux).abs() / math.sqrt(l2) < 1e-3) continue;
+      final m = mm[o.id];
+      final oLinks = m == null ? true : (m.stueckeLinks.containsKey(raum.id) || m.raumLinks == raum.id);
+      return verkleidungDicke(seiten, o, oLinks, raum);
+    }
+    return raumVerkleidung(raum);
+  }
+
+  return (abzug(t1), abzug(t2));
+}
