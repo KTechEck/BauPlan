@@ -19,6 +19,7 @@ import '../floorplan/floorplan_painter.dart';
 import '../installation/installation_page.dart' show ObjektPainter, wandStrecke;
 import '../symbol_editor.dart' show eigeneSymbole;
 import 'akte.dart';
+import '../raumbild_dialog.dart';
 import '../../core/elektro.dart' show plankopf;
 import 'daten_export.dart';
 import '../ersteinrichtung.dart' show einstellungenAlsVorlage;
@@ -154,6 +155,11 @@ class _ExportPageState extends State<ExportPage> {
             onPressed: _laeuft ? null : () => _ausgabe('Fotobericht', () => fotoberichtPdf(_s.store!)),
             icon: const Icon(Icons.photo_library_outlined),
             label: const Text('Fotobericht (PDF)'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _s.geschossId == null ? null : () => raumbildDialog(context, _s),
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('KI-Raumbild …'),
           ),
           OutlinedButton.icon(
             onPressed: _laeuft ? null : _etiketten,

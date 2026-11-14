@@ -684,3 +684,12 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Licht und Strom außen (Wege-Ausleuchtung, insektenfreundlich, IP, RCD), Kabel außen (Erdkabel: Graben/Schutzrohr/Sand/Warnband; auf Putz: UV-Rohr/Schellen/IP-Dosen;
   NYM-Warnungen). Einstellung `aussen`. Erd-/Außenkabel + Schutzrohr, Regenwasser- und Bewässerungsrohr laufen in die Kabel-/Rohrliste.
 - Tests test/build30_test.dart; 289 Tests grün.
+
+## Build 31 (14.11.) – KI-Raumbilder
+- lib/core/raumbild.dart: Schnittstelle RaumbildAnbieter mit OpenAiBild (gpt-image-1, /v1/images/edits mit Planskizze bzw. /generations; Größe quer/hoch/quadrat,
+  Qualität low/medium/high, Kosten-Richtwerte 0,02/0,07/0,25 €), GeminiBild (gemini-2.5-flash-image, generateContent mit inline_data), ComfyUiBild (eigener
+  Server, API-Workflow-JSON mit %PROMPT%/%BILD%, Upload + /prompt + /history + /view). Prompt-Bau (englisch) aus Raumdaten, Stil, Tageszeit, Wünschen.
+- lib/ui/raumbild_dialog.dart (Grundriss › Optionen „KI-Raumbild …“, Ausgabe › „KI-Raumbild …“): Raum, Stil, Licht, Planskizze als Vorlage (raumSkizze: Wände,
+  Fenster blau, Türen gelb, Objekte mit Namen), Prompt änderbar, Anbieterwahl und Schlüssel (AppSettings.bildki, nur auf diesem PC), Einwilligung „darf an externen
+  Dienst“, Kostenhinweis; Bilder unter Projekt/ki_bilder/, Galerie, „Zu den Fotos des Raums“.
+- Tests test/build31_test.dart; 292 Tests grün. Echte Anfrage an OpenAI/Gemini nicht getestet (kein Schlüssel).

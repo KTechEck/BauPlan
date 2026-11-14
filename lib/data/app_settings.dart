@@ -32,6 +32,9 @@ class AppSettings {
   /// Zugang zum C.M.I. der Technischen Alternative (Benutzer, Passwort) – nur auf diesem Gerät.
   Map<String, dynamic>? cmi;
 
+  /// KI-Raumbilder: Anbieter, API-Schlüssel, ComfyUI – nur auf diesem PC.
+  Map<String, dynamic>? bildki;
+
   /// Erklärungen der Werkzeuge rechts anzeigen.
   bool hilfeAnzeigen = true;
 
@@ -55,6 +58,7 @@ class AppSettings {
         s.ki = (m['ki'] as Map?)?.cast<String, dynamic>();
         s.ha = (m['ha'] as Map?)?.cast<String, dynamic>();
         s.cmi = (m['cmi'] as Map?)?.cast<String, dynamic>();
+        s.bildki = (m['bildki'] as Map?)?.cast<String, dynamic>();
         s.hilfeAnzeigen = m['hilfe'] as bool? ?? true;
         s.darstellung = Map<String, dynamic>.from(m['darstellung'] as Map? ?? const {});
         s.speicher = Map<String, dynamic>.from(m['speicher'] as Map? ?? const {});
@@ -91,6 +95,7 @@ class AppSettings {
       'ki': ki,
       'ha': ha,
       'cmi': cmi,
+      'bildki': bildki,
       'hilfe': hilfeAnzeigen,
       'darstellung': darstellung,
       'speicher': speicher,

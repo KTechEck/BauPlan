@@ -43,6 +43,7 @@ import 'floorplan_painter.dart';
 import 'statik.dart';
 import 'fassade_dialog.dart';
 import 'keller_dialog.dart';
+import '../raumbild_dialog.dart';
 import '../../core/pdf_bild.dart';
 import '../../core/gebaeude.dart';
 import '../../core/leitung_wand.dart' show geschossStapel;
@@ -3041,6 +3042,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   if (_s.geschossId != null) fassadeDialog(context, _s);
                 case 'keller':
                   if (_s.geschossId != null) kellerSockelDialog(context, _s);
+                case 'raumbild':
+                  if (_s.geschossId != null) raumbildDialog(context, _s);
                 case 'dach':
                   if (_s.geschossId != null) {
                     dachBearbeiten(context, _s.store!, _s.geschossId!, () {
@@ -3074,6 +3077,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
               const PopupMenuItem(value: 'statiker', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Mappe für den Statiker (PDF) …'))),
               const PopupMenuItem(value: 'fassade', child: ListTile(dense: true, leading: Icon(Icons.home_work_outlined), title: Text('WDVS, Fassade und Balkon …'))),
               const PopupMenuItem(value: 'keller', child: ListTile(dense: true, leading: Icon(Icons.foundation), title: Text('Keller, Sockel, Putzprofile, Fensterbänke …'))),
+              const PopupMenuItem(value: 'raumbild', child: ListTile(dense: true, leading: Icon(Icons.auto_awesome), title: Text('KI-Raumbild …'))),
             ],
           ),
           IconButton(tooltip: 'Alles zeigen', onPressed: _einpassen, icon: const Icon(Sym.allesZeigen)),
