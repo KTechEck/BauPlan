@@ -461,3 +461,11 @@ Gerade aneinanderstoßende Wandstücke beim Aufmaß wie eine Wand: raumStuecke k
 wandMasse beschriftet dieselbe Raumkante nur beim ersten Stück; PC/App lassen die übrigen Stücke innen unbeschriftet. Unterschiedliche Dicken
 (Oberfläche springt) ergeben weiterhin zwei Maße. Offen: Tims Projekt prüfen, warum Stücke nicht zusammengeführt wurden (vermutlich Dicke/Wandtyp/Zustand
 verschieden); Wandverkleidungen; PC-Zoom-Ausblenden.
+
+## Build 16 (14.11. 07:58, 226 Tests) – Wandverkleidungen
+Bauelement-Kategorie `verkleidung` („Wandverkleidung / Vorsatzschale“: dicke, unterkonstruktion, uk_dicke, beplankung, lagen, daemmung, oberflaeche).
+Zuordnung: Raum-Vorgabe raum.eigenschaften.verkleidung {element?, art, dicke}; je Wandseite Einstellung `verkleidung_seiten` („wandId|l/r“, überschreibt).
+PC: _verkleidungWahl (Raum-Panel, Wand-Panel je Seite; Einträge Bibliothek, Schnellwahl, „Eigener Aufbau …“ springt in die Bibliothek).
+Fertigmaß: endAbzuege() zieht je Messstrecke die Verkleidung der anstoßenden Wände ab (PC-Grundriss, Planstand slf/srf/fl/fr).
+App: Raum-Aufmaß + Wand-Blatt je Seite (Aufmaß-Ziele verkleidung, verkleidung_seite), Liste „Eigene Aufbauten“ aus dem Planstand (verkleidungen).
+Offen: PC-Grundriss Maße je Zoom ein-/ausblenden; Tims Projekt nach Build 14/15 prüfen.
