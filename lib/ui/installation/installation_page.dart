@@ -40,8 +40,10 @@ import '../tastenkuerzel.dart';
 import '../bauteile/bauelement_wahl.dart';
 import 'bad_dialog.dart';
 import 'typenschild_dialog.dart';
+import 'wasser_dialog.dart';
 import 'heizkreise_dialog.dart';
 import '../../core/bad.dart' show badObjektMasse;
+import '../../core/gebaeude.dart' show treppeAuslegen, gelaenderHinweise;
 import '../floorplan/geschoss_3d.dart';
 import '../symbole_plan.dart';
 import '../widgets.dart';
@@ -1075,6 +1077,12 @@ class _InstallationPageState extends State<InstallationPage> {
             tooltip: 'Bad und Abdichtung: Nassräume, Abdichtungsflächen (DIN 18534), Dichtband, Manschetten, Abstände',
             aktiv: false,
             onTap: () => badDialogZeigen(context, _s)),
+        WerkzeugKnopf(
+            symbol: Icons.water_drop_outlined,
+            text: 'Wasser',
+            tooltip: 'Wasser: Abwasser (DN, Gefälle), Trinkwasser-Hausanschluss, Wassermelder mit Absperrventil',
+            aktiv: false,
+            onTap: () => wasserDialogZeigen(context, _s)),
         WerkzeugKnopf(
             symbol: Icons.sensors,
             text: 'Live',
@@ -2503,6 +2511,35 @@ class _InstallationPageState extends State<InstallationPage> {
         Text('${t.steigungen} Steigungen à ${t.steigung.toStringAsFixed(1).replaceAll('.', ',')} mm, Auftritt ${t.auftritt.round()} mm – ${t.bewertung}. '
             'Zwischenpodest als Fläche: Typ „Treppenpodest“.',
             style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+        Wrap(spacing: 8, runSpacing: 8, children: [feld('kopfhoehe', 'Kopfhöhe (mm)', 2000)]),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Geländer planen'),
+          value: o.eigenschaften['gelaender'] == true,
+          onChanged: (v) => setzen('gelaender', v ? true : null),
+        ),
+        if (o.eigenschaften['gelaender'] == true)
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            feld('gelaender_hoehe', 'Geländerhöhe (mm)', 900),
+            feld('stababstand', 'Stababstand (mm)', 110),
+          ]),
+        ...() {
+          final hoehe = ((o.eigenschaften['hoehe'] as num?) ?? 2800).toDouble();
+          final din = treppeAuslegen(
+            geschosshoehe: hoehe,
+            stufen: t.steigungen,
+            lauflaenge: t.auftritt * (t.steigungen - 1),
+            laufbreite: ((o.eigenschaften['breite'] as num?) ?? 1000).toDouble(),
+            kopfhoehe: ((o.eigenschaften['kopfhoehe'] as num?) ?? 2000).toDouble(),
+          );
+          final g = gelaenderHinweise(
+            absturzhoehe: hoehe,
+            hoehe: o.eigenschaften['gelaender'] == true ? ((o.eigenschaften['gelaender_hoehe'] as num?) ?? 900).toDouble() : null,
+            stababstand: o.eigenschaften['gelaender'] == true ? ((o.eigenschaften['stababstand'] as num?) ?? 110).toDouble() : null,
+          );
+          return [for (final h in [...din.hinweise.where((x) => x.contains('Laufbreite') || x.contains('Kopfhöhe')), ...g]) _hinweisBox(h)];
+        }(),
       ]);
     }
     return widgets;

@@ -46,6 +46,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('EN', 'Entnahmestelle / Ablauf', 'punkt'),
     ('SR', 'Steigleitung / Fallrohr (über Geschosse)', 'punkt'),
     ...badTypen,
+    ...wasserTypen,
   ]),
   GewerkVorlage('HZ', 'Heizungsanlage', 0xFFE03131, 'solid', true, [
     ('VL', 'Vorlauf', 'linie'),
@@ -152,4 +153,11 @@ const badTypen = [
   ('WC', 'WC', 'punkt'),
   ('WT', 'Waschtisch', 'punkt'),
   ('UR', 'Urinal / Bidet', 'punkt'),
+];
+
+/// Trinkwasser und Wassermelder (Gewerk Sanitär, Migration 23).
+const wasserTypen = [
+  ('HA', 'Hausanschluss / Wasserzähler', 'punkt'),
+  ('TV', 'Trinkwasserverteiler', 'punkt'),
+  ('WM', 'Wassermelder', 'punkt'),
 ];

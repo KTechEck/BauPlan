@@ -162,6 +162,19 @@ class FloorplanPainter extends CustomPainter {
         }
       } else {
         _wand(canvas, w, auswahl.contains(w.id));
+        if (w.eigenschaften['tragend'] == true && w.dicke * massstab > 3) {
+          // tragende Wand: Strich-Punkt auf der Achse
+          final a = _s(Offset(w.x1.toDouble(), w.y1.toDouble())), b = _s(Offset(w.x2.toDouble(), w.y2.toDouble()));
+          final l = (b - a).distance;
+          final u = l < 1 ? Offset.zero : (b - a) / l;
+          final st = Paint()
+            ..color = const Color(0xE6FFFFFF)
+            ..strokeWidth = 1.4;
+          for (var t = 0.0; t < l; t += 16) {
+            canvas.drawLine(a + u * t, a + u * math.min(l, t + 9), st);
+            canvas.drawCircle(a + u * math.min(l, t + 12.5), 0.9, st);
+          }
+        }
       }
       if (w.gesperrt) _schloss(canvas, _s(Offset((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2)));
     }

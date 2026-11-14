@@ -113,11 +113,28 @@ class HlOeffnung {
 
 /// Einstellungen der Berechnung.
 class HlParameter {
-  const HlParameter({this.normAussen = -12, this.jahresmittel = 9, this.unbeheizt = 5, this.deltaUwb = 0.05});
+  const HlParameter({
+    this.normAussen = -12,
+    this.jahresmittel = 9,
+    this.unbeheizt = 5,
+    this.deltaUwb = 0.05,
+    this.n50 = 0,
+    this.wrg = 0,
+    this.aufheiz = 0,
+  });
   final double normAussen; // θe
   final double jahresmittel; // θm,e für Erdreich
   final double unbeheizt; // Temperatur unbeheizter Nachbarräume
   final double deltaUwb; // pauschaler Wärmebrückenzuschlag W/(m²K)
+
+  /// Luftdichtheit n50 (1/h); 0 = nur Mindestluftwechsel (bisheriges Verfahren).
+  final double n50;
+
+  /// Lüftungsanlage mit Wärmerückgewinnung: Rückwärmezahl 0…1 (0 = keine Anlage).
+  final double wrg;
+
+  /// Aufheizzuschlag f_RH in W/m² (0 = ohne, z. B. 8–12 nach Absenkung).
+  final double aufheiz;
 }
 
 /// Ein Transmissionsposten.
@@ -128,12 +145,13 @@ class HlPosten {
 }
 
 class HlErgebnis {
-  HlErgebnis(this.raum, this.posten, this.lueftung);
+  HlErgebnis(this.raum, this.posten, this.lueftung, {this.aufheiz = 0});
   final HlRaum raum;
   final List<HlPosten> posten;
   final double lueftung;
+  final double aufheiz;
   double get transmission => posten.fold(0, (s, p) => s + p.leistung);
-  double get gesamt => transmission + lueftung;
+  double get gesamt => transmission + lueftung + aufheiz;
   double get proQm => raum.flaeche == 0 ? 0 : gesamt / raum.flaeche;
 }
 
@@ -227,10 +245,24 @@ List<HlErgebnis> heizlastBerechnen(List<HlRaum> raeume, List<HlWand> waende, Lis
       final dT = r.temperatur - p.normAussen;
       l.add(HlPosten('Wärmebrücken pauschal (ΔU ${p.deltaUwb.toStringAsFixed(2)})', aA, p.deltaUwb, dT, aA * p.deltaUwb * dT));
     }
-    final lueftung = 0.34 * r.luftwechsel * r.volumen * (r.temperatur - p.normAussen);
-    ergebnisse.add(HlErgebnis(r, l, lueftung));
+    ergebnisse.add(HlErgebnis(r, l, lueftungsLeistung(r, p), aufheiz: r.flaeche * p.aufheiz));
   }
   return ergebnisse;
+}
+
+/// Lüftungswärmeverlust (W) nach DIN EN 12831-1 (vereinfacht): mit n50 der
+/// größere Wert aus Infiltration (2·V·n50·e, e = 0,02) plus Anlagenluft nach
+/// Wärmerückgewinnung und Mindestluftwechsel; ohne n50 nur Mindestluftwechsel.
+double lueftungsLeistung(HlRaum r, HlParameter p) {
+  final dT = r.temperatur - p.normAussen;
+  final vMin = r.luftwechsel * r.volumen;
+  if (p.n50 <= 0 && p.wrg <= 0) return 0.34 * vMin * dT;
+  final vInf = 2 * r.volumen * p.n50 * 0.02;
+  if (p.wrg > 0) {
+    // Anlage fördert den Mindestluftwechsel, davon bleibt (1 − η) als Verlust
+    return 0.34 * (vInf + vMin * (1 - p.wrg.clamp(0, 0.95))) * dT;
+  }
+  return 0.34 * math.max(vInf, vMin) * dT;
 }
 
 /// Norm-Innentemperatur nach Raumname (DIN/TS 12831-1, Wohngebäude).

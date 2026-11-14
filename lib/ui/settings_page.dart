@@ -247,6 +247,9 @@ class _SettingsPageState extends State<SettingsPage> {
         zahl('Wärmebrückenzuschlag ΔU_WB', 'delta_uwb', p.deltaUwb, 'W/(m²K)', hilfe: '0,05 bei Detailnachweis, 0,10 pauschal'),
         zahl('Vorlauftemperatur', 'vorlauf', vl, '°C', hilfe: 'Auslegung Heizkörper'),
         zahl('Rücklauftemperatur', 'ruecklauf', rl, '°C'),
+        zahl('Luftdichtheit n50', 'n50', p.n50, '1/h', hilfe: '0 = nur Mindestluftwechsel; Bestand 4–6, saniert 1,5–3, Neubau ≤ 1,5'),
+        zahl('Lüftungsanlage: Wärmerückgewinnung', 'wrg', (p.wrg * 100).round(), '%', hilfe: '0 = keine Anlage, sonst z. B. 80'),
+        zahl('Aufheizzuschlag', 'aufheiz', p.aufheiz, 'W/m²', hilfe: '0 = ohne; 8–12 nach Nachtabsenkung'),
       ]),
     ]);
   }

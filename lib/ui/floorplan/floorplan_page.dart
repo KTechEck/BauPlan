@@ -40,6 +40,9 @@ import 'dach_dialog.dart';
 import 'geschoss_3d.dart';
 import 'einbaudetail_page.dart';
 import 'floorplan_painter.dart';
+import 'statik.dart';
+import '../../core/gebaeude.dart';
+import '../../core/leitung_wand.dart' show geschossStapel;
 
 enum Werkzeug { auswahl, wand, raum, oeffnung, mass, winkel }
 
@@ -151,6 +154,98 @@ class _FloorplanPageState extends State<FloorplanPage> {
   final _winkelWertFokus = FocusNode();
   String? _winkelWertFuer;
   bool _eckenVerbinden = true; // Projektvorgabe (gespeichert)
+
+  /// Geschoss darunter im Plan einblenden (Darstellung, je Benutzer).
+  bool get _unterlage => _s.settings.darstellung['geschoss_darunter'] == true;
+
+  /// Geschoss direkt unter dem aktuellen (nach Kürzel/Höhe sortiert) oder null.
+  Geschoss? _geschossDarunter() {
+    final store = _s.store!;
+    final gid = _s.geschossId;
+    if (gid == null) return null;
+    final g = store.geschoss(gid);
+    if (g == null) return null;
+    final stapel = geschossStapel(store.geschosse(g.gebaeudeId));
+    final i = stapel.indexWhere((x) => x.id == gid);
+    return i > 0 ? stapel[i - 1] : null;
+  }
+
+  /// Verknüpfung oben → unten (Wand steht auf Wand), gelöste Paare ausgenommen.
+  Map<String, String> _verknuepfungen(List<Wand> oben, Geschoss unten) {
+    final store = _s.store!;
+    final geloest = {for (final e in (store.einstellung<List>('geschoss_verknuepfung_geloest') ?? const [])) '$e'};
+    WandAchse2 achse(Wand w) => (id: w.id, a: Punkt(w.x1.toDouble(), w.y1.toDouble()), b: Punkt(w.x2.toDouble(), w.y2.toDouble()), dicke: w.dicke);
+    return wandVerknuepfungen([for (final w in oben) achse(w)], [for (final w in store.waende(unten.id)) achse(w)], geloest: geloest);
+  }
+
+  /// Statik-Helfer im Wandpanel: tragend, steht auf Wand darunter, Stürze über Öffnungen.
+  List<Widget> _statikFelder(Wand w) {
+    final store = _s.store!;
+    final tragend = w.eigenschaften['tragend'] == true;
+    final unten = _geschossDarunter();
+    final plan = _plan;
+    final verkn = unten == null || plan == null ? const <String, String>{} : _verknuepfungen(plan.waende, unten);
+    final aufWand = verkn[w.id];
+    final geloest = [for (final e in (store.einstellung<List>('geschoss_verknuepfung_geloest') ?? const [])) '$e'];
+    final eigeneGeloest = geloest.where((e) => e.startsWith('${w.id}|')).toList();
+    final oeff = [for (final o in plan?.oeffnungen ?? const <Oeffnung>[]) if (o.wandId == w.id && o.art != OeffnungsArt.nische) o];
+    return [
+      SwitchListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: const Text('tragende Wand'),
+        subtitle: const Text('Statik-Helfer: Hinweise und Mappe für den Statiker, keine Berechnung', style: TextStyle(fontSize: 11)),
+        value: tragend,
+        onChanged: (v) {
+          final alt = w.eigenschaften['tragend'];
+          store.wandEigenschaftenSetzen(w.id, {'tragend': v ? true : null});
+          _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'tragend': alt}));
+          _s.geaendert();
+        },
+      ),
+      if (unten != null)
+        Row(children: [
+          Icon(aufWand != null ? Icons.link : Icons.link_off, size: 16, color: BsFarben.textLeise),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              aufWand != null
+                  ? 'steht auf einer Wand im ${unten.kuerzel} (automatisch erkannt)'
+                  : eigeneGeloest.isNotEmpty
+                      ? 'Verknüpfung zum ${unten.kuerzel} gelöst'
+                      : 'keine Wand darunter im ${unten.kuerzel}${tragend ? ' – Lastabtragung klären!' : ''}',
+              style: TextStyle(fontSize: 12, color: aufWand == null && tragend && eigeneGeloest.isEmpty ? const Color(0xFFB91C1C) : BsFarben.textLeise),
+            ),
+          ),
+          if (aufWand != null)
+            TextButton(
+              onPressed: () {
+                store.einstellungSetzen('geschoss_verknuepfung_geloest', [...geloest, '${w.id}|$aufWand']);
+                _s.geaendert();
+              },
+              child: const Text('lösen'),
+            ),
+          if (eigeneGeloest.isNotEmpty)
+            TextButton(
+              onPressed: () {
+                store.einstellungSetzen('geschoss_verknuepfung_geloest', [for (final e in geloest) if (!e.startsWith('${w.id}|')) e]);
+                _s.geaendert();
+              },
+              child: const Text('wieder verknüpfen'),
+            ),
+        ]),
+      if (tragend && oeff.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        const Text('Öffnungen in der tragenden Wand (Richtwerte):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        for (final o in oeff)
+          () {
+            final r = sturzRichtwert(o.breite.toDouble(), wanddicke: w.dicke.toDouble());
+            return Text('• ${o.art.label} ${mmText(o.breite)}: Sturz ≥ ${mmText(r.laenge)} (Auflager je ${mmText(r.auflager)}), ${r.art}',
+                style: const TextStyle(fontSize: 12));
+          }(),
+      ],
+    ];
+  }
   bool? _neueVerbinden; // für neu gezeichnete Wände: null = Projektvorgabe
   int _abstandBezug = 0; // 0 Achse, 1 innen, 2 außen
   ui.Image? _vorlageBild;
@@ -2838,6 +2933,11 @@ class _FloorplanPageState extends State<FloorplanPage> {
                     }
                   });
                   _s.settings.speichern();
+                case 'unterlage':
+                  setState(() => _s.settings.darstellung['geschoss_darunter'] = !_unterlage);
+                  _s.settings.speichern();
+                case 'statiker':
+                  statikerMappeErstellen(context, _s);
                 case 'dach':
                   if (_s.geschossId != null) {
                     dachBearbeiten(context, _s.store!, _s.geschossId!, () {
@@ -2866,6 +2966,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
               const PopupMenuItem(value: 'mass_zurueck', child: Text('Maße zurücksetzen')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'dach', child: ListTile(dense: true, leading: Icon(Icons.roofing), title: Text('Dachgeschoss: Dach, Sparren, Kniestock …'))),
+              const PopupMenuDivider(),
+              CheckedPopupMenuItem(value: 'unterlage', checked: _unterlage, child: const Text('Geschoss darunter einblenden (Wände, Verknüpfung)')),
+              const PopupMenuItem(value: 'statiker', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Mappe für den Statiker (PDF) …'))),
             ],
           ),
           IconButton(tooltip: 'Alles zeigen', onPressed: _einpassen, icon: const Icon(Sym.allesZeigen)),
@@ -3184,8 +3287,55 @@ class _FloorplanPageState extends State<FloorplanPage> {
       );
       final dach = _s.geschossId == null ? null : dachLesen(_s.store!, _s.geschossId!);
       final dachRahmen = dach == null || !dach.aktiv ? null : gebaeuderahmen(plan.waende);
+      final unten = _unterlage ? _geschossDarunter() : null;
       return Stack(children: [
-        Positioned.fill(child: zeichnung),
+        if (unten != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ClipRect(
+                child: CustomPaint(
+                  painter: UnterlagePainter(
+                    waende: _s.store!.waende(unten.id),
+                    massstab: _massstab,
+                    verschiebung: _verschiebung,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Positioned.fill(child: Opacity(opacity: unten != null ? 0.92 : 1, child: zeichnung)),
+        if (unten != null)
+          Positioned(
+            right: 12,
+            top: 12,
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text('${unten.kuerzel} darunter gestrichelt · tragende Wände ohne Wand darunter rot',
+                    style: const TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+              ),
+            ),
+          ),
+        if (unten != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ClipRect(
+                child: CustomPaint(
+                  painter: UnterlagePainter(
+                    waende: [
+                      for (final w in plan.waende)
+                        if (w.eigenschaften['tragend'] == true && !_verknuepfungen(plan.waende, unten).containsKey(w.id)) w
+                    ],
+                    massstab: _massstab,
+                    verschiebung: _verschiebung,
+                    warnung: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (dach != null && dachRahmen != null)
           Positioned.fill(
             child: IgnorePointer(
@@ -4125,6 +4275,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
             child: Text('Teilhohe Wand: bildet keine Raumgrenze, im Plan heller mit Höhe gezeichnet.',
                 style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
           ),
+        const SizedBox(height: 12),
+        ..._statikFelder(w),
         const SizedBox(height: 12),
         Text('von (${mmText(w.x1)} | ${mmText(w.y1)})  nach (${mmText(w.x2)} | ${mmText(w.y2)})',
             style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),

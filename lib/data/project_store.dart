@@ -183,6 +183,11 @@ class ProjectStore {
             _objekttypErgaenzen('SA', t.$1, t.$2, t.$3);
           }
         }
+        if (version == 22) {
+          for (final t in wasserTypen) {
+            _objekttypErgaenzen('SA', t.$1, t.$2, t.$3);
+          }
+        }
         version++;
         db.userVersion = version;
         db.execute('COMMIT');

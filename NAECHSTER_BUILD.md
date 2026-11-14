@@ -566,3 +566,19 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   speichert eigenschaften.typenschild (+ leistung_w). Fotos zuordnen: lib/core/foto_zuordnung.dart (Zeitnachbarn ±10 min, KI-Vorschlag),
   lib/ui/fotos/foto_zuordnen_dialog.dart (Fotos › „Zuordnen …“, nur Angehaktes).
 - Tests test/build22_test.dart + Widget-Test Bad-Dialog; 259 Tests grün. Tims PC hat die deutsche Spracherkennung (de-DE) installiert.
+
+## Build 23 (14.11.) – Roadmap 3 (Bauphysik/Gebäude) + 4 (Wasser)
+- lib/core/gebaeude.dart: GEG Anlage 7 (GegBauteil.uMax, gegZusatzDaemmung), Schall (flaechenMasse, schalldaemmmass Massekurve, schallEmpfehlung 47/40 dB),
+  Sonnenschutz (fcSonnenschutz, himmelsrichtung mit Einstellung `norden_grad`, sonneneintrag S), Treppe (treppeAuslegen DIN 18065, gelaenderHinweise LBO),
+  Statik (sturzRichtwert), Geschosse (wandVerknuepfungen, gelöst über Einstellung `geschoss_verknuepfung_geloest` „oben|unten“).
+- Bauphysik: neue Reiter Dämmung GEG, Schall, Sonnenschutz (lib/ui/bauphysik/gebaeude_ansichten.dart, rhoVon). Heizlast: n50-Infiltration, Lüftungsanlage mit WRG,
+  Aufheizzuschlag (HlParameter n50/wrg/aufheiz, lueftungsLeistung; Einstellungen › Standort und Klima).
+- Grundriss: Wand „tragend“ (wand.eigenschaften.tragend, Strich-Punkt auf der Achse), Wandpanel zeigt „steht auf Wand im EG“ (lösen/wieder verknüpfen) und Sturz-Richtwerte;
+  Optionen: „Geschoss darunter einblenden“ (UnterlagePainter gestrichelt, tragende Wände ohne Wand darunter rot) und „Mappe für den Statiker (PDF)“
+  (lib/ui/floorplan/statik.dart → exporte/Mappe Statiker.pdf).
+- Treppe (TR): Kopfhöhe, Geländer optional (Höhe, Stababstand) mit Hinweisen. Brandschutz: CO-Melder-Hinweis nur bei Feuerstätte (KM, eigenschaften.feuerstaette, HZ Gas/Öl/Pellet/Ofen).
+- Wasser: Migration 23 (Sanitär HA Hausanschluss/Wasserzähler, TV Trinkwasserverteiler, WM Wassermelder), lib/core/wasser.dart (DU-Werte, Qww, Nennweite, Gefälle,
+  hausanschluss/Zähler, wassermelderYaml), Dialog lib/ui/installation/wasser_dialog.dart (Installation › „Wasser“: Abwasser je Leitung mit DN/Gefälle/Platz/Grundleitung,
+  Trinkwasser-Spitzendurchfluss, Wassermelder je Raum mit „hier nicht nötig“ (raum.eigenschaften.kein_wassermelder), Hauptventil (AV.eigenschaften.hauptventil),
+  HA-Automation → exporte/home_assistant/wassermelder.yaml).
+- Tests test/build23_test.dart + Widget-Test Wasser/Bauphysik; 265 Tests grün.

@@ -55,6 +55,17 @@ List<PruefHinweis> brandschutzPruefen(ProjectStore store, Geschoss g, List<Raum>
           text: '${g.kuerzel} ${r.name}: ${flaeche.toStringAsFixed(0)} m² – ein Rauchwarnmelder überwacht höchstens 60 m².',
           objektId: rauch.first.id));
     }
+    // CO-Melder nur, wo eine Feuerstätte steht (Kamin, Ofen, Gas-/Öl-/Pelletkessel, Therme)
+    final feuer = objekte.any((o) =>
+        o.punkte.isNotEmpty &&
+        (o.raumId == r.id || punktInPolygon(o.punkte.first, r.umriss!)) &&
+        (typen[o.typId]?.kuerzel == 'KM' ||
+            o.eigenschaften['feuerstaette'] == true ||
+            (typen[o.typId]?.kuerzel == 'HZ' && RegExp(r'gas|öl|oel|pellet|kamin|ofen|therme|holz').hasMatch('${o.eigenschaften['bezeichnung'] ?? ''} ${o.kennung}'.toLowerCase()))));
+    final co = drin.where((o) => typen[o.typId]?.kuerzel == 'CM').toList();
+    if (feuer && co.isEmpty) {
+      h.add(PruefHinweis(bereich: 'Brandschutz', text: '${g.kuerzel} ${r.name}: Feuerstätte im Raum – CO-Melder empfohlen.'));
+    }
     if (RegExp(r'küche|bad|dusch|wc').hasMatch(r.name.toLowerCase()) && rauch.isNotEmpty) {
       h.add(PruefHinweis(
           bereich: 'Brandschutz',

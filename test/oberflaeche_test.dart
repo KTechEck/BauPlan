@@ -13,6 +13,7 @@ import 'package:bauspur/ui/kosten/kosten_page.dart';
 import 'package:bauspur/ui/wandansicht/wandansicht_page.dart';
 import 'package:bauspur/core/height.dart';
 import 'package:bauspur/ui/bauteile/bauteile_page.dart';
+import 'package:bauspur/ui/bauphysik/bauphysik_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -194,6 +195,29 @@ void main() {
     expect(find.textContaining('Dichtband'), findsOneWidget);
     await tester.tap(find.text('Schließen'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Installation: Wasser-Dialog und Bauphysik-Reiter GEG/Schall/Sonnenschutz öffnen', (tester) async {
+    await zeigen(tester, () => InstallationPage(state: state));
+    await tester.tap(find.byIcon(Icons.water_drop_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Abwasser'), findsOneWidget);
+    await tester.tap(find.text('Trinkwasser'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Spitzendurchfluss'), findsWidgets);
+    await tester.tap(find.text('Wassermelder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    await zeigen(tester, () => BauphysikPage(state: state));
+    for (final t in ['Dämmung GEG', 'Schall', 'Sonnenschutz']) {
+      await tester.ensureVisible(find.text(t));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(t));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: t);
+    }
+    expect(find.textContaining('Sonneneintragskennwert'), findsOneWidget);
   });
 
   testWidgets('Fotos: Modul öffnet mit leerer Galerie', (tester) async {

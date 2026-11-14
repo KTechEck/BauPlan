@@ -14,6 +14,7 @@ import '../../state/app_state.dart';
 import '../widgets.dart';
 import '../floorplan/dach_dialog.dart' show dachLesen;
 import '../../core/dach.dart' show uDach, dachflaecheUeber;
+import 'gebaeude_ansichten.dart';
 import 'oberflaechen_ansicht.dart';
 
 /// λ eines Baustoffs: hinterlegt oder Richtwert.
@@ -23,7 +24,15 @@ double lambdaVon(Baustoff m) => (m.eigenschaften['lambda'] as num?)?.toDouble() 
 HlParameter heizlastParameter(ProjectStore store) {
   final m = store.einstellung<Map>('heizlast') ?? const {};
   double z(String k, double v) => (m[k] as num?)?.toDouble() ?? v;
-  return HlParameter(normAussen: z('theta_e', -12), jahresmittel: z('theta_m', 9), unbeheizt: z('unbeheizt', 5), deltaUwb: z('delta_uwb', 0.05));
+  return HlParameter(
+    normAussen: z('theta_e', -12),
+    jahresmittel: z('theta_m', 9),
+    unbeheizt: z('unbeheizt', 5),
+    deltaUwb: z('delta_uwb', 0.05),
+    n50: z('n50', 0),
+    wrg: z('wrg', 0) > 1 ? z('wrg', 0) / 100 : z('wrg', 0),
+    aufheiz: z('aufheiz', 0),
+  );
 }
 
 (double, double) systemTemperaturen(ProjectStore store) {
@@ -53,7 +62,7 @@ class _BauphysikPageState extends State<BauphysikPage> {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: BsFarben.rand))),
-        child: Row(children: [
+        child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
           SegmentedButton<int>(
             showSelectedIcon: false,
             segments: const [
@@ -61,17 +70,23 @@ class _BauphysikPageState extends State<BauphysikPage> {
               ButtonSegment(value: 1, label: Text('Boden- und Deckenaufbauten')),
               ButtonSegment(value: 2, label: Text('Baustoffkennwerte')),
               ButtonSegment(value: 3, label: Text('Oberflächen')),
+              ButtonSegment(value: 4, label: Text('Dämmung GEG')),
+              ButtonSegment(value: 5, label: Text('Schall')),
+              ButtonSegment(value: 6, label: Text('Sonnenschutz')),
             ],
             selected: {_tab},
             onSelectionChanged: (v) => setState(() => _tab = v.first),
           ),
-        ]),
+        ])),
       ),
       Expanded(
         child: switch (_tab) {
           0 => HeizlastAnsicht(state: widget.state),
           1 => AufbautenAnsicht(state: widget.state),
           3 => OberflaechenAnsicht(state: widget.state),
+          4 => GegAnsicht(state: widget.state),
+          5 => SchallAnsicht(state: widget.state),
+          6 => SonnenschutzAnsicht(state: widget.state),
           _ => _BaustoffAnsicht(state: widget.state),
         },
       ),
@@ -218,7 +233,8 @@ class _HeizlastAnsichtState extends State<HeizlastAnsicht> {
               items: [for (final x in geschosse) DropdownMenuItem(value: x.id, child: Text('${x.kuerzel} · ${x.name}'))],
               onChanged: (v) => v == null ? null : _s.geschossWaehlen(v),
             ),
-            Text('θe ${p.normAussen.toStringAsFixed(0)} °C · θm,e ${p.jahresmittel.toStringAsFixed(0)} °C · ΔU_WB ${p.deltaUwb.toStringAsFixed(2)} · System $vl/$rl °C',
+            Text('θe ${p.normAussen.toStringAsFixed(0)} °C · θm,e ${p.jahresmittel.toStringAsFixed(0)} °C · ΔU_WB ${p.deltaUwb.toStringAsFixed(2)}'
+                '${p.n50 > 0 ? ' · n50 ${p.n50.toStringAsFixed(1)}' : ''}${p.wrg > 0 ? ' · WRG ${(p.wrg * 100).round()} %' : ''}${p.aufheiz > 0 ? ' · Aufheizen ${p.aufheiz.round()} W/m²' : ''} · System $vl/$rl °C',
                 style: const TextStyle(color: BsFarben.textLeise)),
             TextButton(onPressed: () => _s.modulWaehlen(Modul.einstellungen), child: const Text('ändern (Einstellungen → Standort und Klima)')),
           ]),
@@ -281,8 +297,8 @@ class _HeizlastAnsichtState extends State<HeizlastAnsicht> {
           ),
           const SizedBox(height: 8),
           const Text(
-              'Vereinfachtes Verfahren nach DIN EN 12831-1: Innenmaße, pauschaler Wärmebrückenzuschlag, Mindestluftwechsel, '
-              'ohne Aufheizzuschlag. U-Werte aus Wandtypen, Aufbauten und Fenster-/Türdaten der Bibliothek (Ψ aus dem Einbaudetail, wenn berechnet). '
+              'Vereinfachtes Verfahren nach DIN EN 12831-1: Innenmaße, pauschaler Wärmebrückenzuschlag, Lüftung aus Mindestluftwechsel '
+              'bzw. Infiltration (n50) und Lüftungsanlage mit Wärmerückgewinnung, Aufheizzuschlag optional (Einstellungen → Standort und Klima). U-Werte aus Wandtypen, Aufbauten und Fenster-/Türdaten der Bibliothek (Ψ aus dem Einbaudetail, wenn berechnet). '
               'Für Förderanträge und die Auslegung der Wärmepumpe eine normgerechte Heizlastberechnung durch Fachplaner.',
               style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
         ]),
