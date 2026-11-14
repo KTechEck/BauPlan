@@ -41,6 +41,7 @@ import '../bauteile/bauelement_wahl.dart';
 import 'bad_dialog.dart';
 import 'typenschild_dialog.dart';
 import 'wasser_dialog.dart';
+import '../../core/rack.dart' show dosePort;
 import 'heizkreise_dialog.dart';
 import '../../core/bad.dart' show badObjektMasse;
 import '../../core/gebaeude.dart' show treppeAuslegen, gelaenderHinweise;
@@ -2341,6 +2342,86 @@ class _InstallationPageState extends State<InstallationPage> {
     ];
   }
 
+  /// Reserve (UP-Dose, Leerrohr), Leerrohr-Ziel, Port der Netzwerkdose, Kamera-/Melderbereich, Zutritt.
+  List<Widget> _netzFelder(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
+    final k = d.typen[o.typId]?.kuerzel;
+    final store = _s.store!;
+    void setzen(Map<String, Object?> w) {
+      final neu = {...o.eigenschaften, ...w}..removeWhere((k, v) => v == null);
+      aendern({'eigenschaften': jsonEncode(neu)});
+    }
+
+    Widget zahl(String key, String label, num vorgabe, String einheit) => SizedBox(
+          width: 110,
+          child: SpeicherFeld(
+            key: ValueKey('nf-$key-${o.id}-${o.eigenschaften[key]}'),
+            initialValue: '${o.eigenschaften[key] ?? vorgabe}',
+            decoration: InputDecoration(labelText: label, suffixText: einheit, isDense: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]'))],
+            onFieldSubmitted: (t) => setzen({key: int.tryParse(t)}),
+          ),
+        );
+    final w = <Widget>[];
+    if (const {'DO', 'LR', 'SD', 'ND'}.contains(k)) {
+      w.add(SwitchListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Reserve (verputzt, für später)'),
+        subtitle: const Text('wird dokumentiert, braucht keinen Stromkreis', style: TextStyle(fontSize: 11)),
+        value: o.eigenschaften['reserve'] == true,
+        onChanged: (v) => setzen({'reserve': v ? true : null}),
+      ));
+    }
+    if (k == 'LR') {
+      final schraenke = store.schraenke();
+      w.add(DropdownButtonFormField<String?>(
+        key: ValueKey('lrz-${o.id}-${o.eigenschaften['ziel_schrank']}'),
+        initialValue: schraenke.any((s) => s.id == o.eigenschaften['ziel_schrank']) ? o.eigenschaften['ziel_schrank'] as String : null,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Leerrohr führt zum Verteiler', isDense: true),
+        items: [const DropdownMenuItem(value: null, child: Text('–')), for (final s in schraenke) DropdownMenuItem(value: s.id, child: Text('${s.kennzeichen} ${s.name}'))],
+        onChanged: (v) => setzen({'ziel_schrank': v}),
+      ));
+    }
+    if (k == 'ND' || k == 'AP') {
+      final port = dosePort(store, o.id);
+      w.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(children: [
+          const Icon(Icons.settings_ethernet, size: 16, color: BsFarben.textLeise),
+          const SizedBox(width: 6),
+          Text(port == null ? 'noch keinem Patchfeld-Port zugeordnet (Verteiler › Netzwerkschrank)' : 'aufgelegt auf $port', style: const TextStyle(fontSize: 12)),
+        ]),
+      ));
+    }
+    if (k == 'KA' || k == 'BM') {
+      w.addAll([
+        const SizedBox(height: 8),
+        Text(k == 'KA' ? 'Kamera: Erfassungsbereich' : 'Bewegungsmelder (Wand): Erfassungsbereich', style: Theme.of(context).textTheme.titleSmall),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          zahl('winkel', 'Winkel', k == 'KA' ? 90 : 180, '°'),
+          zahl('reichweite', 'Reichweite', k == 'KA' ? 10 : 12, 'm'),
+          zahl('drehung', 'Blickrichtung', 0, '°'),
+        ]),
+        const Text('Blickrichtung 0° = rechts, 90° = oben; ohne Angabe schaut das Gerät von der Wand in den Raum. Werte aus dem Datenblatt übernehmen.',
+            style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+      ]);
+    }
+    if (k == 'ZU' || k == 'TS') {
+      final hatOeffner = d.objekte.any((x) => d.typen[x.typId]?.kuerzel == 'TO' && x.punkte.isNotEmpty && (x.punkte.first - o.punkte.first).laenge < 3000);
+      w.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          hatOeffner
+              ? 'Türöffner/Motorschloss in der Nähe ✓ – Leitung zum Verteiler/Steuergerät planen.'
+              : 'Kein Türöffner/Motorschloss (Elektro › Türöffner) in der Nähe – für Zutritt nötig.',
+          style: TextStyle(fontSize: 12, color: hatOeffner ? BsFarben.textLeise : const Color(0xFFB45309)),
+        ),
+      ));
+    }
+    return w;
+  }
+
   /// Dusche/Wanne: bodengleich, Brause, Abdichtungshöhe; WC/Waschtisch: Maße.
   List<Widget> _badFelder(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
     final k = d.typen[o.typId]?.kuerzel;
@@ -2787,6 +2868,7 @@ class _InstallationPageState extends State<InstallationPage> {
       ..._geschossuebergreifend(o, d, aendern),
       ..._revisionFelder(o, d, aendern),
       ..._badFelder(o, d, aendern),
+      ..._netzFelder(o, d, aendern),
       if (d.typen[o.typId]?.geometrie == Geometrieart.punkt) ...[
         const SizedBox(height: 8),
         Row(children: [
@@ -3130,6 +3212,23 @@ class ObjektPainter extends CustomPainter {
                 ..strokeWidth = 1.5);
             }
           }
+          // Kamera / Bewegungsmelder: Erfassungsbereich als Kreissektor
+          if ((typ?.kuerzel == 'KA' || typ?.kuerzel == 'BM') && (typ?.kuerzel == 'KA' || o.eigenschaften['reichweite'] != null)) {
+            final winkel = ((o.eigenschaften['winkel'] as num?) ?? (typ?.kuerzel == 'KA' ? 90 : 180)).toDouble();
+            final weite = ((o.eigenschaften['reichweite'] as num?) ?? (typ?.kuerzel == 'KA' ? 10 : 12)).toDouble() * 1000 * massstab;
+            final dreh = o.eigenschaften['drehung'] is num
+                ? -((o.eigenschaften['drehung'] as num).toDouble()) * math.pi / 180
+                : math.atan2(-richtung.dy, -richtung.dx);
+            final sektor = Path()
+              ..moveTo(c.dx, c.dy)
+              ..arcTo(Rect.fromCircle(center: c, radius: weite), dreh - winkel * math.pi / 360, winkel * math.pi / 180, false)
+              ..close();
+            canvas.drawPath(sektor, Paint()..color = farbe.withValues(alpha: 0.08));
+            canvas.drawPath(sektor, Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 0.8
+              ..color = farbe.withValues(alpha: 0.5));
+          }
           // Reale Grundfläche des Produkts (z. B. WC, Waschtisch, Heizkörper), an der Wand ausgerichtet
           final am = abmasse[o.id];
           if (am != null && am.$1 * massstab > 6) {
@@ -3151,6 +3250,7 @@ class ObjektPainter extends CustomPainter {
           }
           geraetSymbol(canvas, mitte, rad, _beschriftung == 'keiner' ? '' : (typ?.kuerzel ?? '?'), farbe,
               richtung: richtung, deckkraft: _deckkraft, quadrat: _quadrat);
+          if (o.eigenschaften['reserve'] == true) _text(canvas, 'Reserve', mitte + Offset(-rad, rad + 2), farbe, groesse: 9);
           if (gewaehlt) {
             canvas.drawCircle(mitte, rad + 4, Paint()
               ..style = PaintingStyle.stroke

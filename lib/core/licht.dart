@@ -182,3 +182,22 @@ List<Punkt> nichtErfasst(List<Punkt> umriss, List<(Punkt, double)> melder, {doub
   }
   return frei;
 }
+
+/// Spannungsfall der Zuleitung vom Netzteil zum Streifen (Kleinspannung):
+/// ΔU% = 2·L·I/(56·A)/U·100. Liefert % und den kleinsten Querschnitt für ≤ [max] %.
+({double prozent, double empfohlen}) ledZuleitung(double leistungW, String spannung, double laengeM, double querschnitt, {double max = 3}) {
+  final u = double.tryParse(spannung.split(' ').first) ?? 24;
+  if (u >= 230 || leistungW <= 0 || laengeM <= 0) return (prozent: 0, empfohlen: querschnitt);
+  final i = leistungW / u;
+  double du(double a) => 2 * laengeM * i / (56 * a) / u * 100;
+  const reihe = [0.5, 0.75, 1.0, 1.5, 2.5, 4.0, 6.0, 10.0];
+  final empf = reihe.firstWhere((a) => du(a) <= max, orElse: () => reihe.last);
+  return (prozent: du(querschnitt), empfohlen: empf);
+}
+
+/// Spannungsfall auf dem Streifen selbst grob nach Einspeisung: einseitig voll,
+/// beidseitig/mittig etwa ein Viertel der Länge wirksam.
+double ledStreifenWirksam(double laengeMm, String einspeisung) => switch (einspeisung) {
+      'beidseitig' || 'mittig' => laengeMm / 2,
+      _ => laengeMm,
+    };

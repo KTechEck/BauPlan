@@ -24,6 +24,9 @@ import '../../core/ha_live.dart';
 import '../floorplan/floorplan_painter.dart' show abstandZuStrecke;
 import '../widgets.dart';
 import 'auslegung_page.dart';
+import 'pruefung_ansicht.dart';
+import 'rack_ansicht.dart';
+import '../../core/elektro.dart' show plankopfZeile;
 import 'ets_abgleich_page.dart';
 import 'ha_live_page.dart';
 import 'stromlaufplan_ansicht.dart';
@@ -449,14 +452,16 @@ class _SchrankPageState extends State<SchrankPage> {
         child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
           SegmentedButton<int>(
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 0, label: Text('Schrank')),
-              ButtonSegment(value: 4, label: Text('Verdrahtung')),
-              ButtonSegment(value: 1, label: Text('Stromkreise')),
-              ButtonSegment(value: 2, label: Text('Übersichtsschaltbild')),
-              ButtonSegment(value: 6, label: Text('Stromlaufplan')),
-              ButtonSegment(value: 3, label: Text('Beschriftung')),
-              ButtonSegment(value: 5, label: Text('KNX / Home Assistant')),
+            segments: [
+              const ButtonSegment(value: 0, label: Text('Schrank')),
+              const ButtonSegment(value: 4, label: Text('Verdrahtung')),
+              const ButtonSegment(value: 1, label: Text('Stromkreise')),
+              const ButtonSegment(value: 2, label: Text('Übersichtsschaltbild')),
+              const ButtonSegment(value: 6, label: Text('Stromlaufplan')),
+              const ButtonSegment(value: 3, label: Text('Beschriftung')),
+              const ButtonSegment(value: 5, label: Text('KNX / Home Assistant')),
+              const ButtonSegment(value: 7, label: Text('Prüfung')),
+              if (s.art == SchrankArt.netzwerk) const ButtonSegment(value: 8, label: Text('Rack 19″')),
             ],
             selected: {_ansicht},
             onSelectionChanged: (v) => setState(() => _ansicht = v.first),
@@ -547,6 +552,8 @@ class _SchrankPageState extends State<SchrankPage> {
           3 => _beschriftungVorschau(s, geraete, kreise),
           5 => _knxAnsicht(),
           6 => StromlaufplanAnsicht(key: ValueKey('slp-${s.id}'), plan: _stromlaufplan(s, geraete, kreise)),
+          7 => ElektroPruefungAnsicht(key: ValueKey('pr-${s.id}'), state: _s, schrank: s),
+          8 when s.art == SchrankArt.netzwerk => RackAnsicht(key: ValueKey('rack-${s.id}'), state: _s, schrank: s, patchfeld: _patchfeld(s)),
           _ => _verdrahtungAnsicht(s, geraete, kreise),
         },
       ),
@@ -2071,7 +2078,7 @@ class _SchrankPageState extends State<SchrankPage> {
         knxKanal: o.eigenschaften['knx_kanal'] as String?,
       ));
     }
-    return stromlaufplanErzeugen(schrank: s, geraete: geraete, kreise: kreise, verbraucher: vb, projekt: p.basename(store.ordner));
+    return stromlaufplanErzeugen(schrank: s, geraete: geraete, kreise: kreise, verbraucher: vb, projekt: plankopfZeile(store, p.basename(store.ordner)));
   }
 
   Future<void> _stromlaufplanPdf(Schrank s, List<SchrankGeraet> geraete, List<Stromkreis> kreise) async {

@@ -23,6 +23,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('LB', 'LED-Streifen / Lichtband', 'linie'),
     ('KK', 'Kabelkanal / Brüstungskanal', 'linie'),
     ('SR', 'Steigleitung Elektro (über Geschosse)', 'punkt'),
+    ('TO', 'Türöffner / Motorschloss', 'punkt'),
   ]),
   GewerkVorlage('KX', 'KNX / Smart Home', 0xFF2F9E44, 'dashed', false, [
     ('KX', 'KNX-Gerät', 'punkt'),
@@ -37,6 +38,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('NK', 'Netzwerkkabel', 'linie'),
     ('AP', 'Access Point / Kamera', 'punkt'),
     ('KK', 'Kabelkanal / Kabelrinne', 'linie'),
+    ...sicherheitTypenNw,
   ]),
   GewerkVorlage('SA', 'Sanitär', 0xFF1C7ED6, 'solid', true, [
     ('KW', 'Kaltwasserleitung', 'linie'),
@@ -160,4 +162,11 @@ const wasserTypen = [
   ('HA', 'Hausanschluss / Wasserzähler', 'punkt'),
   ('TV', 'Trinkwasserverteiler', 'punkt'),
   ('WM', 'Wassermelder', 'punkt'),
+];
+
+/// Kamera und Zutritt (Gewerk Netzwerk, Migration 24).
+const sicherheitTypenNw = [
+  ('KA', 'Kamera', 'punkt'),
+  ('ZU', 'Zutrittsleser (Fingerprint, Code, RFID)', 'punkt'),
+  ('TS', 'Türsprechstelle / Klingel', 'punkt'),
 ];

@@ -582,3 +582,17 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Trinkwasser-Spitzendurchfluss, Wassermelder je Raum mit „hier nicht nötig“ (raum.eigenschaften.kein_wassermelder), Hauptventil (AV.eigenschaften.hauptventil),
   HA-Automation → exporte/home_assistant/wassermelder.yaml).
 - Tests test/build23_test.dart + Widget-Test Wasser/Bauphysik; 265 Tests grün.
+
+## Build 24 (14.11.) – Roadmap 5 (Elektro, Netzwerk, Sicherheit)
+- lib/core/elektro.dart: Plankopf (Einstellung `plankopf`: ersteller, firma, revision, adresse; plankopfZeile im Stromlaufplan-Schriftfeld), phasenlast je
+  Außenleiter + schieflastHinweis (4,6 kVA), elektroPruefen (Kreis ohne Schutzorgan, ohne RCD, ÜSS fehlt, < 20 % Reserve, Auslegung, Schieflast),
+  elektroCheckliste (Einstellung `elektro_pruefung`), verdrahtungsabgleich (Objekte ohne/mit gelöschtem Stromkreis, Kreise ohne Verbraucher),
+  DIN 18015-2 ausstattungSoll/ausstattungIst (Einstellung `ausstattungswert` 1–3).
+- Verteiler: Ansicht „Prüfung“ (lib/ui/verteiler/pruefung_ansicht.dart), Netzwerkschrank: Ansicht „Rack 19″“ (lib/core/rack.dart, lib/ui/verteiler/rack_ansicht.dart;
+  schrank.eigenschaften rack/rack_he, rackPruefen, dosePort) mit Patchfeld daneben.
+- LED-Streifen (Decke): Einspeisung einseitig/beidseitig/mittig, Zuleitung Netzteil→Streifen mit Spannungsfall und Querschnittsvorschlag (ledZuleitung),
+  Netzteil-Ort mit Hinweis bei „Zwischendecke ohne Öffnung“. _zahlFeld nimmt Kommazahlen, wenn die Vorgabe double ist.
+- Installation: Reserve (DO/LR/SD/ND, „verputzt, für später“, im Plan beschriftet, zählt nicht im Abgleich), Leerrohr-Ziel `ziel_schrank`, Netzwerkdose zeigt
+  ihren Patchfeld-Port, Kamera/Bewegungsmelder mit Erfassungssektor (winkel, reichweite, drehung), Zutritt (ZU/TS) prüft Türöffner in der Nähe.
+- Migration 24: NW KA Kamera, ZU Zutrittsleser, TS Türsprechstelle; EL TO Türöffner/Motorschloss.
+- Tests test/build24_test.dart; 269 Tests grün.

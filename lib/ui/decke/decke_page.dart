@@ -520,10 +520,10 @@ class _DeckePageState extends State<DeckePage> {
 
   Widget _zahlFeld(Objekt o, String schluessel, String label, num vorgabe, {String? einheit}) => SpeicherFeld(
         key: ValueKey('$schluessel-${o.id}-${o.eigenschaften[schluessel]}'),
-        initialValue: '${o.eigenschaften[schluessel] ?? vorgabe}',
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
+        initialValue: '${o.eigenschaften[schluessel] ?? vorgabe}'.replaceAll('.', ','),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(vorgabe is double ? r'[0-9,.]' : r'[0-9]'))],
         decoration: InputDecoration(labelText: label, suffixText: einheit),
-        onFieldSubmitted: (v) => _eigAendern(o, {schluessel: int.tryParse(v) ?? vorgabe}),
+        onFieldSubmitted: (v) => _eigAendern(o, {schluessel: vorgabe is double ? (double.tryParse(v.replaceAll(',', '.')) ?? vorgabe) : (int.tryParse(v) ?? vorgabe)}),
       );
 
   /// Leuchte: Lichtstrom, Abstrahlwinkel, Lichtfarbe, Leistung, dimmbar.
@@ -553,7 +553,11 @@ class _DeckePageState extends State<DeckePage> {
   List<Widget> _ledFelder(Objekt o) {
     final spannung = o.eigenschaften['spannung'] as String? ?? '24 V';
     final wpm = (o.eigenschaften['w_pro_m'] as num?)?.toDouble() ?? 10;
-    final p = ledPruefung(o.laenge, wpm, spannung);
+    final einspeisung = o.eigenschaften['einspeisung'] as String? ?? 'einseitig';
+    final p = ledPruefung(ledStreifenWirksam(o.laenge, einspeisung), wpm, spannung);
+    final leistung = o.laenge / 1000 * wpm;
+    final zl = ledZuleitung(leistung, spannung, ((o.eigenschaften['zuleitung_m'] as num?) ?? 0).toDouble(), ((o.eigenschaften['zuleitung_qs'] as num?) ?? 1.5).toDouble());
+    final ort = o.eigenschaften['netzteil_ort'] as String? ?? 'Revisionsöffnung';
     return [
       const SizedBox(height: 8),
       Text('Länge ${meterText(o.laenge)}'),
@@ -584,8 +588,37 @@ class _DeckePageState extends State<DeckePage> {
         onChanged: (v) => _eigAendern(o, {'kanaele': v}),
       ),
       const SizedBox(height: 8),
-      Text('Leistung ${p.leistung.toStringAsFixed(0)} W → Netzteil ${p.netzteil} W (20 % Reserve), ${p.einspeisungen} Einspeisung(en)'),
-      for (final h in p.hinweise) Text('• $h', style: const TextStyle(fontSize: 12, color: Color(0xFFB45309))),
+      DropdownButtonFormField<String>(
+        key: ValueKey('ein-${o.id}-$einspeisung'),
+        initialValue: einspeisung,
+        decoration: const InputDecoration(labelText: 'Einspeisung'),
+        items: [for (final s in const ['einseitig', 'beidseitig', 'mittig']) DropdownMenuItem(value: s, child: Text(s))],
+        onChanged: (v) => _eigAendern(o, {'einspeisung': v}),
+      ),
+      if (spannung != '230 V') ...[
+        Row(children: [
+          Expanded(child: _zahlFeld(o, 'zuleitung_m', 'Zuleitung Netzteil → Streifen', 0, einheit: 'm')),
+          const SizedBox(width: 8),
+          Expanded(child: _zahlFeld(o, 'zuleitung_qs', 'Querschnitt', 1.5, einheit: 'mm²')),
+        ]),
+        DropdownButtonFormField<String>(
+          key: ValueKey('nto-${o.id}-$ort'),
+          initialValue: ort,
+          decoration: const InputDecoration(labelText: 'Netzteil sitzt'),
+          items: [for (final s in const ['Revisionsöffnung', 'Verteiler', 'Schaltschrank / Technik', 'Zwischendecke ohne Öffnung']) DropdownMenuItem(value: s, child: Text(s))],
+          onChanged: (v) => _eigAendern(o, {'netzteil_ort': v}),
+        ),
+      ],
+      const SizedBox(height: 8),
+      Text('Leistung ${leistung.toStringAsFixed(0)} W → Netzteil ${p.netzteil} W (20 % Reserve), ${p.einspeisungen} Einspeisung(en) bei „$einspeisung“'),
+      if (spannung != '230 V' && zl.prozent > 0)
+        Text('Zuleitung: Spannungsfall ${zl.prozent.toStringAsFixed(1).replaceAll('.', ',')} %${zl.prozent > 3 ? ' – zu hoch, mindestens ${zl.empfohlen.toString().replaceAll('.', ',')} mm²' : ''}',
+            style: TextStyle(fontSize: 12, color: zl.prozent > 3 ? const Color(0xFFB45309) : null)),
+      for (final h in [
+        ...p.hinweise.where((h) => !h.startsWith('Netzteil zugänglich')),
+        if (spannung != '230 V' && ort == 'Zwischendecke ohne Öffnung') 'Netzteil muss zugänglich bleiben – Revisionsöffnung vorsehen (Typ Revisionsöffnung).',
+      ])
+        Text('• $h', style: const TextStyle(fontSize: 12, color: Color(0xFFB45309))),
     ];
   }
 

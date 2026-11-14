@@ -403,4 +403,6 @@ const List<List<String>> migrationen = [
   ["ALTER TABLE wand ADD COLUMN eigenschaften TEXT NOT NULL DEFAULT '{}'"],
   // Version 23 – Trinkwasser-Hausanschluss, Trinkwasserverteiler, Wassermelder (Sanitär; Startbestand in _migrieren)
   [],
+  // Version 24 – Kamera, Zutrittsleser, Türsprechstelle (Netzwerk), Türöffner/Motorschloss (Elektro; Startbestand in _migrieren)
+  [],
 ];
