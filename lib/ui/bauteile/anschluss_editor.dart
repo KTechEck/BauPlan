@@ -171,7 +171,7 @@ class _AnschlussEditorState extends State<AnschlussEditor> {
       ),
       const SizedBox(height: 8),
       SizedBox(
-        height: 360,
+        height: 460,
         child: LayoutBuilder(builder: (context, c) {
           const rand = 56.0;
           final gesamtB = b + 2 * freiraum.seite, gesamtH = h + freiraum.oben + freiraum.unten;
@@ -259,7 +259,7 @@ class _AnschlussEditorState extends State<AnschlussEditor> {
     ]);
   }
 
-  Widget _zahl(String schluessel, String label, int wert, void Function(int) setzen, {String suffix = 'mm', double breite = 92}) => SizedBox(
+  Widget _zahl(String schluessel, String label, int wert, void Function(int) setzen, {String suffix = 'mm', double breite = 112}) => SizedBox(
         width: breite,
         child: TextFormField(
           key: ValueKey('${widget.element.id}-$schluessel-$wert'),
@@ -454,7 +454,7 @@ class _GeraetPainter extends CustomPainter {
     canvas.rotate(-math.pi / 2);
     _massLinie(canvas, Offset(-r.height / 2, 0), Offset(r.height / 2, 0), '$h mm', farbe: const Color(0xFF495057));
     canvas.restore();
-    if (einbauhoehe > 0) _text(canvas, 'Einbau: Mitte $einbauhoehe mm über FFB', Offset(r.center.dx, r.top - 12), groesse: 10);
+    if (einbauhoehe > 0) _text(canvas, 'Einbau: Mitte $einbauhoehe mm über FFB', Offset(r.center.dx, r.bottom + 38 + freiUnten * m), groesse: 10);
     // Bohrlöcher
     for (var i = 0; i < bohrungen.length; i++) {
       final w = wahl != null && wahl!.bohrung && wahl!.index == i;

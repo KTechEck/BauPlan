@@ -10,6 +10,8 @@ import '../../app/theme.dart';
 import '../../data/models.dart';
 import '../../data/tagebuch_models.dart';
 import '../../state/app_state.dart';
+import '../../core/wartung.dart';
+import '../widgets.dart' show zeigeHinweis;
 
 String datumText(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
 
@@ -46,6 +48,33 @@ class _TagebuchPageState extends State<TagebuchPage> {
   Future<DateTime?> _datum(DateTime start) =>
       showDatePicker(context: context, initialDate: start, firstDate: DateTime(2000), lastDate: DateTime(2100));
 
+  /// Wiederkehrende Wartungsaufgaben für alle Geräte mit Wartungsintervall anlegen.
+  void _wartungsplan() {
+    final store = _s.store!;
+    final vorhanden = store.aufgaben().map((a) => a.beschreibung).join('|');
+    final posten = wartungsPosten(store.alleObjekte(), (id) {
+      final e = _s.bibliothek.fuerProjekt(store, id);
+      return e == null ? null : (name: e.anzeige, daten: e.daten);
+    });
+    var n = 0;
+    for (final p in posten) {
+      if (vorhanden.contains(wartungsMarker(p.objekt.id))) continue;
+      store.aufgabeAnlegen(
+        titel: 'Wartung ${p.objekt.kennung}: ${p.geraet}',
+        beschreibung: 'Alle ${p.monate} Monate laut Gerätedaten. ${wartungsMarker(p.objekt.id)}',
+        raumId: p.objekt.raumId,
+        faellig: DateTime.now().add(Duration(days: p.monate * 30)),
+        intervallTage: p.monate * 30,
+      );
+      n++;
+    }
+    _s.geaendert();
+    setState(() {});
+    zeigeHinweis(context, posten.isEmpty
+        ? 'Kein Gerät mit Wartungsintervall – in der Bibliothek beim Gerät „Wartungsintervall“ eintragen.'
+        : '$n Wartungsaufgabe(n) angelegt, ${posten.length - n} gab es schon.');
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -75,6 +104,11 @@ class _TagebuchPageState extends State<TagebuchPage> {
                 if (_ansicht == 1) ...[
                   FilledButton.icon(onPressed: () => _aufgabeDialog(), icon: const Icon(Sym.hinzufuegen), label: const Text('Aufgabe')),
                   FilterChip(label: const Text('erledigte zeigen'), selected: _erledigteZeigen, onSelected: (v) => setState(() => _erledigteZeigen = v)),
+                  OutlinedButton.icon(
+                    onPressed: _wartungsplan,
+                    icon: const Icon(Icons.build_circle_outlined, size: 18),
+                    label: const Text('Wartungsplan aus Geräten'),
+                  ),
                 ],
                 if (_ansicht == 2) FilledButton.icon(onPressed: () => _pruefDialog(), icon: const Icon(Sym.hinzufuegen), label: const Text('Protokoll')),
               ]),

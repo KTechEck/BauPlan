@@ -500,3 +500,15 @@ Offen: PC-Grundriss Maße je Zoom ein-/ausblenden; Tims Projekt nach Build 14/15
       2. Heizung + hydraulischer Abgleich (Heizkreise, Durchfluss, Ventilvoreinstellung), Heizkreise um Sperrflächen, Anbindeleitungen gebündelt.
       3. Home Assistant live, Revisionsöffnungen, Rollen (Eigentümer / Mitarbeit / Gast).
       Danach EIN Build (flutter clean), alles prüfen.
+
+## Build 18 (in Arbeit, NICHT gebaut – Stand 14.11. mittags, Nutzungslimit)
+Fertig: Kabelkanäle Typ KK (EL/NW) + Montageschiene MS (Migration 21), lib/core/kanal_montage.dart (Formteile Innen-/Außenecke, Flachwinkel,
+Endkappe, Abzweig, Stoßstellen; Füllgrad; befestigungsabstand/schellenAnzahl/schienenHalter), lib/ui/installation/kanal_felder.dart (Kanal-, Schienen-,
+Leitungs-Führungsfelder), Besorgungsliste mit Kanälen/Schienen/Schellen (Einstellung verschnitt_prozent), Wandansicht zeichnet Kanäle als Band.
+Bibliothek: Kategorien kabelkanal, montage (+ Grundbestand), Gerätedaten (_gMontageart, einbauhoehe … in Gruppen geraetFeldGruppen), Einbauhöhe wird beim
+Zuordnen übernommen. Geräte-Schaubild (anschluss_editor.dart): Ziehen, Bohrlöcher (daten.bohrungen), Freiräume, Maße antippen; Bohrlöcher in der Wandansicht.
+Einstellungen (lib/ui/einstellungen_mehr.dart): Zeichnen (wand_dicke, raster_mm, Maße), Projekt und Geschosse (geschossAendern, Deckendicke, Sicherungen),
+Planung und Vorgaben (verschnitt, Regeln, revision_reichweite, bohr_radius, Abgleich), Objekttypen (objekttypAnlegen, objekt_vorgaben), Kennungen (Einstellung
+kennung), Benutzer und Rollen. Wartungsplan aus Geräten (lib/core/wartung.dart, Knopf in Aufgaben). Tests: kanal_geraete_test, build18_bild_test.
+Offen: volle Testsuite + Analyze nach den letzten Änderungen (Wartungsplan), Test für Wartungsplan, dann Inhaltspakete (Bibliothek Export/Import),
+Wohnflächen-Aufstellung, iPad-Oberfläche, KI-Assistent Stufe 2; danach EIN Build 18 (version.dart hochzählen, flutter clean).

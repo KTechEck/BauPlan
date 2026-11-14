@@ -14,6 +14,7 @@ import '../core/ki.dart' show Regelwerte;
 import '../data/models.dart';
 import '../state/app_state.dart';
 import 'benutzer_rollen.dart';
+import 'dialogs.dart' show geschossDialog;
 import 'installation/installation_page.dart' show objektVorgabe;
 import 'widgets.dart';
 
@@ -226,6 +227,16 @@ class _ProjektGeschosseState extends State<ProjektGeschosseAnsicht> {
               ]),
             ),
           ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              if (await geschossDialog(context, store, geb.id)) _neu();
+            },
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Geschoss anlegen'),
+          ),
+        ),
         const SizedBox(height: 16),
       ],
       const Divider(),
@@ -371,7 +382,7 @@ class _ObjekttypenState extends State<ObjekttypenAnsicht> {
                     _zahlFeld('tz-${t.id}', 'Höhe', z ?? 0, (v) => _vorgabeSetzen(t, {'z': v.round()}), suffix: 'mm', breite: 110),
                     const SizedBox(width: 8),
                     SizedBox(
-                      width: 150,
+                      width: 190,
                       child: DropdownButtonFormField<Hoehenbezug>(
                         key: ValueKey('tb-${t.id}-$bezug'),
                         initialValue: bezug ?? Hoehenbezug.ffb,
