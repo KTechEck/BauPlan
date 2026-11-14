@@ -194,6 +194,12 @@ class _HeizlastAnsichtState extends State<HeizlastAnsicht> {
     final g = geschosse.where((x) => x.id == _s.geschossId).firstOrNull ?? geschosse.firstOrNull;
     if (g == null) return const Center(child: Text('Noch kein Geschoss angelegt.'));
     final (erg, flaechen) = _rechnen(g, geschosse);
+    // Heizlast je Raum für den hydraulischen Abgleich zwischenspeichern
+    final alt = Map<String, dynamic>.from(store.einstellung<Map>('heizlast_raeume') ?? const {});
+    final neu = {...alt, for (final x in erg) x.raum.id: x.gesamt.round()};
+    if (neu.length != alt.length || neu.entries.any((e) => alt[e.key] != e.value)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => store.einstellungSetzen('heizlast_raeume', neu));
+    }
     final p = heizlastParameter(store);
     final (vl, rl) = systemTemperaturen(store);
     final summe = erg.fold<double>(0, (s, e) => s + e.gesamt);

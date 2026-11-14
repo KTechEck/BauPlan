@@ -71,6 +71,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('TR', 'Treppe (Lauflinie)', 'linie'),
     ('TP', 'Treppenpodest / Zwischenpodest', 'flaeche'),
     ('KM', 'Kamin / Schornstein', 'flaeche'),
+    ('RO', 'Revisionsöffnung', 'flaeche'),
   ]),
 ];
 

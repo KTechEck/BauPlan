@@ -173,8 +173,12 @@ Verlegeplan verlegeplan(List<Punkt> umriss, FbhEinstellung e) {
   final innen = polygonNachInnen(basis, e.rand.toDouble());
   if (innen.length < 3 || polygonFlaeche(innen) <= 0) return const Verlegeplan([], []);
   final zugang = heizkreisZugang(basis, e.zugang, abstand: 0).mitte;
-  // Mit Sperrflächen wird schneckenförmig um sie herum verlegt (Mäander-Reihen ließen sich nicht in einem Zug führen).
-  if (e.sperren.isNotEmpty) return _schnecke(innen, zugang, e);
+  // Mit Sperrflächen: Rohrzug im Zellraster um die Sperren herum (rechtwinklig, lückenlos, kreuzungsfrei)
+  if (e.sperren.isNotEmpty) {
+    final p = verlegeplanUmSperren(innen, zugang, e);
+    if (!p.leer) return p;
+    return _schnecke(innen, zugang, e);
+  }
   return switch (e.muster) {
     Verlegemuster.schnecke => _schnecke(innen, zugang, e),
     Verlegemuster.maeander => _maeander(innen, zugang, e, doppelt: false),
@@ -789,3 +793,400 @@ List<List<double>> _alsJson(List<Punkt> l) => [for (final q in l) [q.x.roundToDo
 
 /// Sperrflächen als JSON für die Eigenschaften eines Heizkreises.
 List<List<List<double>>> sperrenJson(List<List<Punkt>> l) => [for (final k in l) _alsJson(k)];
+
+/// Verlegung um Sperrflächen: Die freie Fläche wird in Zellen von etwa 2·VA
+/// gerastert (Zellen in Sperrflächen + Randabstand fallen weg). Ein Baum
+/// über die freien Zellen wird umrundet – das ergibt einen geschlossenen,
+/// rechtwinkligen Rohrzug im Abstand VA, der jede Zelle belegt, sich nie
+/// kreuzt und Vor- und Rücklauf nebeneinander führt. Am Zugang wird der Ring
+/// geöffnet: dort beginnen Vorlauf und Rücklauf nebeneinander.
+/// Baum je Muster: Schnecke = folgt den Rändern ringweise nach innen
+/// (spiralförmig), Mäander = Kamm mit Rücken am Zugang (Bahnen quer).
+Verlegeplan verlegeplanUmSperren(List<Punkt> innen, Punkt zugang, FbhEinstellung e) {
+  if (innen.length < 3) return const Verlegeplan([], []);
+  final xs = innen.map((p) => p.x), ys = innen.map((p) => p.y);
+  final x0 = xs.reduce(math.min), y0 = ys.reduce(math.min), x1 = xs.reduce(math.max), y1 = ys.reduce(math.max);
+  final soll = 2.0 * e.abstand;
+  final nx = math.max(1, ((x1 - x0) / soll).round()), ny = math.max(1, ((y1 - y0) / soll).round());
+  if (nx * ny > 40000) return const Verlegeplan([], []);
+  final cw = (x1 - x0) / nx, ch = (y1 - y0) / ny;
+  final rand = e.rand.toDouble();
+
+  bool rechteckTrifft(double l, double o, double r, double u, List<Punkt> sp) {
+    // Rechteck (l, o)–(r, u) gegen Polygon: Ecke drin, Polygonpunkt drin oder Kanten schneiden sich
+    for (final q in [Punkt(l, o), Punkt(r, o), Punkt(r, u), Punkt(l, u), Punkt((l + r) / 2, (o + u) / 2)]) {
+      if (punktInPolygon(q, sp)) return true;
+    }
+    for (final q in sp) {
+      if (q.x > l && q.x < r && q.y > o && q.y < u) return true;
+    }
+    final ecken = [Punkt(l, o), Punkt(r, o), Punkt(r, u), Punkt(l, u)];
+    for (var i = 0; i < sp.length; i++) {
+      final a = sp[i], b = sp[(i + 1) % sp.length];
+      for (var k = 0; k < 4; k++) {
+        if (_schneidet(a, b, ecken[k], ecken[(k + 1) % 4])) return true;
+      }
+    }
+    return false;
+  }
+
+  // freie Zellen
+  final frei = List.generate(nx, (_) => List.filled(ny, false));
+  for (var i = 0; i < nx; i++) {
+    for (var j = 0; j < ny; j++) {
+      final l = x0 + i * cw, o = y0 + j * ch, r = l + cw, u = o + ch;
+      const k = 2.0; // Toleranz an den Rändern
+      final drin = [Punkt(l + k, o + k), Punkt(r - k, o + k), Punkt(r - k, u - k), Punkt(l + k, u - k), Punkt((l + r) / 2, (o + u) / 2)].every((q) => punktInPolygon(q, innen));
+      if (!drin) continue;
+      frei[i][j] = !e.sperren.any((sp) => sp.length >= 3 && rechteckTrifft(l - rand + k, o - rand + k, r + rand - k, u + rand - k, sp));
+    }
+  }
+  // Startzelle: freie Zelle am nächsten zum Zugang
+  (int, int)? start;
+  var best = double.infinity;
+  for (var i = 0; i < nx; i++) {
+    for (var j = 0; j < ny; j++) {
+      if (!frei[i][j]) continue;
+      final d = (Punkt(x0 + (i + 0.5) * cw, y0 + (j + 0.5) * ch) - zugang).laenge;
+      if (d < best) {
+        best = d;
+        start = (i, j);
+      }
+    }
+  }
+  if (start == null) return const Verlegeplan([], []);
+  final (startI, startJ) = start;
+  const nachbarn = [(1, 0), (0, 1), (-1, 0), (0, -1)];
+  bool ok(int i, int j) => i >= 0 && j >= 0 && i < nx && j < ny && frei[i][j];
+  // Ringtiefe: Abstand (Zellen) zum nächsten belegten Feld bzw. zum Rand
+  final ring = List.generate(nx, (_) => List.filled(ny, 1 << 20));
+  final schlange = <(int, int)>[];
+  for (var i = 0; i < nx; i++) {
+    for (var j = 0; j < ny; j++) {
+      if (!frei[i][j]) continue;
+      if (nachbarn.any((n) => !ok(i + n.$1, j + n.$2))) {
+        ring[i][j] = 0;
+        schlange.add((i, j));
+      }
+    }
+  }
+  for (var q = 0; q < schlange.length; q++) {
+    final (i, j) = schlange[q];
+    for (final (di, dj) in nachbarn) {
+      final a = i + di, b = j + dj;
+      if (ok(a, b) && ring[a][b] > ring[i][j] + 1) {
+        ring[a][b] = ring[i][j] + 1;
+        schlange.add((a, b));
+      }
+    }
+  }
+  // Baum (Kanten als Zellpaare)
+  final baum = <(int, int, int, int)>[];
+  final besucht = List.generate(nx, (_) => List.filled(ny, false));
+  {
+    // Spannbaum nach Gewichten (Kruskal). Schnecke: Kanten entlang eines Rings
+    // zuerst, aufgetrennt am Zugang, nach innen verbunden am Zugang – ergibt
+    // ineinanderliegende Bänder (bifilar). Mäander: Kamm, Bahnen entlang der
+    // längeren Seite, Rücken nahe am Zugang.
+    final quer = (x1 - x0) >= (y1 - y0);
+    double abstStart(int i, int j) => ((i - startI).abs() + (j - startJ).abs()).toDouble();
+    double gewicht(int a, int b, int c, int d) {
+      if (e.muster == Verlegemuster.schnecke) {
+        final gleich = ring[a][b] == ring[c][d];
+        final n = math.min(abstStart(a, b), abstStart(c, d));
+        return gleich ? 0.5 / (1 + n) : 1 + n / 1000;
+      }
+      final waagerecht = b == d;
+      return waagerecht == quer ? 0 : 1 + (quer ? (a - startI).abs() : (b - startJ).abs()).toDouble();
+    }
+
+    final kanten = <(double, int, int, int, int)>[];
+    for (var i = 0; i < nx; i++) {
+      for (var j = 0; j < ny; j++) {
+        if (!frei[i][j]) continue;
+        if (ok(i + 1, j)) kanten.add((gewicht(i, j, i + 1, j), i, j, i + 1, j));
+        if (ok(i, j + 1)) kanten.add((gewicht(i, j, i, j + 1), i, j, i, j + 1));
+      }
+    }
+    kanten.sort((a, b) => a.$1.compareTo(b.$1));
+    final eltern = List.generate(nx * ny, (k) => k);
+    int wurzel(int k) {
+      while (eltern[k] != k) {
+        eltern[k] = eltern[eltern[k]];
+        k = eltern[k];
+      }
+      return k;
+    }
+
+    for (final (_, a, b, c, d) in kanten) {
+      final ra = wurzel(a * ny + b), rc = wurzel(c * ny + d);
+      if (ra == rc) continue;
+      eltern[ra] = rc;
+      baum.add((a, b, c, d));
+    }
+    // nur die Komponente mit der Startzelle
+    final sw = wurzel(startI * ny + startJ);
+    baum.retainWhere((k) => wurzel(k.$1 * ny + k.$2) == sw);
+    for (var i = 0; i < nx; i++) {
+      for (var j = 0; j < ny; j++) {
+        besucht[i][j] = frei[i][j] && wurzel(i * ny + j) == sw;
+      }
+    }
+  }
+  // Ring um den Baum: Unterknoten (2i+a, 2j+b); Kanten als Menge
+  int knoten(int u, int v) => u * (2 * ny) + v;
+  final kanten = <int, Set<int>>{};
+  void verbinden(int p, int q) {
+    kanten.putIfAbsent(p, () => {}).add(q);
+    kanten.putIfAbsent(q, () => {}).add(p);
+  }
+
+  void trennen(int p, int q) {
+    kanten[p]?.remove(q);
+    kanten[q]?.remove(p);
+  }
+
+  for (var i = 0; i < nx; i++) {
+    for (var j = 0; j < ny; j++) {
+      if (!besucht[i][j]) continue;
+      final a = knoten(2 * i, 2 * j), b = knoten(2 * i + 1, 2 * j), c = knoten(2 * i + 1, 2 * j + 1), d = knoten(2 * i, 2 * j + 1);
+      verbinden(a, b);
+      verbinden(b, c);
+      verbinden(c, d);
+      verbinden(d, a);
+    }
+  }
+  for (var (a, b, c, d) in baum) {
+    if (a > c || b > d) (a, b, c, d) = (c, d, a, b);
+    if (c == a + 1) {
+      // rechts: rechte Seite von (a,b) und linke Seite von (c,d) öffnen, oben und unten verbinden
+      trennen(knoten(2 * a + 1, 2 * b), knoten(2 * a + 1, 2 * b + 1));
+      trennen(knoten(2 * c, 2 * d), knoten(2 * c, 2 * d + 1));
+      verbinden(knoten(2 * a + 1, 2 * b), knoten(2 * c, 2 * d));
+      verbinden(knoten(2 * a + 1, 2 * b + 1), knoten(2 * c, 2 * d + 1));
+    } else {
+      trennen(knoten(2 * a, 2 * b + 1), knoten(2 * a + 1, 2 * b + 1));
+      trennen(knoten(2 * c, 2 * d), knoten(2 * c + 1, 2 * d));
+      verbinden(knoten(2 * a, 2 * b + 1), knoten(2 * c, 2 * d));
+      verbinden(knoten(2 * a + 1, 2 * b + 1), knoten(2 * c + 1, 2 * d));
+    }
+  }
+  Punkt lage(int k) => Punkt(x0 + ((k ~/ (2 * ny)) + 0.5) * cw / 2, y0 + ((k % (2 * ny)) + 0.5) * ch / 2);
+  // Ring am Zugang öffnen: Seite der Startzelle, die zum Zugang zeigt
+  final (si, sj) = start;
+  final mitte = Punkt(x0 + (si + 0.5) * cw, y0 + (sj + 0.5) * ch);
+  final seiten = <(double, int, int)>[
+    (zugang.x - mitte.x, knoten(2 * si + 1, 2 * sj), knoten(2 * si + 1, 2 * sj + 1)), // rechts
+    (mitte.x - zugang.x, knoten(2 * si, 2 * sj), knoten(2 * si, 2 * sj + 1)), // links
+    (zugang.y - mitte.y, knoten(2 * si, 2 * sj + 1), knoten(2 * si + 1, 2 * sj + 1)), // unten
+    (mitte.y - zugang.y, knoten(2 * si, 2 * sj), knoten(2 * si + 1, 2 * sj)), // oben
+  ]..sort((a, b) => b.$1.compareTo(a.$1));
+  final offen = seiten.where((s) => kanten[s.$2]?.contains(s.$3) ?? false).firstOrNull;
+  if (offen == null) return const Verlegeplan([], []);
+  trennen(offen.$2, offen.$3);
+  // Weg von einem Ende zum anderen
+  final weg = <Punkt>[lage(offen.$2)];
+  var vor = -1, akt = offen.$2;
+  for (var n = 0; n < 4 * nx * ny + 4; n++) {
+    final weiter = kanten[akt]!.where((k) => k != vor).firstOrNull;
+    if (weiter == null) break;
+    weg.add(lage(weiter));
+    vor = akt;
+    akt = weiter;
+    if (akt == offen.$3) break;
+  }
+  final zug = _bereinigen(weg);
+  if (zug.length < 2) return const Verlegeplan([], []);
+  // in der Mitte (nach Länge) teilen: erste Hälfte Vorlauf, zweite Rücklauf
+  var gesamt = 0.0;
+  for (var i = 0; i + 1 < zug.length; i++) {
+    gesamt += (zug[i + 1] - zug[i]).laenge;
+  }
+  var s = 0.0;
+  for (var i = 0; i + 1 < zug.length; i++) {
+    final l = (zug[i + 1] - zug[i]).laenge;
+    if (s + l >= gesamt / 2) {
+      final m = zug[i] + (zug[i + 1] - zug[i]) * ((gesamt / 2 - s) / math.max(1e-9, l));
+      return Verlegeplan([...zug.sublist(0, i + 1), m], [m, ...zug.sublist(i + 1)]);
+    }
+    s += l;
+  }
+  return Verlegeplan(zug, [zug.last]);
+}
+
+bool _schneidet(Punkt a, Punkt b, Punkt c, Punkt d) {
+  double k(Punkt o, Punkt p, Punkt q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
+  final d1 = k(c, d, a), d2 = k(c, d, b), d3 = k(a, b, c), d4 = k(a, b, d);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/// Eine Anbindeleitung, die gebündelt geführt werden soll.
+typedef AnbindungsAnfrage = ({String id, Punkt start, Punkt ziel, List<Punkt>? raum});
+
+/// Linienzug um [d] parallel versetzen (positiv = links der Laufrichtung).
+List<Punkt> parallelVersatz(List<Punkt> zug, double d) => parallelVersatzJe(zug, (_) => d);
+
+/// Linienzug parallel versetzen, Versatz je Abschnitt [d] (Index des Abschnitts).
+List<Punkt> parallelVersatzJe(List<Punkt> zug, double Function(int abschnitt) d) {
+  final z = _bereinigen(zug);
+  if (z.length < 2) return z;
+  Punkt links(Punkt a, Punkt b) {
+    final r = b - a;
+    final l = math.max(1e-9, r.laenge);
+    return Punkt(-r.y / l, r.x / l);
+  }
+
+  final aus = <Punkt>[z.first + links(z[0], z[1]) * d(0)];
+  for (var i = 1; i + 1 < z.length; i++) {
+    final n1 = links(z[i - 1], z[i]), n2 = links(z[i], z[i + 1]);
+    final a1 = z[i - 1] + n1 * d(i - 1), r1 = z[i] - z[i - 1];
+    final a2 = z[i] + n2 * d(i), r2 = z[i + 1] - z[i];
+    final nenner = r1.kreuz(r2);
+    if (nenner.abs() < 1e-9) {
+      aus.add(z[i] + n1 * d(i - 1));
+      if (d(i) != d(i - 1)) aus.add(z[i] + n2 * d(i));
+    } else {
+      aus.add(a1 + r1 * ((a2 - a1).kreuz(r2) / nenner));
+    }
+  }
+  aus.add(z.last + links(z[z.length - 2], z.last) * d(z.length - 2));
+  return aus;
+}
+
+/// Anbindeleitungen gebündelt führen: Leitungen, die denselben Raum durch
+/// dieselbe Tür verlassen, laufen als Bündel im Abstand [teilung]
+/// nebeneinander (gleicher Weg, parallel versetzt) bis vor den Verteiler.
+/// Mehrere Bündel liegen nebeneinander, das längste außen. Im Raum geht
+/// jede Leitung rechtwinklig vom Kreis zu ihrem Platz in der Tür.
+Map<String, List<Punkt>> anbindungenBuendeln(List<AnbindungsAnfrage> anfragen, List<Durchgang> tueren, {double teilung = 40}) {
+  const rohrAbstandMin = 22.0;
+  double randAbstand(Punkt q, List<Punkt> raum) {
+    var best = double.infinity;
+    for (var i = 0; i < raum.length; i++) {
+      final a = raum[i], b = raum[(i + 1) % raum.length];
+      final d = b - a;
+      final l2 = d.skalar(d);
+      if (l2 < 1e-9) continue;
+      final t = ((q - a).skalar(d) / l2).clamp(0.0, 1.0);
+      best = math.min(best, (a + d * t - q).laenge);
+    }
+    return best;
+  }
+
+  // Tür je Leitung (kürzester Weg), -1 = Ziel im selben Raum
+  final tuerVon = <String, int>{};
+  for (final a in anfragen) {
+    final r = a.raum;
+    if (r == null || r.length < 3 || punktInPolygon(a.ziel, r)) {
+      tuerVon[a.id] = -1;
+      continue;
+    }
+    var best = double.infinity, bi = -1;
+    for (var i = 0; i < tueren.length; i++) {
+      final t = tueren[i];
+      if (randAbstand(t.mitte, r) > t.dicke + 50) continue;
+      final l = (a.start - t.mitte).laenge + (t.mitte - a.ziel).laenge;
+      if (l < best) {
+        best = l;
+        bi = i;
+      }
+    }
+    tuerVon[a.id] = bi;
+  }
+  final gruppen = <int, List<AnbindungsAnfrage>>{};
+  for (final a in anfragen) {
+    gruppen.putIfAbsent(tuerVon[a.id]!, () => []).add(a);
+  }
+  // längste Bündel außen: nach Abstand Tür → Ziel absteigend
+  final reihen = gruppen.keys.toList()
+    ..sort((x, y) {
+      double weg(int k) => k < 0 ? 0 : gruppen[k]!.map((a) => (tueren[k].mitte - a.ziel).laenge).reduce(math.max);
+      return weg(y).compareTo(weg(x));
+    });
+  final aus = <String, List<Punkt>>{};
+  var aussen = 0.0; // bereits belegte Breite neben dem Verteiler
+  for (final k in reihen) {
+    final g = gruppen[k]!;
+    if (k < 0) {
+      for (final a in g) {
+        aus[a.id] = _bereinigen(_rechtwinklig(a.start, a.ziel));
+      }
+      continue;
+    }
+    final t = tueren[k];
+    final n = Punkt(-t.richtung.y, t.richtung.x);
+    final s = t.dicke / 2 + 250;
+    final raum = g.first.raum!;
+    var pin = t.mitte + n * s, pout = t.mitte - n * s;
+    if (!punktInPolygon(pin, raum)) (pin, pout) = (pout, pin);
+    final raus = pout - pin;
+    // Reihenfolge in der Tür nach Lage der Kreise (keine Kreuzung im Durchgang)
+    g.sort((a, b) => (a.start - t.mitte).skalar(t.richtung).compareTo((b.start - t.mitte).skalar(t.richtung)));
+    final zielMitte = g.map((a) => a.ziel).reduce((a, b) => a + b) * (1 / g.length);
+    // Grundweg: aus der Tür gerade heraus, dann rechtwinklig zum Verteiler
+    final senkrechtRaus = raus.x.abs() < raus.y.abs();
+    final ecke = senkrechtRaus ? Punkt(pout.x, zielMitte.y) : Punkt(zielMitte.x, pout.y);
+    // Bündel endet vor dem Verteiler, von dort fächern die Leitungen zu ihren Abgängen auf
+    final rest = zielMitte - ecke;
+    final vorlauf = math.min(rest.laenge * 0.5, 250 + (g.length - 1) * teilung / 2);
+    final grund = _bereinigen([pin, pout, ecke, if (rest.laenge > 1) zielMitte - rest * (vorlauf / rest.laenge) else zielMitte]);
+    final linksGrund = Punkt(-(pout - pin).y, (pout - pin).x);
+    final vorzeichen = linksGrund.skalar(t.richtung) >= 0 ? 1.0 : -1.0;
+    final breite = (g.length - 1) * teilung;
+    // Im Raum: je Leitung eine Querlage parallel zur Türwand; die äußeren Spuren
+    // queren näher an der Wand – so kreuzt sich nichts.
+    final nInnen = (pin - t.mitte) * (1 / math.max(1e-9, (pin - t.mitte).laenge));
+    double u(Punkt q) => (q - t.mitte).skalar(t.richtung);
+    double w(Punkt q) => (q - t.mitte).skalar(nInnen);
+    Punkt uw(double a, double b) => t.mitte + t.richtung * a + nInnen * b;
+    final w0 = t.dicke / 2 + 60; // erste Querlage knapp vor der Wand (Randstreifen)
+    final lage = <int, int>{};
+    for (final links in [true, false]) {
+      final seite = [
+        for (final (i, a) in g.indexed)
+          if ((u(a.start) < -breite / 2 + i * teilung) == links) i,
+      ]..sort((x, y) => links ? x.compareTo(y) : y.compareTo(x)); // links: linke Spur an die Wand, rechts gespiegelt
+      for (final (k, i) in seite.indexed) {
+        lage[i] = k;
+      }
+    }
+    // Querlagen zwischen Wand und den Kreisen; reicht der Platz nicht, enger legen
+    final naechster = g.map((a) => w(a.start)).reduce(math.min);
+    final schritt = g.length <= 1 ? teilung : math.max(rohrAbstandMin, math.min(teilung, (naechster - w0 - 10) / g.length));
+    // Reihenfolge beim Auffächern vor dem Verteiler
+    final rang = <int, int>{};
+    {
+      final probe = [for (final (i, _) in g.indexed) parallelVersatzJe(grund, (abschnitt) => abschnitt < 2 ? vorzeichen * (-breite / 2 + i * teilung) : vorzeichen * (-breite / 2 + i * teilung) + aussen)];
+      final abst = <int, double>{};
+      for (final (i, a) in g.indexed) {
+        final z = probe[i];
+        final d = z.length >= 2 ? z.last - z[z.length - 2] : const Punkt(0, 1);
+        final quer = Punkt(-d.y, d.x) * (1 / math.max(1e-9, d.laenge));
+        abst[i] = (z.last - a.ziel).skalar(quer).abs();
+      }
+      final ordnung = abst.keys.toList()..sort((x, y) => abst[x]!.compareTo(abst[y]!));
+      for (final (k, i) in ordnung.indexed) {
+        rang[i] = k;
+      }
+    }
+    for (final (i, a) in g.indexed) {
+      final spur = vorzeichen * (-breite / 2 + i * teilung); // Lage in der Tür entlang t.richtung
+      // durch die Tür auf der eigenen Spur, ab der Ecke zusätzlich neben die schon gelegten Bündel
+      final zug = parallelVersatzJe(grund, (abschnitt) => abschnitt < 2 ? spur : spur + aussen);
+      final startTuer = zug.first;
+      // im Raum: rechtwinklig zum eigenen Platz vor der Tür
+      final wk = w0 + (lage[i] ?? 0) * schritt;
+      final innen = [a.start, uw(u(a.start), wk), uw(u(startTuer), wk)]; // dann gerade durch die Tür
+      // vor dem Verteiler: vom Bündelende rechtwinklig zum eigenen Anschluss
+      final ende = zug.last;
+      final letzte = zug.length >= 2 ? zug.last - zug[zug.length - 2] : const Punkt(0, 1);
+      final r = letzte * (1 / math.max(1e-9, letzte.laenge));
+      final p1 = ende + r * (60 + (rang[i] ?? i) * teilung / 2); // gestaffelt: wer näher an der Verteilerkante liegt, biegt zuerst ab
+      final waagerecht = r.y.abs() < r.x.abs();
+      final rein = waagerecht ? [ende, p1, Punkt(p1.x, a.ziel.y), a.ziel] : [ende, p1, Punkt(a.ziel.x, p1.y), a.ziel];
+      aus[a.id] = _bereinigen([...innen, ...zug.skip(1), ...rein.skip(1)]);
+    }
+    aussen += breite + 2 * teilung;
+  }
+  return aus;
+}

@@ -73,7 +73,16 @@ class FloorplanPainter extends CustomPainter {
     this.massAuswahl,
     this.massVorschau,
     this.bezugPunkt,
+    this.massDichte = 1,
+    this.massSchrift = 1,
   });
+
+  /// Maße je Zoom: Schriftgröße (Faktor) und wie dicht Maße stehen dürfen.
+  /// Ein Maßtext erscheint nur, wenn er mit Abstand auf seine Strecke passt
+  /// (Dichte > 1 = mehr Abstand, weniger Maße).
+  final double massDichte, massSchrift;
+
+  bool _passt(double textBreite, double streckePx) => massDichte <= 0 || textBreite * massDichte + 10 <= streckePx;
 
   final List<Wand> waende;
   final List<RaumBild> raeume;
@@ -649,7 +658,7 @@ class FloorplanPainter extends CustomPainter {
       text: TextSpan(
         text: mmText(l),
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 11 * massSchrift,
           color: farbe,
           fontWeight: hervorheben ? FontWeight.w600 : FontWeight.w500,
           backgroundColor: BsFarben.zeichenflaeche.withValues(alpha: 0.85),
@@ -657,6 +666,7 @@ class FloorplanPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
+    if (!_passt(tp.width, (db - da).distance)) return;
     var winkel = math.atan2(su.dy, su.dx);
     if (winkel > math.pi / 2 || winkel < -math.pi / 2) winkel += math.pi;
     final c = (da + db) / 2 + snl * (tp.height / 2 + 2);
@@ -683,16 +693,18 @@ class FloorplanPainter extends CustomPainter {
       ..strokeWidth = hervorheben ? 1.6 : 1;
     var winkel = math.atan2(u.dy, u.dx);
     if (winkel > math.pi / 2 || winkel < -math.pi / 2) winkel += math.pi;
-    void beschriften(String t, Offset p) {
+    bool beschriften(String t, Offset p, double streckePx) {
       final tp = TextPainter(
-        text: TextSpan(text: t, style: TextStyle(fontSize: 11, color: farbe, fontWeight: hervorheben ? FontWeight.w600 : FontWeight.w400, backgroundColor: BsFarben.zeichenflaeche.withValues(alpha: 0.85))),
+        text: TextSpan(text: t, style: TextStyle(fontSize: 11 * massSchrift, color: farbe, fontWeight: hervorheben ? FontWeight.w600 : FontWeight.w400, backgroundColor: BsFarben.zeichenflaeche.withValues(alpha: 0.85))),
         textDirection: TextDirection.ltr,
       )..layout();
+      if (!_passt(tp.width, streckePx)) return false;
       canvas.save();
       canvas.translate(p.dx, p.dy);
       canvas.rotate(winkel);
       tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
       canvas.restore();
+      return true;
     }
 
     for (final seite in [1.0, -1.0]) {
@@ -700,17 +712,20 @@ class FloorplanPainter extends CustomPainter {
       final versatz = w.dicke / 2 + 14 / massstab;
       if (hier.isEmpty) {
         final len = f == null ? l : (seite > 0 ? f.$1 : f.$2);
-        beschriften(mmText(len), _s((a + b) / 2 + nl * (seite * (w.dicke / 2 + 16 / massstab))));
+        beschriften(mmText(len), _s((a + b) / 2 + nl * (seite * (w.dicke / 2 + 16 / massstab))), len * massstab);
         continue;
       }
       for (final (t1, t2, _, name) in hier) {
         if ((t2 - t1) * massstab < 30) continue;
         final p1 = _s(a + u * t1 + nl * (seite * versatz)), p2 = _s(a + u * t2 + nl * (seite * versatz));
+        // Text mit Raumname, sonst nur das Maß; passt beides nicht, entfällt die Messlinie
+        final px = (t2 - t1) * massstab;
+        final mitte = _s(a + u * ((t1 + t2) / 2) + nl * (seite * (versatz + 12 / massstab)));
+        if (!beschriften('${mmText(t2 - t1)} $name', mitte, px) && !beschriften(mmText(t2 - t1), mitte, px)) continue;
         canvas.drawLine(p1, p2, stift);
         final q = Offset(-(p2 - p1).dy, (p2 - p1).dx) / math.max(1, (p2 - p1).distance) * 4;
         canvas.drawLine(p1 - q, p1 + q, stift);
         canvas.drawLine(p2 - q, p2 + q, stift);
-        beschriften('${mmText(t2 - t1)} $name', _s(a + u * ((t1 + t2) / 2) + nl * (seite * (versatz + 12 / massstab))));
       }
     }
   }
@@ -733,7 +748,7 @@ class FloorplanPainter extends CustomPainter {
         text: TextSpan(
           text: t,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 11 * massSchrift,
             color: hervorheben ? BsFarben.akzentDunkel : BsFarben.textLeise,
             fontWeight: hervorheben ? FontWeight.w600 : FontWeight.w400,
             backgroundColor: BsFarben.zeichenflaeche.withValues(alpha: 0.85),
@@ -741,6 +756,7 @@ class FloorplanPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
+      if (!hervorheben && !_passt(tp.width, laenge * massstab)) return;
       final abstand = dicke * massstab / 2 + 6 + tp.height / 2;
       final c = mitte + links * (seite * abstand);
       canvas.save();
@@ -794,6 +810,8 @@ class FloorplanPainter extends CustomPainter {
       old.umrisse != umrisse ||
       old.schichten != schichten ||
       old.massstab != massstab ||
+      old.massDichte != massDichte ||
+      old.massSchrift != massSchrift ||
       old.verschiebung != verschiebung ||
       !setEquals(old.auswahl, auswahl) ||
       old.rahmen != rahmen ||

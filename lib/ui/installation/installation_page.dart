@@ -13,6 +13,10 @@ import '../../core/bauelemente.dart';
 import '../../core/fbh.dart';
 import '../../core/verdrahtungskette.dart';
 import '../../core/geschossuebergreifend.dart';
+import 'leitung_lage_felder.dart';
+import 'ha_live_ebene.dart';
+import '../../core/revision.dart';
+import '../../core/ha_live.dart' show HaEinstellung;
 import '../../core/height.dart';
 import '../../core/leitungsnetz.dart';
 import '../../core/raumerkennung.dart';
@@ -121,8 +125,30 @@ class _InstallationPageState extends State<InstallationPage> {
 
   AppState get _s => widget.state;
 
+  HaLiveQuelle? _live; // Home Assistant live im Plan
+
+  void _liveUmschalten() {
+    if (_live != null) {
+      _live!.dispose();
+      setState(() => _live = null);
+      return;
+    }
+    final q = HaLiveQuelle(HaEinstellung.ausJson(_s.settings.ha));
+    if (q.einstellung.sperre != null) {
+      zeigeHinweis(context, 'Home Assistant ist noch nicht eingerichtet: ${q.einstellung.sperre} (Verteiler › KNX / Home Assistant › live).');
+      q.dispose();
+      return;
+    }
+    q.addListener(() {
+      if (mounted) setState(() {});
+    });
+    q.starten();
+    setState(() => _live = q);
+  }
+
   @override
   void dispose() {
+    _live?.dispose();
     _fokus.dispose();
     super.dispose();
   }
@@ -1015,6 +1041,12 @@ class _InstallationPageState extends State<InstallationPage> {
                 _entwurf.clear();
               })),
         ]),
+        WerkzeugKnopf(
+            symbol: Icons.sensors,
+            text: 'Live',
+            tooltip: 'Home Assistant live: Zustände (an/aus, Temperatur …) der zugeordneten Entitäten im Plan zeigen – nur lesend',
+            aktiv: _live != null,
+            onTap: _liveUmschalten),
         Tooltip(
           message: 'Wie gesetzt wird: Gerät vorher aus der Liste wählen – oder erst in den Plan klicken und dann im Menü neben dem Cursor wählen',
           child: SegmentedButton<bool>(
@@ -1247,6 +1279,28 @@ class _InstallationPageState extends State<InstallationPage> {
                     ),
                   ),
                 ),
+                if (_live case final live?)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: HaLivePainter(
+                          objekte: [for (final o in d.objekte) if (_istSichtbar(o, d)) o],
+                          zustand: live.zustand,
+                          massstab: _massstab,
+                          verschiebung: _verschiebung,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_live case final live?)
+                  Positioned(
+                    right: 12,
+                    top: 12,
+                    child: Chip(
+                      avatar: Icon(live.fehler == null ? Icons.sensors : Icons.sensors_off, size: 16, color: live.fehler == null ? const Color(0xFF15803D) : const Color(0xFFB91C1C)),
+                      label: Text(live.fehler ?? (live.stand == null ? 'Home Assistant: verbinde …' : 'Home Assistant live · ${live.zustand.length} Entitäten · ${TimeOfDay.fromDateTime(live.stand!).format(context)}')),
+                    ),
+                  ),
                 if (_rahmenA != null && _rahmenB != null)
                   Positioned.fromRect(
                     rect: Rect.fromPoints(_rahmenA! * _massstab + _verschiebung, _rahmenB! * _massstab + _verschiebung),
@@ -1439,7 +1493,9 @@ class _InstallationPageState extends State<InstallationPage> {
         final store = _s.store!;
         final r = _s.bibliothek.fuerProjekt(store, rohr)?.zahl('aussendurchmesser')?.toDouble() ?? 0;
         final k = kabel.map((id) => _s.bibliothek.fuerProjekt(store, id)?.zahl('aussendurchmesser')?.toDouble() ?? 0).fold<double>(0, (a, b) => a + b);
-        return math.max(r, k);
+        final b = math.max(r, k);
+        // von Hand gesetzte Breite bleibt
+        return eig['breite_hand'] == true ? ((eig['breite_mm'] as num?)?.toDouble() ?? b) : b;
       }
 
       return [
@@ -1486,8 +1542,9 @@ class _InstallationPageState extends State<InstallationPage> {
           label: const Text('Kabel hinzufügen'),
         ),
         if ((eig['breite_mm'] as num? ?? 0) > 0)
-          Text('Breite ${(eig['breite_mm'] as num).toStringAsFixed(1).replaceAll('.', ',')} mm – so breit zeichnet der Plan die Leitung.',
+          Text('Breite ${(eig['breite_mm'] as num).toStringAsFixed(1).replaceAll('.', ',')} mm – so breit zeichnen Plan und Wandansicht die Leitung.',
               style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+        ...leitungLageFelder(context, o, setzen),
       ];
     }
     if (typ.geometrie != Geometrieart.punkt || !elektro) return const [];
@@ -2243,6 +2300,49 @@ class _InstallationPageState extends State<InstallationPage> {
   /// Eigenschaften mit Reitern (Lastenheft): Allgemein, Produkt & Kosten,
   /// Fotos, Verlauf.
   /// Über Geschosse (Steigleitung, Kamin, Treppe) und Treppenwerte.
+  /// Revisionsöffnung bzw. „muss zugänglich bleiben“ mit Prüfung der Reichweite.
+  List<Widget> _revisionFelder(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
+    final t = d.typen[o.typId];
+    if (t == null) return const [];
+    if (t.kuerzel == 'RO') {
+      final xs = o.punkte.map((p) => p.x), ys = o.punkte.map((p) => p.y);
+      final b = o.punkte.isEmpty ? 0 : (xs.reduce(math.max) - xs.reduce(math.min)).round(), h = o.punkte.isEmpty ? 0 : (ys.reduce(math.max) - ys.reduce(math.min)).round();
+      final dran = [
+        for (final r in revisionPruefen(d.objekte, d.typen, reichweite: ((_s.store!.einstellung<num>('revision_reichweite')) ?? 400).toDouble()))
+          if (r.oeffnung?.id == o.id && r.erreichbar) r.objekt.kennung,
+      ];
+      return [
+        const SizedBox(height: 8),
+        Text('Revisionsöffnung ${mmText(b)} × ${mmText(h)} mm${o.lage == null ? '' : ' · ${o.lage}'}', style: const TextStyle(fontSize: 12)),
+        Text(dran.isEmpty ? 'Noch kein zugänglich zu haltendes Objekt in Reichweite.' : 'Erreichbar: ${dran.join(', ')}',
+            style: const TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+      ];
+    }
+    if (t.geometrie != Geometrieart.punkt) return const [];
+    final muss = mussZugaenglich(o, t);
+    final reichweite = ((_s.store!.einstellung<num>('revision_reichweite')) ?? 400).toDouble();
+    final pruef = muss ? revisionPruefen([o, ...d.objekte.where((x) => d.typen[x.typId]?.kuerzel == 'RO')], d.typen, reichweite: reichweite).firstOrNull : null;
+    return [
+      CheckboxListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        value: muss,
+        title: const Text('Muss zugänglich bleiben (Revision)', style: TextStyle(fontSize: 13)),
+        subtitle: Text(
+          !muss
+              ? 'z. B. Abzweigdose, Netzteil, Klappe hinter Decke/Vorwand'
+              : pruef == null || pruef.oeffnung == null
+                  ? 'Keine Revisionsöffnung geplant (Typ „Revisionsöffnung“, Allgemein)'
+                  : pruef.erreichbar
+                      ? 'Erreichbar über ${pruef.oeffnung!.kennung}'
+                      : '${pruef.oeffnung!.kennung} ist ${(pruef.abstand / 10).round()} cm entfernt – zu weit',
+          style: TextStyle(fontSize: 11, color: muss && !(pruef?.erreichbar ?? false) ? const Color(0xFFB45309) : BsFarben.textLeise),
+        ),
+        onChanged: (v) => aendern({'eigenschaften': jsonEncode({...o.eigenschaften, 'zugaenglich': v ?? false})}),
+      ),
+    ];
+  }
+
   List<Widget> _geschossuebergreifend(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
     final store = _s.store!;
     final kuerzel = d.typen[o.typId]?.kuerzel ?? '';
@@ -2536,6 +2636,7 @@ class _InstallationPageState extends State<InstallationPage> {
         onChanged: (v) => aendern({'lage': v}),
       ),
       ..._geschossuebergreifend(o, d, aendern),
+      ..._revisionFelder(o, d, aendern),
       const SizedBox(height: 12),
       DropdownButtonFormField<ObjektStatus>(
         key: ValueKey('status-${o.id}-${o.status.name}'),

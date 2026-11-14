@@ -12,6 +12,10 @@ import '../../core/raumerkennung.dart';
 import '../../core/anschluesse.dart';
 import '../../core/aufmass.dart' show raumSchraegen;
 import '../../core/geraeteanschluesse.dart';
+import '../../core/geschossuebergreifend.dart';
+import '../../core/leitung_wand.dart';
+import '../../mobil/planstand.dart' show installationszonen;
+import '../installation/leitung_lage_felder.dart';
 import '../../core/leitungsnetz.dart';
 import '../../core/verteiler.dart';
 import '../../core/wandmasse.dart';
@@ -106,6 +110,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
   late bool _links = widget.links;
   bool _setzen = false;
   bool _zeichnen = false; // Leitung / Rohr zeichnen (L)
+  bool _bohren = false; // Bohr-Check (B)
+  Offset? _bohrpunkt; // x, z absolut
   String? _leitungsTypId;
   final List<Offset> _entwurf = []; // (x, z) der Leitung im Entwurf
   String? _typId;
@@ -133,6 +139,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
   late List<(Objekt, double, double)> _punkte; // Objekt, x, z absolut
   late List<(Objekt, double, double, double)> _leitungen; // Objekt, x1, x2, z
   late List<(Objekt, List<Offset>)> _zuege; // in der Ansicht gezeichnete Leitungen: (x, z) je Punkt
+  /// Leitungen aus anderen Geschossen und Steigleitungen, die durch diese Wand laufen (nur Anzeige).
+  late List<(Objekt, List<Offset>, String)> _fremd;
   /// Andockpunkte für Leitungen: Geräteanschlüsse und Enden von Leitungen, die hier
   /// ankommen (aus dem Grundriss oder um die Ecke von der Nachbarwand).
   late List<({Offset xz, String text, Map<String, dynamic> bezug})> _andock;
@@ -195,6 +203,26 @@ class _WandansichtPageState extends State<WandansichtPage> {
           _leitungen.add((o, math.min(x1, x2), math.max(x1, x2), (zAbs() ?? _h.rfb).toDouble()));
         }
       }
+    }
+    // Durchgehende Leitungen: aus anderen Geschossen (Höhen aus der Wandansicht) und Steigleitungen
+    _fremd = [];
+    bool anWand(Offset p) {
+      final x = _seite.x(p), vor = _seite.vor(p);
+      return x > -50 && x < _seite.laenge + 50 && vor > -tiefe && vor < 80;
+    }
+    final gName = {for (final geb in store.gebaeude()) for (final x in store.geschosse(geb.id)) x.id: x.kuerzel};
+    for (final (o, stueck) in leitungenAusAnderenGeschossen(store, g.id)) {
+      if (!stueck.every((e) => anWand(Offset(e.$1.x, e.$1.y)))) continue;
+      _fremd.add((o, [for (final e in stueck) Offset(_seite.x(Offset(e.$1.x, e.$1.y)), e.$2)], 'aus ${gName[o.geschossId] ?? '?'}'));
+    }
+    final oben = (_h.rohdecke + deckendicke(store, g)).toDouble();
+    for (final o in [...durchgehendeObjekte(store, g.id), for (final x in store.objekte(g.id)) if (x.eigenschaften['bis_geschoss'] != null) x]) {
+      final t = _typen[o.typId];
+      if (t?.geometrie != Geometrieart.punkt || o.punkte.isEmpty) continue;
+      final p = Offset(o.punkte.first.x, o.punkte.first.y);
+      if (!anWand(p)) continue;
+      final x = _seite.x(p);
+      _fremd.add((o, [Offset(x, _h.rfb.toDouble()), Offset(x, oben)], o.geschossId == g.id ? '↕ bis ${gName[o.eigenschaften['bis_geschoss']] ?? '?'}' : '↕ aus ${gName[o.geschossId] ?? '?'}'));
     }
     // Andockpunkte
     _alleObjekte = store.objekte(g.id);
@@ -481,11 +509,85 @@ class _WandansichtPageState extends State<WandansichtPage> {
     return id;
   }
 
-  void _werkzeug({bool setzen = false, bool zeichnen = false}) => setState(() {
+  void _werkzeug({bool setzen = false, bool zeichnen = false, bool bohren = false}) => setState(() {
         _setzen = setzen;
         _zeichnen = zeichnen;
+        _bohren = bohren;
+        if (!bohren) _bohrpunkt = null;
         _entwurfLeeren();
       });
+
+  /// Alles in dieser Wandansicht als Teile für den Bohr-Check.
+  List<WandTeil> _wandTeile() {
+    int? tiefe(Objekt o) => o.eigenschaften['tiefe_mm'] != null || o.eigenschaften['verlegung'] != null ? LeitungImBauteil.aus(o.eigenschaften, lage: o.lage).ueberdeckung : null;
+    double breite(Objekt o) => ((o.eigenschaften['breite_mm'] ?? o.eigenschaften['dose_d'] ?? o.eigenschaften['durchmesser_mm']) as num?)?.toDouble() ?? 0;
+    String text(Objekt o) => '${o.kennung} (${_typen[o.typId]?.name ?? ''})';
+    return [
+      for (final (o, x, z) in _punkte) WandTeil(id: o.id, text: text(o), x: x, z: z, breite: math.max(60, breite(o))),
+      for (final (o, x1, x2, z) in _leitungen) WandTeil(id: o.id, text: text(o), x: x1, z: z, x2: x2, z2: z, breite: breite(o), ueberdeckung: tiefe(o)),
+      for (final (o, pts) in _zuege)
+        for (var i = 0; i + 1 < pts.length; i++)
+          WandTeil(id: o.id, text: text(o), x: pts[i].dx, z: pts[i].dy, x2: pts[i + 1].dx, z2: pts[i + 1].dy, breite: breite(o), ueberdeckung: tiefe(o)),
+      for (final (o, pts, t) in _fremd)
+        for (var i = 0; i + 1 < pts.length; i++)
+          WandTeil(id: o.id, text: '${text(o)} $t', x: pts[i].dx, z: pts[i].dy, x2: pts[i + 1].dx, z2: pts[i + 1].dy, breite: breite(o), ueberdeckung: tiefe(o)),
+    ];
+  }
+
+  void _bohrCheckZeigen(Offset a) {
+    final treffer = bohrCheck(a, _wandTeile());
+    final w = _seite.wand;
+    final a0 = Offset(w.x1.toDouble(), w.y1.toDouble());
+    final u = (Offset(w.x2.toDouble(), w.y2.toDouble()) - a0) / math.max(1.0, w.laenge);
+    final oeff = [
+      for (final o in _oeffnungen)
+        () {
+          final x1 = _seite.x(a0 + u * o.abstand.toDouble()), x2 = _seite.x(a0 + u * (o.abstand + o.breite).toDouble());
+          return (math.min(x1, x2), math.max(x1, x2));
+        }()
+    ];
+    final hoehe = (_h.rohdecke - _h.ffb).toDouble();
+    final p = Offset(a.dx, a.dy - _h.ffb);
+    final inZone = installationszonen(_seite.laenge, hoehe, oeff).any((r) => r.contains(p));
+    final (stufe, urteil) = bohrUrteil(treffer, inZone: inZone);
+    final farbe = [const Color(0xFF15803D), const Color(0xFFB45309), const Color(0xFFB91C1C)][stufe];
+    showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Row(children: [
+          Icon(stufe == 2 ? Icons.dangerous_outlined : (stufe == 1 ? Icons.warning_amber : Icons.check_circle_outline), color: farbe),
+          const SizedBox(width: 8),
+          Expanded(child: Text(urteil, style: TextStyle(color: farbe, fontSize: 16))),
+        ]),
+        content: SizedBox(
+          width: 460,
+          child: ListView(shrinkWrap: true, children: [
+            Text('Anzeichnen: ${mmText(a.dx)} mm ab linker Wandkante, ${mmText(p.dy)} mm über FFB'
+                ' (von rechts ${mmText(_seite.laenge - a.dx)} mm, unter Rohdecke ${mmText(_h.rohdecke - a.dy)} mm)',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            for (final t in treffer)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(t.abstand < 100 ? Icons.dangerous_outlined : Icons.warning_amber, color: t.abstand < 100 ? const Color(0xFFB91C1C) : const Color(0xFFB45309)),
+                title: Text(t.teil.text),
+                subtitle: Text([
+                  t.abstand <= 0 ? 'liegt genau hier' : '${mmText(t.abstand)} mm bis zur Kante',
+                  if (!t.hoeheBekannt) 'Höhe nicht geplant – nur seitlicher Abstand',
+                  if (t.teil.ueberdeckung != null) 'Vorderkante ${t.teil.ueberdeckung} mm tief' else if (t.teil.istLinie) 'Tiefe nicht eingetragen',
+                  if (t.teil.breite > 0) '${t.teil.breite.round()} mm breit',
+                ].join(' · ')),
+              ),
+            const SizedBox(height: 6),
+            const Text('Installationszonen nach DIN 18015-3. Ohne Gewähr – vor dem Bohren mit Leitungssucher prüfen.',
+                style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Schließen'))],
+      ),
+    );
+  }
 
   KeyEventResult _taste(FocusNode n, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
@@ -535,6 +637,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
       _werkzeug(setzen: true);
     } else if (!strg && k == LogicalKeyboardKey.keyL) {
       _werkzeug(zeichnen: true);
+    } else if (!strg && k == LogicalKeyboardKey.keyB) {
+      _werkzeug(bohren: true);
     } else {
       return KeyEventResult.ignored;
     }
@@ -647,9 +751,10 @@ class _WandansichtPageState extends State<WandansichtPage> {
               decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: BsFarben.rand))),
               child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 WerkzeugGruppe(kinder: [
-                  WerkzeugKnopf(symbol: Sym.auswahl, text: 'Auswahl', tooltip: 'Auswahl (V): ziehen verschiebt', aktiv: !_setzen && !_zeichnen, onTap: _werkzeug),
+                  WerkzeugKnopf(symbol: Sym.auswahl, text: 'Auswahl', tooltip: 'Auswahl (V): ziehen verschiebt', aktiv: !_setzen && !_zeichnen && !_bohren, onTap: _werkzeug),
                   WerkzeugKnopf(symbol: Sym.setzen, text: 'Setzen', tooltip: 'Objekt setzen (P)', aktiv: _setzen, onTap: () => _werkzeug(setzen: true)),
                   WerkzeugKnopf(symbol: Sym.leitung, text: 'Leitung', tooltip: 'Leitung / Rohr zeichnen (L): Punkte klicken, Enter beendet', aktiv: _zeichnen, onTap: () => _werkzeug(zeichnen: true)),
+                  WerkzeugKnopf(symbol: Icons.hardware_outlined, text: 'Bohr-Check', tooltip: 'Bohr-Check (B): Stelle anklicken – was liegt dort, wie tief darf gebohrt werden', aktiv: _bohren, onTap: () => _werkzeug(bohren: true)),
                 ]),
                 DropdownButton<String>(
                   value: _zeichnen ? _leitungsTypId : _typId,
@@ -771,6 +876,11 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 _objektSetzen(a);
                 return;
               }
+              if (_bohren) {
+                setState(() => _bohrpunkt = a);
+                _bohrCheckZeigen(a);
+                return;
+              }
               final id = _treffer(_zuAnsicht(e.localPosition)) ?? _trefferZug(_zuAnsicht(e.localPosition));
               final zusatz = HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed;
               setState(() {
@@ -853,6 +963,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 ],
                 leitungen: _leitungen,
                 zuege: _zuege,
+                fremd: _fremd,
+                bohrpunkt: _bohren ? _bohrpunkt : null,
                 andock: [for (final a in _andock) (a.xz, a.text, a.bezug.containsKey('leitung'))],
                 fangText: _zeichnen ? _fangText : null,
                 schraenke: _schraenke,
@@ -887,7 +999,10 @@ class _WandansichtPageState extends State<WandansichtPage> {
           'Leitung (L): Leitungstyp wählen (z. B. Heizrohr, Vorlauf) und Punkte klicken – auch senkrecht, etwa die Anbindeleitungen '
           'zum Heizkreisverteiler. Der Fang greift an Objekten und an der Unterkante des Verteilerschranks; Umschalt = waagerecht/senkrecht, '
           'Enter oder zweiter Klick auf denselben Punkt beendet, Rücktaste nimmt den letzten Punkt zurück.\n\n'
-          'Türen und Fenster in Rohbaumaßen ab RFB. Leitungen erscheinen, wenn sie in oder an dieser Wand verlaufen.',
+          'Türen und Fenster in Rohbaumaßen ab RFB. Leitungen erscheinen, wenn sie in oder an dieser Wand verlaufen.\n\n'
+          'Über Geschosse: eine Leitung über die Rohdecke hinaus (oder unter den Rohfußboden) zeichnen – sie erscheint gestrichelt in der Wand '
+          'des Geschosses darüber bzw. darunter, ebenso Steigleitungen mit „bis Geschoss“.\n\n'
+          'Bohr-Check (B): Stelle anklicken – Abstand zur Leitungskante, Tiefe, Installationszonen.',
           style: const TextStyle(height: 1.45),
         ),
       ]);
@@ -941,6 +1056,11 @@ class _WandansichtPageState extends State<WandansichtPage> {
       const SizedBox(height: 12),
       Text('Länge ${meterText(o.laenge)} (davon senkrecht ${meterText(senkrecht)})'),
       Text('${pts.length} Punkte, von ${mmText(pts.first.dy - _h.ffb)} bis ${mmText(pts.last.dy - _h.ffb)} mm über FFB'),
+      ...leitungLageFelder(context, o, (neu) {
+        final alt = store.objektAendern(o.id, {'eigenschaften': jsonEncode({...o.eigenschaften, ...neu}..removeWhere((_, v) => v == null))});
+        _rueckgaengig.add(() => store.objektAendern(o.id, alt));
+        _s.geaendert();
+      }, wanddicke: _seite.wand.dicke),
       const SizedBox(height: 12),
       for (final (ende, label) in const [('uebergang_anfang', 'Übergang am Anfang'), ('uebergang_ende', 'Übergang am Ende')])
         Padding(
@@ -1013,7 +1133,12 @@ class _AnsichtPainter extends CustomPainter {
     this.dachHoehe,
     this.mehr = const {},
     this.rahmen,
+    this.fremd = const [],
+    this.bohrpunkt,
   });
+
+  final List<(Objekt, List<Offset>, String)> fremd;
+  final Offset? bohrpunkt;
 
   /// Mehrfachauswahl und Auswahlrahmen (Ansichtskoordinaten x, z).
   final Set<String> mehr;
@@ -1163,7 +1288,7 @@ class _AnsichtPainter extends CustomPainter {
       final farbe = Color(gewerke[typen[o.typId]?.gewerkId]?.farbe ?? 0xFF888888);
       canvas.drawLine(_p(x1, z), _p(x2, z), Paint()
         ..color = farbe
-        ..strokeWidth = 3
+        ..strokeWidth = math.max(3.0, ((o.eigenschaften['breite_mm'] as num?)?.toDouble() ?? 0) * massstab)
         ..strokeCap = StrokeCap.round);
       _text(canvas, o.kennung, _p((x1 + x2) / 2, z) + const Offset(0, 4), farbe: farbe, groesse: 9);
     }
@@ -1209,6 +1334,42 @@ class _AnsichtPainter extends CustomPainter {
         _text(canvas, uebergangsPfeil(lage), p, farbe: farbe, groesse: 9, mitte: true, fett: true);
         _text(canvas, 'ab hier $lage', p + const Offset(9, 2), farbe: farbe, groesse: 9);
       }
+    }
+    // Durchgehende Leitungen aus anderen Geschossen / Steigleitungen (blass, gestrichelte Kante)
+    for (final (o, pts, text) in fremd) {
+      final farbe = Color(gewerke[typen[o.typId]?.gewerkId]?.farbe ?? 0xFF888888);
+      final b = math.max(3.0, ((o.eigenschaften['breite_mm'] as num?)?.toDouble() ?? (o.eigenschaften['durchmesser_mm'] as num?)?.toDouble() ?? 0) * massstab);
+      final bild = [for (final q in pts) _p(q.dx, q.dy)];
+      canvas.drawPath(Path()..addPolygon(bild, false), Paint()
+        ..style = PaintingStyle.stroke
+        ..color = farbe.withValues(alpha: 0.35)
+        ..strokeWidth = b);
+      for (var i = 0; i + 1 < bild.length; i++) {
+        final a = bild[i], e = bild[i + 1];
+        final l = (e - a).distance;
+        if (l < 1) continue;
+        final r = (e - a) / l;
+        for (var t = 0.0; t < l; t += 12) {
+          canvas.drawLine(a + r * t, a + r * math.min(t + 6, l), Paint()
+            ..color = farbe
+            ..strokeWidth = 1.2);
+        }
+      }
+      final m = bild.length >= 2 ? (bild[0] + bild[1]) / 2 : bild.first;
+      _text(canvas, '${o.kennung} $text', m + const Offset(6, 0), farbe: farbe, groesse: 9);
+    }
+    // Bohrstelle
+    if (bohrpunkt case final bp?) {
+      final p = _p(bp.dx, bp.dy);
+      final stift = Paint()
+        ..color = const Color(0xFFB91C1C)
+        ..strokeWidth = 2;
+      canvas.drawCircle(p, 9, Paint()
+        ..style = PaintingStyle.stroke
+        ..color = const Color(0xFFB91C1C)
+        ..strokeWidth = 2);
+      canvas.drawLine(p - const Offset(14, 0), p + const Offset(14, 0), stift);
+      canvas.drawLine(p - const Offset(0, 14), p + const Offset(0, 14), stift);
     }
     // Andockpunkte: Geräteanschlüsse und ankommende Leitungen
     for (final (q, text, fortsetzung) in andock) {

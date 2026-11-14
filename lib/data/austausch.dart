@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../core/abgleich_projekt.dart';
 import '../core/auswertung.dart';
 import '../core/aufmass.dart';
 import '../core/brandschutz.dart';
 import '../core/geschossuebergreifend.dart';
+import '../core/leitung_wand.dart';
 import '../core/height.dart';
 import '../core/sparren.dart';
 import '../core/raumerkennung.dart';
@@ -167,6 +169,16 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
           for (final o in durchgehendeObjekte(store, g.id))
             if (typen[o.typId] != null)
               {..._objektFuerApp(store, o, typen[o.typId]!, gewerkKuerzel, g.hoehen, g.hoehen.ffb, produkte), 'durchgehend': true}..remove('h'),
+          // Leitungen, die in der Wand aus einem anderen Geschoss hierher steigen
+          for (final (i, (o, stueck)) in leitungenAusAnderenGeschossen(store, g.id).indexed)
+            if (typen[o.typId] != null)
+              {
+                ..._objektFuerApp(store, o, typen[o.typId]!, gewerkKuerzel, g.hoehen, g.hoehen.ffb, produkte),
+                'id': '${o.id}#$i',
+                'punkte': [for (final e in stueck) [e.$1.x.round(), e.$1.y.round()]],
+                'hs': [for (final e in stueck) e.$2.round() - g.hoehen.ffb],
+                'aus_geschoss': o.geschossId,
+              }..remove('h')..remove('laenge'),
         ],
       });
     }
@@ -228,7 +240,13 @@ Map<String, dynamic> _objektFuerApp(ProjectStore store, Objekt o, Objekttyp t, M
         'daten': bel['daten'],
       },
     if (o.eigenschaften['kabel'] != null) 'kabel': o.eigenschaften['kabel'],
+    if ((o.eigenschaften['breite_mm'] as num? ?? 0) > 0) 'b': (o.eigenschaften['breite_mm'] as num).round(),
+    if (t.geometrie == Geometrieart.linie && (o.eigenschaften['tiefe_mm'] != null || o.eigenschaften['verlegung'] != null)) ...{
+      't': LeitungImBauteil.aus(o.eigenschaften, lage: o.lage).ueberdeckung,
+      'verlegung': LeitungImBauteil.aus(o.eigenschaften, lage: o.lage).verlegung.label,
+    },
     if (o.eigenschaften['stromkreis'] != null) 'stromkreis': o.eigenschaften['stromkreis'],
+    if (t.kuerzel == 'HV' && (o.eigenschaften['kreise'] as List? ?? const []).any((k) => k != null)) 'abgleich': abgleichKurz(abgleichFuerVerteiler(store, o)),
   };
 }
 
@@ -297,6 +315,18 @@ EingangErgebnis eingangUebernehmen(ProjectStore store) {
       final e = Map<String, dynamic>.from(jsonDecode(datei.readAsStringSync()) as Map);
       final anhang = e['datei'] is String ? File(p.join(ordner.path, e['datei'] as String)) : null;
       if (anhang != null && !anhang.existsSync()) continue; // Foto noch nicht vollständig synchronisiert
+      if (e['pruefen'] == true) {
+        // Eintrag von Mitarbeit: wartet auf Prüfung durch den Eigentümer
+        final pruef = Directory(p.join(ordner.path, '_pruefen'))..createSync(recursive: true);
+        for (final d in [datei, if (anhang != null) anhang]) {
+          final z = File(p.join(pruef.path, p.basename(d.path)));
+          if (z.existsSync()) z.deleteSync();
+          d.renameSync(z.path);
+        }
+        hinweise.add('Eintrag von ${e['autor'] ?? 'Mitarbeit'} wartet auf Prüfung (Einstellungen › Speicher und Abgleich)');
+        n++;
+        continue;
+      }
       _eintragUebernehmen(store, e, anhang, hinweise);
       for (final d in [datei, if (anhang != null) anhang]) {
         final z = File(p.join(archiv.path, p.basename(d.path)));
@@ -392,6 +422,20 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
         }
         if (text.isNotEmpty) store.tagebuchAnlegen(datum: zeit, text: 'Aufgabe: $text – $autor (App)', raeume: [if (raumId != null) raumId]);
       }
+    case 'abgleich':
+      final o = objektId == null ? null : _objekt(store, geschossId, objektId);
+      if (o != null) {
+        store.objektAendern(o.id, {
+          'eigenschaften': jsonEncode({
+            ...o.eigenschaften,
+            if (e['ist_l_min'] is num) 'ist_l_min': e['ist_l_min'],
+            if (e['ist_stufe'] is num) 'ist_stufe': e['ist_stufe'],
+            'ist_von': autor,
+            'ist_zeit': zeit.toIso8601String(),
+          }),
+        });
+        hinweise.add('Abgleich ${o.kennung}: ${e['ist_l_min'] ?? '–'} l/min, Stufe ${e['ist_stufe'] ?? '–'} ($autor)');
+      }
     case 'foto':
       break;
     default:
@@ -409,3 +453,52 @@ Objekt? _objekt(ProjectStore store, String? geschossId, String id) {
 
 /// Kleine Hilfe für Tests/App: Punkt aus JSON.
 Punkt punktAus(List l) => Punkt((l[0] as num).toDouble(), (l[1] as num).toDouble());
+
+
+/// Einträge von Mitarbeit, die auf Prüfung warten: (Datei, Inhalt).
+List<(File, Map<String, dynamic>)> pruefListe(ProjectStore store) {
+  final ordner = Directory(p.join(austauschOrdner(store), 'eingang', '_pruefen'));
+  if (!ordner.existsSync()) return const [];
+  final aus = <(File, Map<String, dynamic>)>[];
+  for (final d in ordner.listSync().whereType<File>().where((d) => d.path.toLowerCase().endsWith('.json'))) {
+    try {
+      aus.add((d, Map<String, dynamic>.from(jsonDecode(d.readAsStringSync()) as Map)));
+    } catch (_) {}
+  }
+  aus.sort((a, b) => '${a.$2['zeit']}'.compareTo('${b.$2['zeit']}'));
+  return aus;
+}
+
+/// Geprüften Eintrag übernehmen (oder verwerfen) und archivieren.
+List<String> pruefEintragErledigen(ProjectStore store, File datei, {required bool uebernehmen}) {
+  final hinweise = <String>[];
+  final e = Map<String, dynamic>.from(jsonDecode(datei.readAsStringSync()) as Map);
+  final anhang = e['datei'] is String ? File(p.join(datei.parent.path, e['datei'] as String)) : null;
+  if (uebernehmen) _eintragUebernehmen(store, e, anhang != null && anhang.existsSync() ? anhang : null, hinweise);
+  final archiv = Directory(p.join(austauschOrdner(store), 'eingang', '_archiv'))..createSync(recursive: true);
+  for (final d in [datei, if (anhang != null && anhang.existsSync()) anhang]) {
+    final z = File(p.join(archiv.path, '${uebernehmen ? '' : 'verworfen_'}${p.basename(d.path)}'));
+    if (z.existsSync()) z.deleteSync();
+    d.renameSync(z.path);
+  }
+  return hinweise;
+}
+
+/// Lesbare Kurzbeschreibung eines Eintrags.
+String eintragText(Map<String, dynamic> e) {
+  final art = switch (e['art']) {
+    'foto' => 'Foto',
+    'notiz' => 'Notiz',
+    'messwert' => 'Messwert',
+    'material' => 'Material',
+    'status' => 'Status ${e['status'] ?? ''}',
+    'aufmass' => 'Aufmaß',
+    'abgleich' => 'Abgleich',
+    'beleg' => 'Kassenbon',
+    'einkauf' => 'Einkauf',
+    _ => '${e['art']}',
+  };
+  final wert = e['wert'] == null ? '' : ' ${e['wert']} ${e['einheit'] ?? ''}';
+  final text = '${e['text'] ?? ''}'.trim();
+  return '$art$wert${text.isEmpty ? '' : ': $text'}';
+}

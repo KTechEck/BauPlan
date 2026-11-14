@@ -395,4 +395,6 @@ const List<List<String>> migrationen = [
   [],
   // Version 19 – Treppe, Podest, Kamin; Steigleitungen in Sanitär, Heizung, Elektro (Startbestand in _migrieren)
   [],
+  // Version 20 – Revisionsöffnung (Allgemein, Fläche in Decke oder Wand; Startbestand in _migrieren)
+  [],
 ];

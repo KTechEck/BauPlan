@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../kontext.dart';
 import '../planstand.dart';
 import 'erfassen.dart';
+import 'abgleich.dart';
 import 'aufmass.dart';
 import 'plan.dart';
 import 'wandansicht.dart';
@@ -244,6 +245,13 @@ class MehrSeite extends StatelessWidget {
         title: const Text('Räume und Aufmaß'),
         subtitle: Text('${plan.aufmassOffen.length} Maß(e) warten am PC auf Übernahme · $offeneMasse auf diesem Handy gemessen'),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Räume')), body: RaeumeListe(k: k)))),
+      ),
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.speed),
+        title: const Text('Hydraulischer Abgleich'),
+        subtitle: const Text('Soll-Durchfluss je Abgang, eingestellten Wert eintragen'),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AbgleichSeite(k: k))),
       ),
       const Divider(),
       Text('Abgleich', style: Theme.of(context).textTheme.titleMedium),

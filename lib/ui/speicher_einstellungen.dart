@@ -9,6 +9,7 @@ import '../app/theme.dart';
 import '../core/speicher.dart';
 import '../data/austausch.dart';
 import '../state/app_state.dart';
+import 'benutzer_rollen.dart';
 
 /// Einstellungen › Speicher und Abgleich: wo die Daten für die Mobil-App
 /// liegen (nur dieser PC, Heimnetz, Cloud) und wie sich die App verbindet.
@@ -284,6 +285,8 @@ class _SpeicherEinstellungenState extends State<SpeicherEinstellungenAnsicht> {
           ]),
         ),
       ),
+      const SizedBox(height: 8),
+      BenutzerRollenKarte(state: state),
       const SizedBox(height: 8),
       Card(
         child: ExpansionTile(

@@ -474,7 +474,28 @@ Offen: PC-Grundriss Maße je Zoom ein-/ausblenden; Tims Projekt nach Build 14/15
 - [x] Belege/Kassenzettel: lib/core/texterkennung.dart (offline über Windows.Media.Ocr per PowerShell, Wörter nach Zeilen gruppiert,
       texterkennungBereinigen). Einkauf erfassen: Bilder werden automatisch erkannt, Knopf „Text erkennen (offline)“, Abschnitt „Belege vom Handy“
       (Einstellung `belege_offen`, Fotos unter belege/; beim Speichern erledigt). App: Kachel „Kassenbon“ (Eingang art beleg). Tests test/belege_test.dart.
-- [ ] Nächste große Schritte laut Tim/Koordinator (PC und App, am Stück, Lastenheft maßgeblich):
+- [x] Leitungen in der Wand (lib/core/leitung_wand.dart): eigenschaften verlegung (unterputz/schlitz/aufputz/vorwand/hohlwand/kanal), breite_mm
+      (+ breite_hand), tiefe_mm = Überdeckung bis Vorderkante, schlitz_b/schlitz_t; Schlitzprüfung nach DIN EN 1996-1-1/NA (Richtwerte); Felder
+      lib/ui/installation/leitung_lage_felder.dart (Installation + Wandansicht). Bohr-Check (core bohrCheck/bohrUrteil: Abstand bis Leitungskante,
+      max. Bohrtiefe) am PC in der Wandansicht (Werkzeug B) und in der App (Bohrhilfe, Plan-Bohr-Check). Über Geschosse: geschossStapel/geschossSockel,
+      Einstellung deckendicke {geschossId: mm}, leitungenAusAnderenGeschossen (z_abs über die Rohdecke) + Steigleitungen mit bis_geschoss gestrichelt in
+      der Wandansicht (PC) bzw. als durchgehend im Planstand (App). Planstand: Objekte b/t/verlegung.
+- [x] Heizung: verlegeplanUmSperren (Zellraster 2·VA + Spannbaum-Umrundung, rechtwinklig, lückenlos, kreuzungsfrei; Schnecke = Ringbänder, Mäander = Kamm);
+      anbindungenBuendeln (Bündel je Tür parallel versetzt, Querlagen an der Türwand, Auffächern vor dem Verteiler, Ziele = verteilerAnschlussPunkte je Abgang).
+      Hydraulischer Abgleich: lib/core/hydraulik.dart + abgleich_projekt.dart (Einstellung abgleich: Spreizung, W/m², Rohr innen, Zuschlag, kv-Stufen;
+      Heizlast je Raum aus Einstellung heizlast_raeume, von der Bauphysik zwischengespeichert, oder raum.eigenschaften.heizlast_w; HK eigenschaften
+      leistung_w, ist_l_min, ist_stufe). PC: Verteiler-Editor › „Hydraulischer Abgleich …“ (lib/ui/verteiler/abgleich_page.dart). App: Mehr › Hydraulischer
+      Abgleich (Eingang art abgleich setzt ist_l_min/ist_stufe). Planstand: HV-Objekte mit abgleich-Liste.
+- [x] Home Assistant live im Installationsplan (Knopf „Live“, lib/ui/installation/ha_live_ebene.dart, alle 10 s, nur lesend).
+- [x] Revisionsöffnungen: Typ RO (Allgemein, Fläche; Migration 20), lib/core/revision.dart (mussZugaenglich: eigenschaften.zugaenglich, BK, AV, DO in Decke,
+      netzteil verdeckt; Reichweite Einstellung revision_reichweite, Vorgabe 400 mm), Projektprüfung + Installations-Panel.
+- [x] Rollen: lib/core/rollen.dart, Einstellung benutzer [{id,name,rolle,code,raeume,pruefpflicht}], eigener Kopplungscode je Benutzer; PcDienst erkennt
+      den Benutzer am Code (Gast: kein Schreiben, Mitarbeit: autor/rolle/pruefen vom PC gesetzt, Planstand nur freigegebene Räume). Eingang: pruefen=true →
+      eingang/_pruefen, Prüfliste in Einstellungen › Speicher und Abgleich (lib/ui/benutzer_rollen.dart). App: Rolle aus planstand.rolle, Gast ohne Erfassen.
+- [x] PC-Grundriss: Maße je Zoom ausblenden (passt der Text nicht auf die Strecke, entfällt er), Optionsmenü: dichter/lockerer, Schrift, zurücksetzen
+      (AppSettings.darstellung mass_dichte/mass_schrift).
+- Tests: test/heizung_leitung_test.dart, test/rollen_revision_test.dart; 239 Tests grün, Analyze sauber.
+- [x] (erledigt) Nächste große Schritte laut Tim/Koordinator (PC und App, am Stück, Lastenheft maßgeblich):
       1. Leitungen: Tiefe und Breite in der Wand (Schlitz/Unterputz), in Wandansicht und Bohrhilfe berücksichtigen.
       2. Heizung + hydraulischer Abgleich (Heizkreise, Durchfluss, Ventilvoreinstellung), Heizkreise um Sperrflächen, Anbindeleitungen gebündelt.
       3. Home Assistant live, Revisionsöffnungen, Rollen (Eigentümer / Mitarbeit / Gast).

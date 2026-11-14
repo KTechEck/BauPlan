@@ -172,6 +172,7 @@ class ProjectStore {
           _objekttypErgaenzen('HZ', 'SR', 'Steigleitung Heizung (über Geschosse)', 'punkt');
           _objekttypErgaenzen('EL', 'SR', 'Steigleitung Elektro (über Geschosse)', 'punkt');
         }
+        if (version == 19) _objekttypErgaenzen('AL', 'RO', 'Revisionsöffnung', 'flaeche');
         version++;
         db.userVersion = version;
         db.execute('COMMIT');

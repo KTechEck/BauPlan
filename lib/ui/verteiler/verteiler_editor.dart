@@ -13,6 +13,7 @@ import '../../data/models.dart';
 import '../../state/app_state.dart';
 import '../installation/heizkreise_dialog.dart';
 import '../widgets.dart';
+import 'abgleich_page.dart';
 
 /// Editor für einen Heizkreisverteiler: Ausstattung, Montage, Zuleitung und
 /// Belegung der Abgänge mit Heizkreisen.
@@ -321,6 +322,8 @@ class _VerteilerEditorState extends State<VerteilerEditor> {
                           icon: const Icon(Icons.alt_route, size: 18),
                           label: const Text('Anbindeleitungen bündeln'),
                         ),
+                        const SizedBox(width: 8),
+                        abgleichKnopf(context, _s, v),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(
                           onPressed: () => _nachRaeumen(v, d, kreise, raeume, belegt),

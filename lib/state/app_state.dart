@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 
+import '../core/rollen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -99,6 +101,8 @@ class AppState extends ChangeNotifier {
     code: () => speicher.code,
     auskunft: () => {'name': Platform.localHostname, 'projekt': store == null ? '' : p.basename(store!.ordner), 'build': bauspurBuild},
     beiEingang: () => Timer(const Duration(seconds: 1), eingangPruefen),
+    benutzer: (c) => store == null ? null : benutzerAus(store!.einstellung<List>('benutzer')).where((b) => b.code == c).firstOrNull?.auskunft,
+    planFiltern: (b, nutzer) => utf8.encode(jsonEncode(planstandFuerBenutzer(Map<String, dynamic>.from(jsonDecode(utf8.decode(b)) as Map), nutzer))),
   );
 
   /// Störung beim Abgleich (Netzwerkordner oder Cloud nicht erreichbar), sonst null.

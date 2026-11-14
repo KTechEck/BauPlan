@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/fbh.dart';
 import '../../core/raumerkennung.dart';
+import '../../core/verteiler.dart';
 import '../../data/models.dart';
 import '../../data/project_store.dart';
 
@@ -234,34 +235,49 @@ int anbindeleitungenBuendeln(ProjectStore store, String geschossId, List<Objekt>
   for (final o in store.objekte(geschossId)) {
     if (o.typId == hr.id && ids.contains(o.eigenschaften['heizkreis'])) store.objektLoeschen(o.id);
   }
-  // nach Weg zum Verteiler sortieren: nahe Kreise innen im Bündel
-  double weg(Objekt k) => k.punkte.map((q) => (q.x - hv.x).abs() + (q.y - hv.y).abs()).reduce(math.min);
-  final sortiert = [...kreise]..sort((a, b) => weg(a).compareTo(weg(b)));
-  const rohr = 20.0, abstand = 2 * rohr;
-  var n = 0;
-  for (final (i, hk) in sortiert.indexed) {
+  // Ziele: Anschlüsse VL/RL des belegten Abgangs am Verteilerschrank, sonst nebeneinander am Verteiler
+  final vd = VerteilerDaten.ausJson(verteiler.eigenschaften);
+  final wandStrecken = [
+    for (final w in waende.values) (a: Punkt(w.x1.toDouble(), w.y1.toDouble()), b: Punkt(w.x2.toDouble(), w.y2.toDouble()), dicke: w.dicke.toDouble()),
+  ];
+  final anschluss = {for (final (name, p) in verteilerAnschlussPunkte(hv, vd, wandStrecken)) name: p};
+  const rohr = 20.0, teilung = 2 * rohr;
+  final anfragen = <AnbindungsAnfrage>[];
+  final plaene = <String, Objekt>{};
+  for (final (i, hk) in kreise.indexed) {
     final z = verlegeplan(hk.punkte, FbhEinstellung.ausJson(hk.eigenschaften));
     if (z.anschlussVl == null || z.anschlussRl == null) continue;
     final raum = raeume.where((r) => r.id == hk.raumId).firstOrNull?.umriss ??
         raeume.where((r) => r.umriss != null && r.umriss!.length >= 3 && punktInPolygon(hk.punkte.first, r.umriss!)).firstOrNull?.umriss;
-    var summe = 0.0;
-    final neu = <String>[];
+    final abgang = vd.kreise.indexOf(hk.id) + 1;
     for (final (ende, art, seite) in [(z.anschlussVl!, 'VL', 0), (z.anschlussRl!, 'RL', 1)]) {
-      final versatz = (2 * i + seite) * abstand - abstand * sortiert.length;
-      final ziel = hv + Punkt(versatz, 0);
-      final w = anbindeweg(ende, ziel, raum: raum, tueren: tueren, versatz: versatz);
-      if (w.length < 2) continue;
-      final id = store.objektAnlegen(geschossId: geschossId, typ: hr, punkte: w, raumId: hk.raumId, lage: 'im Estrich', status: status);
-      store.objektAendern(id, {'eigenschaften': jsonEncode({'leitung': art, 'heizkreis': hk.id, 'verteiler': verteiler.id, 'breite_mm': rohr})});
-      neu.add(id);
-      for (var k = 0; k + 1 < w.length; k++) {
-        summe += (w[k + 1] - w[k]).laenge;
-      }
+      final ziel = abgang > 0 && anschluss['$abgang $art'] != null ? anschluss['$abgang $art']! : hv + Punkt((2 * i + seite) * teilung - teilung * kreise.length, 0);
+      final id = '${hk.id}|$art';
+      anfragen.add((id: id, start: ende, ziel: ziel, raum: raum));
+      plaene[id] = hk;
     }
-    if (neu.isEmpty) continue;
-    n += neu.length;
+  }
+  final wege = anbindungenBuendeln(anfragen, tueren, teilung: teilung);
+  var n = 0;
+  final summe = <String, double>{}, erste = <String, String>{};
+  for (final a in anfragen) {
+    final w = wege[a.id];
+    final hk = plaene[a.id]!;
+    if (w == null || w.length < 2) continue;
+    final art = a.id.split('|').last;
+    final id = store.objektAnlegen(geschossId: geschossId, typ: hr, punkte: w, raumId: hk.raumId, lage: 'im Estrich', status: status);
+    store.objektAendern(id, {'eigenschaften': jsonEncode({'leitung': art, 'heizkreis': hk.id, 'verteiler': verteiler.id, 'breite_mm': rohr, 'verlegung': 'unterputz'})});
+    n++;
+    erste.putIfAbsent(hk.id, () => id);
+    for (var k = 0; k + 1 < w.length; k++) {
+      summe[hk.id] = (summe[hk.id] ?? 0) + (w[k + 1] - w[k]).laenge / 2; // Mittel aus VL und RL
+    }
+  }
+  for (final hk in kreise) {
+    if (summe[hk.id] == null) continue;
+    final aktuell = store.objekte(geschossId).where((o) => o.id == hk.id).firstOrNull ?? hk;
     store.objektAendern(hk.id, {
-      'eigenschaften': jsonEncode({...hk.eigenschaften, 'zuleitung_mm': (summe / neu.length).round(), 'anbindung': neu.first, 'verteiler': verteiler.id}),
+      'eigenschaften': jsonEncode({...aktuell.eigenschaften, 'zuleitung_mm': summe[hk.id]!.round(), 'anbindung': erste[hk.id], 'verteiler': verteiler.id}),
     });
   }
   return n;

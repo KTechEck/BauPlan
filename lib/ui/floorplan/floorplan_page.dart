@@ -2662,7 +2662,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           _vorlageMenue(plan),
           // Seltene Projekteinstellungen gebündelt in einem Menü
           PopupMenuButton<String>(
-            tooltip: 'Optionen: Ecken verbinden, neue Wände',
+            tooltip: 'Optionen: Ecken verbinden, neue Wände, Maße je Zoom',
             icon: const Icon(Icons.tune),
             onSelected: (a) {
               switch (a) {
@@ -2675,6 +2675,26 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   setState(() => _neueVerbinden = true);
                 case 'neu_aus':
                   setState(() => _neueVerbinden = false);
+                case 'mass_dichter' || 'mass_lockerer' || 'schrift_groesser' || 'schrift_kleiner' || 'mass_zurueck':
+                  final d = _s.settings.darstellung;
+                  double w(String k) => (d[k] as num?)?.toDouble() ?? 1;
+                  setState(() {
+                    switch (a) {
+                      case 'mass_dichter':
+                        d['mass_dichte'] = (w('mass_dichte') / 1.25).clamp(0.5, 3.0);
+                      case 'mass_lockerer':
+                        d['mass_dichte'] = (w('mass_dichte') * 1.25).clamp(0.5, 3.0);
+                      case 'schrift_groesser':
+                        d['mass_schrift'] = (w('mass_schrift') * 1.15).clamp(0.7, 2.0);
+                      case 'schrift_kleiner':
+                        d['mass_schrift'] = (w('mass_schrift') / 1.15).clamp(0.7, 2.0);
+                      default:
+                        d
+                          ..remove('mass_dichte')
+                          ..remove('mass_schrift');
+                    }
+                  });
+                  _s.settings.speichern();
                 case 'dach':
                   if (_s.geschossId != null) {
                     dachBearbeiten(context, _s.store!, _s.geschossId!, () {
@@ -2691,6 +2711,16 @@ class _FloorplanPageState extends State<FloorplanPage> {
               CheckedPopupMenuItem(value: 'neu_std', checked: _neueVerbinden == null, child: const Text('wie Projektvorgabe')),
               CheckedPopupMenuItem(value: 'neu_an', checked: _neueVerbinden == true, child: const Text('verbinden')),
               CheckedPopupMenuItem(value: 'neu_aus', checked: _neueVerbinden == false, child: const Text('nicht verbinden')),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                  enabled: false,
+                  child: Text('Maße im Plan (je Zoom): Dichte ${((_s.settings.darstellung['mass_dichte'] as num?)?.toDouble() ?? 1).toStringAsFixed(2).replaceAll('.', ',')}, '
+                      'Schrift ${(((_s.settings.darstellung['mass_schrift'] as num?)?.toDouble() ?? 1) * 100).round()} %')),
+              const PopupMenuItem(value: 'mass_dichter', child: Text('Mehr Maße zeigen (dichter)')),
+              const PopupMenuItem(value: 'mass_lockerer', child: Text('Weniger Maße zeigen (lockerer)')),
+              const PopupMenuItem(value: 'schrift_groesser', child: Text('Maßschrift größer')),
+              const PopupMenuItem(value: 'schrift_kleiner', child: Text('Maßschrift kleiner')),
+              const PopupMenuItem(value: 'mass_zurueck', child: Text('Maße zurücksetzen')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'dach', child: ListTile(dense: true, leading: Icon(Icons.roofing), title: Text('Dachgeschoss: Dach, Sparren, Kniestock …'))),
             ],
@@ -2963,6 +2993,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
               child: CustomPaint(
                 size: Size.infinite,
                 painter: FloorplanPainter(
+                  massDichte: (_s.settings.darstellung['mass_dichte'] as num?)?.toDouble() ?? 1,
+                  massSchrift: (_s.settings.darstellung['mass_schrift'] as num?)?.toDouble() ?? 1,
                   waende: _versatz == Offset.zero ? plan.waende : _verschobeneVorschau(plan.waende),
                   raeume: raumBilder,
                   umrisse: _versatz == Offset.zero ? plan.umrisse : const {},

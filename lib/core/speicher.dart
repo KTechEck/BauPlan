@@ -267,7 +267,14 @@ class PcSpeicher implements Speicher {
 /// Kleiner Dienst in BauSpur am PC: gibt der App im Heimnetz den Planstand
 /// und nimmt Erfassungen an. Ohne Kopplungscode gibt es nur den Namen des PCs.
 class PcDienst {
-  PcDienst({required this.ordner, required this.code, required this.auskunft, this.beiEingang});
+  PcDienst({required this.ordner, required this.code, required this.auskunft, this.beiEingang, this.benutzer, this.planFiltern});
+
+  /// Weitere Benutzer mit eigenem Code: liefert die Auskunft (Name, Rolle,
+  /// freigegebene Räume, Prüfpflicht) zum Code, sonst null.
+  final Map<String, dynamic>? Function(String code)? benutzer;
+
+  /// Planstand für einen Benutzer zuschneiden (freigegebene Räume).
+  final List<int> Function(List<int> plan, Map<String, dynamic> benutzer)? planFiltern;
 
   /// Austauschordner des offenen Projekts (null: kein Projekt offen).
   final String? Function() ordner;
@@ -312,12 +319,14 @@ class PcDienst {
     final teile = a.uri.pathSegments;
     final kopf = teile.isEmpty ? '' : teile.first;
     if (kopf == 'bauspur') return _antwort(a, 200, {'dienst': 'bauspur', ...auskunft()});
-    if (a.headers.value('x-bauspur-code') != code()) {
+    final c = a.headers.value('x-bauspur-code') ?? '';
+    final Map<String, dynamic>? nutzer = c == code() ? null : (c.isEmpty ? null : benutzer?.call(c));
+    if (c != code() && nutzer == null) {
       // bremst das Durchprobieren von Codes
       await Future<void>.delayed(const Duration(milliseconds: 400));
       return _antwort(a, 401);
     }
-    if (kopf == 'pruefen') return _antwort(a, 200, {'dienst': 'bauspur', ...auskunft()});
+    if (kopf == 'pruefen') return _antwort(a, 200, {'dienst': 'bauspur', ...auskunft(), ...?nutzer, if (nutzer == null) 'rolle': 'eigentuemer'});
     final basis = ordner();
     final rel = teile.skip(1).join('/');
     if (basis == null) return _antwort(a, 503, {'fehler': 'Am PC ist kein Projekt geöffnet.'});
@@ -327,15 +336,31 @@ class PcDienst {
     if (kopf == 'datei' && a.method == 'GET') {
       final b = await lokal.lesen(rel);
       if (b == null) return _antwort(a, 404);
-      a.response.add(b);
+      a.response.add(nutzer != null && rel.endsWith('.json') && rel.startsWith('planstand') && planFiltern != null ? planFiltern!(b, nutzer) : b);
       return a.response.close();
     }
-    if (kopf == 'datei' && a.method == 'PUT' && rel.startsWith('eingang/') && !rel.contains('_archiv')) {
+    if (kopf == 'datei' && a.method == 'PUT' && rel.startsWith('eingang/') && !rel.contains('_archiv') && !rel.contains('_pruefen')) {
+      if (nutzer != null && nutzer['rolle'] == 'gast') return _antwort(a, 403, {'fehler': 'Gast: nur lesen'});
       final b = BytesBuilder(copy: false);
       await for (final t in a) {
         b.add(t);
       }
-      await lokal.schreiben(rel, b.takeBytes());
+      var daten = b.takeBytes();
+      if (nutzer != null && rel.endsWith('.json')) {
+        // Wer etwas schickt, bestimmt der PC über den Code – nicht die App
+        try {
+          final e = Map<String, dynamic>.from(jsonDecode(utf8.decode(daten)) as Map);
+          e
+            ..['autor'] = nutzer['benutzer'] ?? e['autor']
+            ..['benutzer_id'] = nutzer['benutzer_id']
+            ..['rolle'] = nutzer['rolle']
+            ..['pruefen'] = nutzer['pruefpflicht'] != false;
+          daten = Uint8List.fromList(utf8.encode(jsonEncode(e)));
+        } catch (_) {
+          return _antwort(a, 400);
+        }
+      }
+      await lokal.schreiben(rel, daten);
       if (rel.endsWith('.json')) beiEingang?.call();
       return _antwort(a, 200);
     }

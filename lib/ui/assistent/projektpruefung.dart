@@ -7,6 +7,7 @@ import '../../core/ki.dart';
 import '../../core/knx.dart';
 import '../../core/licht.dart';
 import '../../core/raumerkennung.dart';
+import '../../core/revision.dart';
 import '../../core/schrank.dart';
 import '../../core/technik.dart';
 import '../../core/verdrahtung.dart';
@@ -42,6 +43,17 @@ List<PruefHinweis> projektPruefen(ProjectStore store, Regelwerte r) {
           bereich: 'Installation',
           text: '${g.kuerzel}: ${ohneRaum.length} Objekt(e) ohne Raum (${ohneRaum.take(4).map((o) => o.kennung).join(', ')}${ohneRaum.length > 4 ? ' …' : ''}).',
           objektId: ohneRaum.first.id));
+    }
+    // Revisionsöffnungen: Abzweigdosen, Netzteile, Klappen, Absperrungen müssen erreichbar bleiben
+    final reichweite = ((store.einstellung<num>('revision_reichweite')) ?? 400).toDouble();
+    for (final rp in revisionPruefen(objekte, typen, reichweite: reichweite)) {
+      if (rp.erreichbar) continue;
+      h.add(PruefHinweis(
+          bereich: 'Revision',
+          text: rp.oeffnung == null
+              ? '${rp.objekt.kennung}: muss zugänglich bleiben – keine Revisionsöffnung geplant.'
+              : '${rp.objekt.kennung}: nächste Revisionsöffnung ${rp.oeffnung!.kennung} ist ${(rp.abstand / 10).round()} cm entfernt (Reichweite ${(reichweite / 10).round()} cm).',
+          objektId: rp.objekt.id));
     }
     // Brandschutz: Rauchwarnmelder (Landesbauordnungen, DIN 14676)
     h.addAll(brandschutzPruefen(store, g, raeume, objekte, typen));

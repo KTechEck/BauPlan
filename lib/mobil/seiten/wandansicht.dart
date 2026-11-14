@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
+import '../../core/leitung_wand.dart';
 import '../kontext.dart';
-import '../planstand.dart';
+import '../planstand.dart' hide bohrCheck;
 import 'aufmass.dart';
 
 /// Ein Element in der Wandansicht (x ab linker Ecke, z über FFB, mm).
@@ -16,6 +17,21 @@ class _Teil {
   final double? z;
   final double? x2, z2;
   bool get istLinie => x2 != null;
+  double get breite => (o['b'] as num?)?.toDouble() ?? 0;
+  int? get tiefe => (o['t'] as num?)?.round();
+  bool get durchgehend => o['durchgehend'] == true && !istLinie;
+
+  WandTeil get wandTeil => WandTeil(
+        id: '${o['id']}',
+        text: '${o['kennung']} · ${o['name']}',
+        x: x,
+        z: z,
+        x2: x2,
+        z2: z2,
+        breite: istLinie ? breite : math.max(60, breite),
+        ueberdeckung: istLinie ? tiefe : null,
+        durchgehend: durchgehend,
+      );
 }
 
 /// Wandansicht in der App: Wand von der Raumseite gesehen, mit Öffnungen,
@@ -451,33 +467,13 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
     final p = _bohrpunkt;
     if (p == null) return;
     final s = _seite;
-    final treffer = <(Map<String, dynamic>, double, bool)>[]; // Objekt, Abstand, Höhe bekannt
-    for (final t in teile) {
-      double d;
-      final bekannt = t.z != null && (!t.istLinie || t.z2 != null);
-      if (!bekannt) {
-        // Höhe unbekannt: nur waagrechter Abstand zählt (Leitung könnte überall laufen)
-        d = t.istLinie ? (p.dx < math.min(t.x, t.x2!) ? math.min(t.x, t.x2!) - p.dx : (p.dx > math.max(t.x, t.x2!) ? p.dx - math.max(t.x, t.x2!) : 0)) : (t.x - p.dx).abs();
-      } else if (t.istLinie) {
-        d = abstandStrecke(p, Offset(t.x, t.z!), Offset(t.x2!, t.z2!));
-      } else {
-        d = (Offset(t.x, t.z!) - p).distance;
-      }
-      if (d <= 300) treffer.add((t.o, d, bekannt));
-    }
-    treffer.sort((a, b) => a.$2.compareTo(b.$2));
+    final treffer = bohrCheck(p, [for (final t in teile) t.wandTeil]);
     final zonen = installationszonen(s.laenge, hoehe, [for (final o in oeff) (o.x1, o.x2)]);
     final inZone = zonen.any((r) => r.contains(p));
     final inOeffnung = oeff.any((o) => p.dx >= o.x1 && p.dx <= o.x2 && p.dy >= o.z1 && p.dy <= o.z2);
-    final nah = treffer.where((t) => t.$2 < 100).isNotEmpty;
-    final farbe = nah ? const Color(0xFFB91C1C) : (inZone || treffer.isNotEmpty ? const Color(0xFFB45309) : massGemessen);
-    final urteil = nah
-        ? 'Nicht bohren – Leitung/Gerät näher als 10 cm'
-        : inZone
-            ? 'Vorsicht – Installationszone (hier dürfen Leitungen liegen)'
-            : treffer.isNotEmpty
-                ? 'Vorsicht – geplante Leitung/Gerät bis 30 cm'
-                : 'Laut Plan frei, außerhalb der Installationszonen';
+    final (stufe, urteil) = bohrUrteil(treffer, inZone: inZone);
+    final nah = stufe == 2;
+    final farbe = nah ? const Color(0xFFB91C1C) : (stufe == 1 ? const Color(0xFFB45309) : massGemessen);
     showModalBottomSheet<void>(
       context: context,
       builder: (_) => ListView(padding: const EdgeInsets.all(16), shrinkWrap: true, children: [
@@ -491,13 +487,19 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
         Text('(von rechts: ${mmCm(s.laenge - p.dx)}, unter Decke: ${mmCm(hoehe - p.dy)})', style: const TextStyle(color: BsFarben.textLeise)),
         if (inOeffnung) const Text('Die Stelle liegt in einer Öffnung.', style: TextStyle(color: Color(0xFFB45309))),
         const SizedBox(height: 8),
-        for (final (o, d, bekannt) in treffer)
+        for (final t in treffer)
           ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(d < 100 ? Icons.dangerous_outlined : Icons.warning_amber, color: d < 100 ? const Color(0xFFB91C1C) : const Color(0xFFB45309)),
-            title: Text('${o['kennung']} · ${o['name']}'),
-            subtitle: Text('${mmCm(d)} entfernt${bekannt ? '' : ' (Höhe nicht geplant – nur seitlicher Abstand)'}${o['kabel'] == null ? '' : ' · ${o['kabel']}'}'),
+            leading: Icon(t.abstand < 100 ? Icons.dangerous_outlined : Icons.warning_amber, color: t.abstand < 100 ? const Color(0xFFB91C1C) : const Color(0xFFB45309)),
+            title: Text(t.teil.text),
+            subtitle: Text([
+              t.abstand <= 0 ? 'liegt genau hier' : '${mmCm(t.abstand)} bis zur Kante',
+              if (!t.hoeheBekannt) 'Höhe nicht geplant – nur seitlicher Abstand',
+              if (t.teil.durchgehend) 'Steigleitung über die ganze Höhe',
+              if (t.teil.ueberdeckung != null) '${t.teil.ueberdeckung} mm tief (Vorderkante)' else if (t.teil.istLinie) 'Tiefe nicht eingetragen',
+              if (t.teil.breite > 0) '${t.teil.breite.round()} mm breit',
+            ].join(' · ')),
           ),
         const SizedBox(height: 6),
         const Text('Installationszonen nach DIN 18015-3: 15–45 cm unter der Decke und über dem Boden, 100–130 cm, 10–30 cm neben Ecken, Türen und Fenstern. '
@@ -600,8 +602,9 @@ class _WandPainter extends CustomPainter {
       final farbe = gewerke[t.o['gewerk']]?.farbe ?? const Color(0xFF888888);
       if (t.istLinie) {
         final p = Paint()
-          ..color = farbe
-          ..strokeWidth = 2.5;
+          ..color = t.o['durchgehend'] == true ? farbe.withValues(alpha: 0.45) : farbe
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = math.max(2.5, t.breite * m);
         if (t.z != null && t.z2 != null) {
           canvas.drawLine(zuBild(t.x, t.z!), zuBild(t.x2!, t.z2!), p);
         } else {
@@ -609,6 +612,12 @@ class _WandPainter extends CustomPainter {
           final x1 = math.min(t.x, t.x2!), x2 = math.max(t.x, t.x2!);
           canvas.drawRect(Rect.fromPoints(zuBild(x1, hoehe), zuBild(math.max(x2, x1 + 20 / m), 0)), Paint()..color = farbe.withValues(alpha: 0.12));
         }
+      } else if (t.durchgehend) {
+        // Steigleitung aus/in ein anderes Geschoss: über die ganze Wandhöhe
+        canvas.drawLine(zuBild(t.x, 0), zuBild(t.x, hoehe), Paint()
+          ..color = farbe.withValues(alpha: 0.45)
+          ..strokeWidth = math.max(3, t.breite * m));
+        _text(canvas, '↕ ${t.o['kennung']}', zuBild(t.x, hoehe * 0.6), groesse: 8, farbe: farbe, fett: true);
       } else {
         final z = t.z;
         final c = zuBild(t.x, z ?? 0);

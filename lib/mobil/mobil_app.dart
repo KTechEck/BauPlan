@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../core/rollen.dart';
 import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
@@ -130,6 +132,10 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
 
   /// Erfassung ablegen (Puffer) und sofort zu übertragen versuchen.
   Future<void> _erfasst(Map<String, dynamic> eintrag, {List<int>? foto}) async {
+    if (!Rolle.aus(_plan?.daten['rolle']).darfErfassen) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Als Gast kannst du nur nachschlagen, nichts erfassen.')));
+      return;
+    }
     widget.puffer.ablegen({...eintrag, 'autor': _e.benutzer.isEmpty ? 'App' : _e.benutzer}, foto: foto);
     setState(() => _wartend = widget.puffer.wartend.length);
     await _abgleichen();
@@ -157,17 +163,27 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
     if (_laedt && _plan == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (_ordnerName == null || _plan == null) return _einrichten();
     final k = _kontext(_plan!);
+    final rolle = Rolle.aus(_plan!.daten['rolle']);
     final seiten = <({IconData icon, String label, Widget seite})>[
-      (icon: Icons.add_a_photo_outlined, label: 'Erfassen', seite: ErfassenSeite(k: k)),
+      if (rolle.darfErfassen) (icon: Icons.add_a_photo_outlined, label: 'Erfassen', seite: ErfassenSeite(k: k)),
       (icon: Icons.architecture, label: 'Plan', seite: PlanSeite(k: k)),
       (icon: Icons.meeting_room_outlined, label: 'Räume', seite: RaeumeListe(k: k)),
       (icon: Icons.shopping_cart_outlined, label: 'Einkauf', seite: EinkaufSeite(k: k)),
       (icon: Icons.more_horiz, label: 'Mehr', seite: MehrSeite(k: k, neuZeichnen: () => setState(() {}))),
     ];
+    if (_seite >= seiten.length) _seite = 0;
     final tablet = mobilGeraet(context) == MobilGeraet.tablet;
     final kopf = AppBar(
       title: Text(_plan!.projekt),
       actions: [
+        if (rolle != Rolle.eigentuemer)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Chip(
+              avatar: Icon(rolle == Rolle.gast ? Icons.visibility_outlined : Icons.engineering_outlined, size: 16),
+              label: Text('${_plan!.daten['benutzer'] ?? ''} · ${rolle.label}'),
+            ),
+          ),
         if (_wartend > 0)
           Padding(
             padding: const EdgeInsets.only(right: 4),
@@ -184,9 +200,9 @@ class _MobilStartState extends State<MobilStart> with WidgetsBindingObserver {
         ),
       Expanded(
         // iPad: Plan groß mit Räumen daneben; die eigene iPad-Oberfläche folgt
-        child: tablet && _seite == 1
+        child: tablet && seiten[_seite].label == 'Plan'
             ? Row(children: [
-                Expanded(child: seiten[1].seite),
+                Expanded(child: seiten[_seite].seite),
                 const VerticalDivider(width: 1),
                 SizedBox(width: 340, child: RaeumeListe(k: k)),
               ])

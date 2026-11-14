@@ -71,6 +71,7 @@ List<(Map<String, dynamic>, double)> bohrCheck(Map<String, dynamic> geschoss, Of
         d = math.min(d, abstandStrecke(q, pts[i], pts[i + 1]));
       }
     }
+    d = math.max(0, d - ((o['b'] as num?)?.toDouble() ?? 0) / 2); // bis zur Leitungskante
     if (d <= radius && o['geometrie'] != 'flaeche') aus.add((o, d));
   }
   aus.sort((a, b) => a.$2.compareTo(b.$2));

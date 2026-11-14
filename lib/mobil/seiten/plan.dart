@@ -577,7 +577,7 @@ class _GrundrissAnsichtState extends State<GrundrissAnsicht> {
             dense: true,
             leading: Icon(d < 100 ? Icons.dangerous_outlined : Icons.warning_amber, color: d < 100 ? const Color(0xFFB91C1C) : const Color(0xFFB45309)),
             title: Text('${o['kennung']} · ${o['name']}'),
-            subtitle: Text('${mmCm(d)} entfernt${o['lage'] == null ? '' : ' · ${o['lage']}'}${o['h'] == null ? '' : ' · Höhe ${mmCm(o['h'] as num)} über FFB'}'),
+            subtitle: Text('${mmCm(d)} entfernt${o['lage'] == null ? '' : ' · ${o['lage']}'}${o['t'] == null ? '' : ' · ${o['t']} mm tief'}${o['h'] == null ? '' : ' · Höhe ${mmCm(o['h'] as num)} über FFB'}'),
           ),
         const Text('Im Grundriss fehlt die Höhe: für die Wand die Wandansicht öffnen (Plan › Wand › Ansicht). Ohne Gewähr – vor dem Bohren mit Leitungssucher prüfen.',
             style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
