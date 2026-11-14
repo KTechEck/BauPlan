@@ -407,4 +407,9 @@ const List<List<String>> migrationen = [
   [],
   // Version 25 – Abgehängtes Deckenfeld mit Schattenfuge (Allgemein; Startbestand in _migrieren)
   [],
+  // Version 26 – Aufgabenart (Aufgabe, Mangel, Restarbeit) und Bezug zu einem Objekt
+  [
+    "ALTER TABLE aufgabe ADD COLUMN art TEXT NOT NULL DEFAULT 'aufgabe'",
+    'ALTER TABLE aufgabe ADD COLUMN objekt_id TEXT',
+  ],
 ];

@@ -18,6 +18,7 @@ import '../../state/app_state.dart';
 import '../floorplan/floorplan_painter.dart';
 import '../installation/installation_page.dart' show ObjektPainter, wandStrecke;
 import '../symbol_editor.dart' show eigeneSymbole;
+import 'akte.dart';
 import '../widgets.dart';
 import 'hausdoku.dart';
 import 'wohnflaeche_page.dart';
@@ -136,6 +137,26 @@ class _ExportPageState extends State<ExportPage> {
             icon: const Icon(Icons.square_foot),
             label: const Text('Wohnfläche (WoFlV)'),
           ),
+          FilledButton.tonalIcon(
+            onPressed: _laeuft ? null : () => _ausgabe('Hausakte', () => hausakteErstellen(_s.store!)),
+            icon: const Icon(Icons.folder_special_outlined),
+            label: const Text('Hausakte (Ordner + ZIP + HTML)'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _laeuft ? null : () => _ausgabe('Raumbuch', () => raumbuchPdf(_s.store!)),
+            icon: const Icon(Icons.meeting_room_outlined),
+            label: const Text('Raumbuch (PDF)'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _laeuft ? null : () => _ausgabe('Fotobericht', () => fotoberichtPdf(_s.store!)),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: const Text('Fotobericht (PDF)'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _laeuft ? null : _etiketten,
+            icon: const Icon(Icons.label_outline),
+            label: const Text('Etiketten …'),
+          ),
           OutlinedButton.icon(
             onPressed: () => Process.run('explorer', [exporte.path]),
             icon: const Icon(Sym.ordner),
@@ -199,6 +220,62 @@ class _ExportPageState extends State<ExportPage> {
     } finally {
       if (mounted) setState(() => _laeuft = false);
     }
+  }
+
+  Future<void> _ausgabe(String was, Future<String> Function() machen) async {
+    setState(() => _laeuft = true);
+    try {
+      final datei = await machen();
+      if (mounted) {
+        setState(() => _letzteDatei = datei);
+        zeigeHinweis(context, '$was gespeichert: ${p.basename(datei)}', aktion: SnackBarAction(label: 'Öffnen', onPressed: () => Process.run('explorer', [datei])));
+      }
+    } catch (e) {
+      if (mounted) zeigeFehler(context, '$was fehlgeschlagen: $e');
+    } finally {
+      if (mounted) setState(() => _laeuft = false);
+    }
+  }
+
+  Future<void> _etiketten() async {
+    final arten = {'kabel', 'dosen', 'sicherungen', 'fuehler'};
+    var format = etikettenFormate.keys.first;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: const Text('Etiketten drucken'),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final (k, l) in const [('kabel', 'Kabel und Leerrohre (Kennung)'), ('dosen', 'Netzwerkdosen (Port)'), ('sicherungen', 'Sicherungen (Kennzeichen, Stromkreis)'), ('fuehler', 'Fühler (Regelung)')])
+                CheckboxListTile(
+                  dense: true,
+                  value: arten.contains(k),
+                  title: Text(l),
+                  onChanged: (v) => setD(() => v == true ? arten.add(k) : arten.remove(k)),
+                ),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: format,
+                decoration: const InputDecoration(labelText: 'Format'),
+                items: [for (final f in etikettenFormate.keys) DropdownMenuItem(value: f, child: Text(f))],
+                onChanged: (v) => setD(() => format = v ?? format),
+              ),
+              const SizedBox(height: 6),
+              const Text('Banddrucker: ein Etikett je PDF-Seite in Bandbreite. Dazu eine CSV für die Etiketten-Software.',
+                  style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Erstellen')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await _ausgabe('Etiketten', () async => (await etikettenSpeichern(_s.store!, etikettenSammeln(_s.store!, arten), format)).$1);
   }
 
   Future<void> _zip() async {

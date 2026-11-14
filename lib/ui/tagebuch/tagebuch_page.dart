@@ -28,6 +28,7 @@ class TagebuchPage extends StatefulWidget {
 
 class _TagebuchPageState extends State<TagebuchPage> {
   int _ansicht = 0;
+  String _artFilter = 'alle';
   bool _erledigteZeigen = false;
   final List<VoidCallback> _rueckgaengig = [];
 
@@ -113,6 +114,18 @@ class _TagebuchPageState extends State<TagebuchPage> {
                   ),
                 if (_ansicht == 1) ...[
                   FilledButton.icon(onPressed: () => _aufgabeDialog(), icon: const Icon(Sym.hinzufuegen), label: const Text('Aufgabe')),
+                  OutlinedButton.icon(onPressed: () => _aufgabeDialog(art: 'mangel'), icon: const Icon(Icons.report_problem_outlined, size: 18), label: const Text('Mangel')),
+                  SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: 'alle', label: Text('alle')),
+                      ButtonSegment(value: 'aufgabe', label: Text('Aufgaben')),
+                      ButtonSegment(value: 'mangel', label: Text('Mängel')),
+                      ButtonSegment(value: 'restarbeit', label: Text('Restarbeiten')),
+                    ],
+                    selected: {_artFilter},
+                    onSelectionChanged: (v) => setState(() => _artFilter = v.first),
+                  ),
                   FilterChip(label: const Text('erledigte zeigen'), selected: _erledigteZeigen, onSelected: (v) => setState(() => _erledigteZeigen = v)),
                   OutlinedButton.icon(
                     onPressed: _wartungsplan,
@@ -305,7 +318,8 @@ class _TagebuchPageState extends State<TagebuchPage> {
 
   // ---------------------------------------------------------- Aufgaben
 
-  Future<void> _aufgabeDialog({Aufgabe? alt}) async {
+  Future<void> _aufgabeDialog({Aufgabe? alt, String art = 'aufgabe'}) async {
+    var artWahl = alt?.art ?? art;
     final store = _s.store!;
     final raeume = _raeume;
     final gewerke = store.gewerke();
@@ -319,10 +333,16 @@ class _TagebuchPageState extends State<TagebuchPage> {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setD) => AlertDialog(
-          title: Text(alt == null ? 'Aufgabe' : 'Aufgabe bearbeiten'),
+          title: Text(alt == null ? (aufgabenArten[artWahl] ?? 'Aufgabe') : '${aufgabenArten[artWahl] ?? 'Aufgabe'} bearbeiten'),
           content: SizedBox(
             width: 520,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [for (final e in aufgabenArten.entries) ButtonSegment(value: e.key, label: Text(e.value))],
+                selected: {artWahl},
+                onSelectionChanged: (v) => setD(() => artWahl = v.first),
+              ),
               TextField(controller: titel, autofocus: true, decoration: const InputDecoration(labelText: 'Titel', hintText: 'z. B. Leerrohre fotografieren')),
               TextField(controller: beschreibung, maxLines: 2, decoration: const InputDecoration(labelText: 'Beschreibung')),
               Row(children: [
@@ -392,7 +412,7 @@ class _TagebuchPageState extends State<TagebuchPage> {
     String? tag(DateTime? d) => d == null ? null : '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     if (alt == null) {
       final id = store.aufgabeAnlegen(
-          titel: titel.text.trim(), beschreibung: beschreibung.text.trim(), raumId: raum, gewerkId: gewerk, faellig: faellig, abhaengigVon: vor, intervallTage: intervall);
+          titel: titel.text.trim(), beschreibung: beschreibung.text.trim(), raumId: raum, gewerkId: gewerk, faellig: faellig, abhaengigVon: vor, intervallTage: intervall, art: artWahl);
       _rueckgaengig.add(() => store.aufgabeLoeschen(id));
     } else {
       final vorher = store.aufgabeAendern(alt.id, {
@@ -403,6 +423,7 @@ class _TagebuchPageState extends State<TagebuchPage> {
         'faellig': tag(faellig),
         'abhaengig_von': vor,
         'intervall_tage': intervall,
+        'art': artWahl,
       });
       _rueckgaengig.add(() => store.aufgabeAendern(alt.id, vorher));
     }
@@ -415,7 +436,10 @@ class _TagebuchPageState extends State<TagebuchPage> {
     final raeume = _raeume;
     final gewerke = {for (final g in store.gewerke()) g.id: g};
     final heute = DateTime.now();
-    final liste = [for (final a in alle) if (_erledigteZeigen || a.status != AufgabenStatus.erledigt) a];
+    final liste = [
+      for (final a in alle)
+        if ((_erledigteZeigen || a.status != AufgabenStatus.erledigt) && (_artFilter == 'alle' || a.art == _artFilter)) a
+    ];
     if (liste.isEmpty) return const Center(child: Text('Keine offenen Aufgaben.'));
     return ListView(padding: const EdgeInsets.all(16), children: [
       for (final a in liste)
@@ -435,7 +459,11 @@ class _TagebuchPageState extends State<TagebuchPage> {
                         _s.geaendert();
                       },
               ),
-              title: Text(a.titel, style: TextStyle(decoration: a.status == AufgabenStatus.erledigt ? TextDecoration.lineThrough : null)),
+              title: Text.rich(TextSpan(children: [
+                if (a.art != 'aufgabe')
+                  TextSpan(text: '${aufgabenArten[a.art] ?? a.art}: ', style: TextStyle(color: a.art == 'mangel' ? const Color(0xFFB91C1C) : const Color(0xFFB45309), fontWeight: FontWeight.w600)),
+                TextSpan(text: a.titel),
+              ]), style: TextStyle(decoration: a.status == AufgabenStatus.erledigt ? TextDecoration.lineThrough : null)),
               subtitle: Text([
                 if (a.raumId != null && raeume[a.raumId] != null) raeume[a.raumId]!,
                 if (a.gewerkId != null && gewerke[a.gewerkId] != null) gewerke[a.gewerkId]!.name,

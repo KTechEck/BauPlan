@@ -264,3 +264,32 @@ List<List<(Punkt, double)>> leitungImGeschoss(Objekt o, int versatz, double unte
   if (akt != null && akt.length >= 2) stuecke.add(akt);
   return stuecke;
 }
+
+/// Bohrschutz-Karte: Sperrzonen um Leitungen und Dosen (Ansichts-x/z in mm)
+/// mit [sicherheit] mm Abstand zusätzlich zur halben Breite.
+List<(double x0, double z0, double x1, double z1, String text)> bohrSperrzonen(List<WandTeil> teile, {double sicherheit = 100}) => [
+      for (final t in teile)
+        if (t.z != null)
+          () {
+            final b = t.breite / 2 + sicherheit;
+            final x2 = t.x2 ?? t.x, z2 = t.z2 ?? t.z!;
+            return (math.min(t.x, x2) - b, math.min(t.z!, z2) - b, math.max(t.x, x2) + b, math.max(t.z!, z2) + b, t.text);
+          }(),
+    ];
+
+/// Installationszonen nach DIN 18015-3 (x/z in mm über RFB-Bezug [ffb]):
+/// waagerecht 150–450 mm unter der Decke und über dem Fußboden, senkrecht
+/// 100–300 mm neben Öffnungen und Wandecken.
+List<(double x0, double z0, double x1, double z1)> dinInstallationszonen({
+  required double laenge,
+  required double ffb,
+  required double decke,
+  List<(double von, double bis)> oeffnungen = const [],
+}) =>
+    [
+      (0, decke - 450, laenge, decke - 150),
+      (0, ffb + 150, laenge, ffb + 450),
+      (100, ffb, 300, decke),
+      (laenge - 300, ffb, laenge - 100, decke),
+      for (final (a, b) in oeffnungen) ...[(a - 300, ffb, a - 100, decke), (b + 100, ffb, b + 300, decke)],
+    ];

@@ -209,7 +209,7 @@ Future<void> diktatInsTagebuch(BuildContext context, AppState s, {List<String> r
   for (final e in wahl.entries) {
     if (!e.value) continue;
     final t = e.key.substring(2);
-    store.aufgabeAnlegen(titel: e.key.startsWith('M:') ? 'Mangel: $t' : t, beschreibung: 'aus Diktat vom ${DateTime.now().day}.${DateTime.now().month}.');
+    store.aufgabeAnlegen(titel: t, art: e.key.startsWith('M:') ? 'mangel' : 'aufgabe', beschreibung: 'aus Diktat vom ${DateTime.now().day}.${DateTime.now().month}.');
   }
   s.geaendert();
 }

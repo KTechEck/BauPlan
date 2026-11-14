@@ -3004,7 +3004,22 @@ class _InstallationPageState extends State<InstallationPage> {
         decoration: const InputDecoration(labelText: 'Status'),
         items: [for (final s in ObjektStatus.values) DropdownMenuItem(value: s, child: Text(s.label))],
         onChanged: (s) {
-          if (s != null) aendern({'status': s.name});
+          if (s == null) return;
+          aendern({'status': s.name});
+          // Pflichtfoto: dezenter Hinweis, wenn etwas verdeckt wird, das noch kein Foto hat (abschaltbar)
+          if (s == ObjektStatus.verdeckt && _s.settings.darstellung['pflichtfoto_hinweis'] != false) {
+            final hatFoto = _s.store!.fotos(o.geschossId).any((f) => f.objektIds.contains(o.id));
+            if (!hatFoto) {
+              zeigeHinweis(context, '${o.kennung} ist jetzt verdeckt, aber es gibt noch kein Foto davon.',
+                  aktion: SnackBarAction(
+                    label: 'Hinweis abschalten',
+                    onPressed: () {
+                      _s.settings.darstellung['pflichtfoto_hinweis'] = false;
+                      _s.settings.speichern();
+                    },
+                  ));
+            }
+          }
         },
       ),
       const SizedBox(height: 12),

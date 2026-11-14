@@ -627,3 +627,19 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Eigene Symbole (lib/ui/symbol_editor.dart: Linie/Kreis/Rechteck/Text auf ±20-Raster; Einstellungen `eigene_symbole`, `symbol_zuordnung`), in Installation und PDF-Plänen;
   „Eigenes Symbol für diesen Typ …“ im Objektpanel.
 - Tests test/build26_test.dart (inkl. echter PDF-Umwandlung unter Windows); 277 Tests grün.
+
+## Build 27 (14.11.) – Roadmap 8 (Baustelle/Einkauf) + 9 (Fotos/Hausakte)
+- Nächster Einkauf (lib/ui/bauteile/naechster_einkauf.dart, Bibliothek-Symbol Tasche): noch zu beschaffen (Bibliothek + Kabel-/Rohrliste), vormerken (Einstellung
+  `einkauf_plan`), „gekauft“ erhöht den Bestand, „noch da – nicht kaufen“ (Bestand > Bedarf), Werkzeug mitnehmen (Einstellungen `werkzeug`, `werkzeug_dabei`,
+  Vorschläge je Gewerk, ★ passend zu offenen Aufgaben), Einkaufszettel als HTML.
+- Migration 26: aufgabe.art (aufgabe/mangel/restarbeit) + objekt_id; Tagebuch › Aufgaben mit Filter und Knopf „Mangel“; Diktat legt Mängel als Art an.
+- Bohrschutz-Karte in der Wandansicht (Werkzeug „Bohrschutz“: rot Leitungen/Dosen mit Sicherheitsabstand, gelb DIN-18015-3-Zonen; bohrSperrzonen,
+  dinInstallationszonen in leitung_wand.dart; Einstellung bohr_sicherheit).
+- Prüfprotokoll-Vorlagen: Spülen Trinkwasser/Heizung, Einstellwerte Heizkreise, Inbetriebnahme Wärmepumpe/Lüftung.
+- Fotos: EXIF-Aufnahmedatum beim Import (lib/core/exif.dart), Pflichtfoto-Hinweis beim Status „verdeckt“ (abschaltbar, Darstellung pflichtfoto_hinweis),
+  „Verdeckt ohne Foto“, Zeitleiste je Raum mit Vorher/Nachher-Schieber (lib/ui/fotos/foto_extras.dart).
+- Ausgabe (lib/ui/export/akte.dart): Raumbuch (PDF), Fotobericht (PDF), Etiketten (Kabel, Netzwerkdosen mit Port, Sicherungen, Fühler; A4-Bögen,
+  Band 12/24 mm, Kabelfahne; CSV für Etiketten-Software), Hausakte als Ordner mit Kategorien + ZIP + index.html (offline) mit Stromlaufplänen,
+  Hydraulikschema, TAPPS2, Fotos nach Geschoss/Raum, Protokollen, Kabelliste, Gewährleistung, Belegen, Home-Assistant-YAML.
+- Gewährleistung je Produkt (lib/ui/bauteile/gewaehrleistung_dialog.dart, Einstellung `gewaehrleistung`, Vorschläge aus Einkäufen ≥ 50 €).
+- Tests test/build27_test.dart; 280 Tests grün.

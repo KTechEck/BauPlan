@@ -113,6 +113,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
   bool _setzen = false;
   bool _zeichnen = false; // Leitung / Rohr zeichnen (L)
   bool _bohren = false; // Bohr-Check (B)
+  bool _bohrschutz = false; // Bohrschutz-Karte einblenden
   Offset? _bohrpunkt; // x, z absolut
   String? _leitungsTypId;
   final List<Offset> _entwurf = []; // (x, z) der Leitung im Entwurf
@@ -818,6 +819,12 @@ class _WandansichtPageState extends State<WandansichtPage> {
                   WerkzeugKnopf(symbol: Sym.setzen, text: 'Setzen', tooltip: 'Objekt setzen (P)', aktiv: _setzen, onTap: () => _werkzeug(setzen: true)),
                   WerkzeugKnopf(symbol: Sym.leitung, text: 'Leitung', tooltip: 'Leitung / Rohr zeichnen (L): Punkte klicken, Enter beendet', aktiv: _zeichnen, onTap: () => _werkzeug(zeichnen: true)),
                   WerkzeugKnopf(symbol: Icons.hardware_outlined, text: 'Bohr-Check', tooltip: 'Bohr-Check (B): Stelle anklicken – was liegt dort, wie tief darf gebohrt werden', aktiv: _bohren, onTap: () => _werkzeug(bohren: true)),
+                  WerkzeugKnopf(
+                      symbol: Icons.grid_off_outlined,
+                      text: 'Bohrschutz',
+                      tooltip: 'Bohrschutz-Karte: rot = Leitungen/Dosen mit Sicherheitsabstand, gelb = Installationszonen nach DIN 18015-3 (dort können weitere Leitungen liegen)',
+                      aktiv: _bohrschutz,
+                      onTap: () => setState(() => _bohrschutz = !_bohrschutz)),
                 ]),
                 DropdownButton<String>(
                   value: _zeichnen ? _leitungsTypId : _typId,
@@ -993,6 +1000,15 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 fremd: _fremd,
                 bohrloecher: _bohrloecher,
                 bohrpunkt: _bohren ? _bohrpunkt : null,
+                sperr: _bohrschutz ? bohrSperrzonen(_wandTeile(), sicherheit: (_s.store!.einstellung<num>('bohr_sicherheit') ?? 100).toDouble()) : const [],
+                zonen: _bohrschutz
+                    ? dinInstallationszonen(
+                        laenge: _seite.laenge,
+                        ffb: _h.ffb.toDouble(),
+                        decke: _h.rohdecke.toDouble(),
+                        oeffnungen: [for (final o in _oeffnungen) (o.abstand.toDouble(), (o.abstand + o.breite).toDouble())],
+                      )
+                    : const [],
                 andock: [for (final a in _andock) (a.xz, a.text, a.bezug.containsKey('leitung'))],
                 fangText: _zeichnen ? _fangText : null,
                 schraenke: _schraenke,
@@ -1164,7 +1180,13 @@ class _AnsichtPainter extends CustomPainter {
     this.fremd = const [],
     this.bohrpunkt,
     this.bohrloecher = const [],
+    this.sperr = const [],
+    this.zonen = const [],
   });
+
+  /// Bohrschutz-Karte: Sperrzonen um Leitungen/Dosen und DIN-Installationszonen (x/z mm).
+  final List<(double, double, double, double, String)> sperr;
+  final List<(double, double, double, double)> zonen;
 
   final List<(Offset, int)> bohrloecher;
 
@@ -1229,6 +1251,19 @@ class _AnsichtPainter extends CustomPainter {
       for (var z = (h.rfb / raster).ceil() * raster.toDouble(); z <= h.rohdecke; z += raster) {
         canvas.drawLine(_p(0, z), _p(l, z), rp);
       }
+    }
+    // Bohrschutz-Karte: DIN-Zonen gelb, belegte Sperrzonen rot
+    for (final (x0, z0, x1, z1) in zonen) {
+      canvas.drawRect(Rect.fromPoints(_p(x0.clamp(0, l), z0), _p(x1.clamp(0, l), z1)).intersect(flaeche), Paint()..color = const Color(0x33F59F00));
+    }
+    for (final (x0, z0, x1, z1, _) in sperr) {
+      final r = Rect.fromPoints(_p(x0, z0), _p(x1, z1)).intersect(flaeche);
+      if (r.width <= 0 || r.height <= 0) continue;
+      canvas.drawRect(r, Paint()..color = const Color(0x55DC2626));
+      canvas.drawRect(r, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8
+        ..color = const Color(0xAADC2626));
     }
     canvas.drawRect(flaeche, Paint()
       ..style = PaintingStyle.stroke

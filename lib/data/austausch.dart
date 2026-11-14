@@ -400,7 +400,7 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
           store.aufgabeAnlegen(titel: a, beschreibung: 'aus Diktat (App, $autor) – bitte prüfen', raumId: raumId);
         }
         for (final m in teile.maengel) {
-          store.aufgabeAnlegen(titel: 'Mangel: $m', beschreibung: 'aus Diktat (App, $autor) – bitte prüfen', raumId: raumId);
+          store.aufgabeAnlegen(titel: m, art: 'mangel', beschreibung: 'aus Diktat (App, $autor) – bitte prüfen', raumId: raumId);
         }
         if (teile.aufgaben.isNotEmpty || teile.maengel.isNotEmpty) {
           hinweise.add('Diktat ($autor): ${teile.aufgaben.length + teile.maengel.length} Aufgabe(n) erkannt – bitte prüfen');

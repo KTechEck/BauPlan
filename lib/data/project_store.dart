@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../core/exif.dart';
 import '../core/fbh.dart';
 import '../core/height.dart';
 import '../core/ids.dart';
@@ -1676,7 +1677,8 @@ class ProjectStore {
         ? null
         : db.select('SELECT kuerzel FROM raum WHERE id = ?', [raumId]).firstOrNull?['kuerzel'] as String?;
     final gk = g?.kuerzel ?? 'G', rk = raum ?? 'ALLG';
-    final aufnahme = datei.lastModifiedSync().toUtc();
+    // Aufnahmedatum aus EXIF (Kamera/Handy), sonst Änderungsdatum der Datei
+    final aufnahme = (exifAusDatei(quelle) ?? datei.lastModifiedSync()).toUtc();
     final id = neueId();
     final kurz = id.substring(id.length - 8);
     final tag = aufnahme.toIso8601String().substring(0, 10);
@@ -2136,11 +2138,13 @@ class ProjectStore {
     DateTime? faellig,
     String? abhaengigVon,
     int? intervallTage,
+    String art = 'aufgabe',
+    String? objektId,
   }) {
     final id = neueId();
     db.execute(
-      'INSERT INTO aufgabe (id, titel, beschreibung, raum_id, gewerk_id, faellig, abhaengig_von, intervall_tage, erstellt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, titel, beschreibung, raumId, gewerkId, faellig == null ? null : _tag(faellig), abhaengigVon, intervallTage, jetzt()],
+      'INSERT INTO aufgabe (id, titel, beschreibung, raum_id, gewerk_id, faellig, abhaengig_von, intervall_tage, erstellt, art, objekt_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, titel, beschreibung, raumId, gewerkId, faellig == null ? null : _tag(faellig), abhaengigVon, intervallTage, jetzt(), art, objektId],
     );
     _protokoll('aufgabe', id, 'anlegen', {'titel': titel});
     return id;

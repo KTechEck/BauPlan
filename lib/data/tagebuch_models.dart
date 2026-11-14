@@ -57,7 +57,13 @@ class Aufgabe {
     this.abhaengigVon,
     this.intervallTage,
     this.erledigtAm,
+    this.art = 'aufgabe',
+    this.objektId,
   });
+
+  /// aufgabe, mangel, restarbeit
+  final String art;
+  final String? objektId;
   final String id;
   final String titel;
   final String beschreibung;
@@ -82,8 +88,15 @@ class Aufgabe {
         abhaengigVon: r['abhaengig_von'] as String?,
         intervallTage: r['intervall_tage'] as int?,
         erledigtAm: r['erledigt_am'] == null ? null : DateTime.parse(r['erledigt_am'] as String),
+        art: _spalte(r, 'art') ?? 'aufgabe',
+        objektId: _spalte(r, 'objekt_id'),
       );
 }
+
+String? _spalte(Row r, String k) => r.containsKey(k) ? r[k] as String? : null;
+
+/// Aufgabenarten mit Anzeige.
+const aufgabenArten = {'aufgabe': 'Aufgabe', 'mangel': 'Mangel', 'restarbeit': 'Restarbeit'};
 
 /// Prüfprotokoll bzw. Messwert (Druckprobe, Isolationsmessung, Belegreifheizen …).
 class Pruefprotokoll {
@@ -129,6 +142,11 @@ const pruefVorlagen = <String, List<String>>{
   'Schleifenimpedanz / RCD-Prüfung': ['Stromkreis', 'Zs Ω', 'Auslösezeit ms', 'IΔn mA'],
   'Belegreifheizen Estrich': ['Beginn', 'Ende', 'Vorlauftemperatur °C', 'CM-Messung %'],
   'Dichtheitsprüfung Abwasser': ['Prüfdruck mbar', 'Dauer min', 'Ergebnis'],
+  'Spülen Trinkwasser (DIN EN 806-4)': ['Strang', 'Verfahren (Wasser/Wasser-Luft)', 'Dauer min', 'Fließgeschwindigkeit m/s'],
+  'Spülen Heizung / FBH': ['Kreis', 'Dauer min', 'Wasserqualität / Leitwert µS/cm', 'Füllwasser behandelt'],
+  'Einstellwerte Heizkreise (Abgleich)': ['Kreis', 'Durchfluss l/min', 'Ventilstufe', 'Vorlauf °C'],
+  'Inbetriebnahme Wärmepumpe': ['Vorlauf °C', 'Heizkurve', 'Anlagendruck bar', 'Kältekreis geprüft'],
+  'Inbetriebnahme Lüftung': ['Stufe', 'Zuluft m³/h', 'Abluft m³/h', 'Filter'],
   'Sonstige Messung': ['Messwert', 'Einheit'],
 };
 
