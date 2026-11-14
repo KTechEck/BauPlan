@@ -7,6 +7,8 @@ import 'dart:ui' as ui;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import '../zwei_finger.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -1943,6 +1945,26 @@ class _FloorplanPageState extends State<FloorplanPage> {
     _randPruefen();
   }
 
+  final _zf = ZweiFinger();
+
+  /// Maus-/Stift-/Fingerdruck auf der Zeichenfläche.
+  void _druck(PointerDownEvent e) {
+              if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) {
+                _eigFenster.nachKlickOeffnen(context, sperre: () => _auswahl.isNotEmpty || _massAuswahl != null || _winkelAuswahl != null);
+              }
+              if (e.buttons != kPrimaryMouseButton) return;
+              if (_vorlageModus == 2) {
+                _fokus.requestFocus();
+                setState(() => _vorlageZiehStart = _zuWelt(e.localPosition));
+                return;
+              }
+              if (_ansichtZiehen) {
+                _fokus.requestFocus();
+                return;
+              }
+              _klick(e.localPosition);
+            }
+
   void _ansichtSchieben(Offset bildschirmDelta) => setState(() => _verschiebung += bildschirmDelta);
 
   void _zoomen(double faktor, Offset um) {
@@ -2932,22 +2954,17 @@ class _FloorplanPageState extends State<FloorplanPage> {
           }),
           child: Listener(
             onPointerDown: (e) {
-              if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) {
-                _eigFenster.nachKlickOeffnen(context, sperre: () => _auswahl.isNotEmpty || _massAuswahl != null || _winkelAuswahl != null);
-              }
-              if (e.buttons != kPrimaryMouseButton) return;
-              if (_vorlageModus == 2) {
-                _fokus.requestFocus();
-                setState(() => _vorlageZiehStart = _zuWelt(e.localPosition));
-                return;
-              }
-              if (_ansichtZiehen) {
-                _fokus.requestFocus();
-                return;
-              }
-              _klick(e.localPosition);
+              if (_zf.runter(e)) return;
+              _druck(e);
             },
             onPointerMove: (e) {
+              if (_zf.ausloesenBeiBewegung(e) case final w?) _druck(w);
+              if (_zf.zweiFinger(e) case final g?) {
+                _ansichtSchieben(g.verschiebung);
+                _zoomen(g.faktor, g.mitte);
+                return;
+              }
+              if (_zf.aktiv) return;
               final vs = _vorlageZiehStart;
               if (vs != null) {
                 setState(() => _vorlageVersatz = _zuWelt(e.localPosition) - vs);
@@ -2961,6 +2978,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
               }
             },
             onPointerUp: (e) {
+              final h = _zf.hoch(e);
+              if (h.wartend case final w?) _druck(w);
+              if (h.geste) return;
               if (_vorlageZiehStart != null) {
                 _vorlageVerschiebenFertig();
                 return;

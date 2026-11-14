@@ -4,6 +4,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import '../zwei_finger.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -136,6 +138,17 @@ class _InstallationPageState extends State<InstallationPage> {
   String? _geschossBeiLetztemBuild;
 
   AppState get _s => widget.state;
+
+  final _zf = ZweiFinger();
+
+  /// Maus-/Stift-/Fingerdruck auf der Zeichenfläche.
+  void _druck(PointerDownEvent e) {
+              if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) _eigFenster.nachKlickOeffnen(context);
+              if (e.buttons == kPrimaryMouseButton && !_ansichtZiehen) {
+                _klickGlobal = e.position;
+                _klick(e.localPosition);
+              }
+            }
 
   HaLiveQuelle? _live; // Home Assistant live im Plan
 
@@ -1203,17 +1216,29 @@ class _InstallationPageState extends State<InstallationPage> {
           onExit: (_) => setState(() => _maus = null),
           child: Listener(
             onPointerDown: (e) {
-              if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) _eigFenster.nachKlickOeffnen(context);
-              if (e.buttons == kPrimaryMouseButton && !_ansichtZiehen) {
-                _klickGlobal = e.position;
-                _klick(e.localPosition);
-              }
+              if (_zf.runter(e)) return;
+              _druck(e);
             },
-            onPointerUp: (_) {
+            onPointerUp: (e) {
+              final h = _zf.hoch(e);
+              if (h.wartend case final w?) _druck(w);
+              if (h.geste) return;
               if (_ziehStart != null) _ziehenBeenden();
               if (_rahmenA != null) _rahmenBeenden(d);
             },
             onPointerMove: (e) {
+              if (_zf.ausloesenBeiBewegung(e) case final w?) _druck(w);
+              if (_zf.zweiFinger(e) case final g?) {
+                setState(() => _verschiebung += g.verschiebung);
+                final neu = (_massstab * g.faktor).clamp(0.005, 2.0).toDouble();
+                final w = _zuWelt(g.mitte);
+                setState(() {
+                  _massstab = neu;
+                  _verschiebung = g.mitte - w * neu;
+                });
+                return;
+              }
+              if (_zf.aktiv) return;
               if (_rahmenA != null && (e.buttons & kPrimaryMouseButton) != 0 && !_ansichtZiehen) {
                 setState(() => _rahmenB = _zuWelt(e.localPosition));
                 return;

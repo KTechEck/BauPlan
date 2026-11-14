@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../app/version.dart';
 import '../core/bauelemente.dart';
 import '../core/speicher.dart';
+import '../core/ipad_austausch.dart';
 import '../data/app_settings.dart';
 import '../data/austausch.dart';
 import '../data/bauelement_bibliothek.dart';
@@ -103,7 +104,51 @@ class AppState extends ChangeNotifier {
     beiEingang: () => Timer(const Duration(seconds: 1), eingangPruefen),
     benutzer: (c) => store == null ? null : benutzerAus(store!.einstellung<List>('benutzer')).where((b) => b.code == c).firstOrNull?.auskunft,
     planFiltern: (b, nutzer) => utf8.encode(jsonEncode(planstandFuerBenutzer(Map<String, dynamic>.from(jsonDecode(utf8.decode(b)) as Map), nutzer))),
-  );
+  )
+    ..projektZip = _projektZip
+    ..ipadStand = (d) {
+      final st = store;
+      if (st == null) return;
+      final f = File(ipadStandPfad(austauschOrdner(st)))..parent.createSync(recursive: true);
+      f.writeAsBytesSync(d);
+      notifyListeners();
+    };
+
+  /// Ganzer Projektordner als ZIP für das iPad (ohne Sperrdatei, Sicherungen und Austausch).
+  Future<List<int>?> _projektZip() async {
+    final st = store;
+    if (st == null) return null;
+    try {
+      st.sicherungJetzt();
+      final tmp = Directory.systemTemp.createTempSync('bauspur_ipad_');
+      final datei = p.join(tmp.path, 'projekt.zip');
+      final r = await Process.run('tar', ['-a', '-c', '-f', datei, '--exclude=projekt.lock', '--exclude=backup', '--exclude=austausch', '-C', st.ordner, '.']);
+      if (r.exitCode != 0) return null;
+      final b = File(datei).readAsBytesSync();
+      tmp.deleteSync(recursive: true);
+      return b;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stand vom iPad übernehmen: Sicherung, Projekt schließen, Datenbank ersetzen, wieder öffnen.
+  void ipadStandUebernehmen() {
+    final st = store;
+    if (st == null) return;
+    final quelle = File(ipadStandPfad(austauschOrdner(st)));
+    if (!quelle.existsSync()) return;
+    st.sicherungJetzt();
+    final ordner = st.ordner;
+    projektSchliessen();
+    final ziel = p.join(ordner, datenbankDatei);
+    for (final rest in ['$ziel-wal', '$ziel-shm']) {
+      if (File(rest).existsSync()) File(rest).deleteSync();
+    }
+    quelle.copySync(ziel);
+    quelle.deleteSync();
+    projektOeffnen(ProjectStore.oeffnen(ordner));
+  }
 
   /// Störung beim Abgleich (Netzwerkordner oder Cloud nicht erreichbar), sonst null.
   String? speicherMeldung;

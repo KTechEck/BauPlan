@@ -79,6 +79,7 @@ class _ZeichnenAnsichtState extends State<ZeichnenAnsicht> {
         SizedBox(
           width: 240,
           child: DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: const [115, 175, 240, 300, 365, 425].contains(_z('wand_dicke', 240).round()) ? _z('wand_dicke', 240).round() : 240,
             decoration: const InputDecoration(labelText: 'Wanddicke für neue Wände'),
             items: [for (final d in const [115, 175, 240, 300, 365, 425]) DropdownMenuItem(value: d, child: Text('$d mm'))],
@@ -88,6 +89,7 @@ class _ZeichnenAnsichtState extends State<ZeichnenAnsicht> {
         SizedBox(
           width: 240,
           child: DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: const [10, 50, 100, 250].contains(_z('raster_mm', 50).round()) ? _z('raster_mm', 50).round() : 50,
             decoration: const InputDecoration(labelText: 'Raster beim Zeichnen'),
             items: [for (final d in const [10, 50, 100, 250]) DropdownMenuItem(value: d, child: Text('$d mm'))],
@@ -455,6 +457,7 @@ class _KennungenState extends State<KennungenAnsicht> {
         SizedBox(
           width: 160,
           child: DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: const ['-', '.', '_', '/'].contains(trenner) ? trenner : '-',
             decoration: const InputDecoration(labelText: 'Trennzeichen'),
             items: [for (final t in const ['-', '.', '_', '/']) DropdownMenuItem(value: t, child: Text(t))],
@@ -464,6 +467,7 @@ class _KennungenState extends State<KennungenAnsicht> {
         SizedBox(
           width: 160,
           child: DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: stellen.clamp(1, 4),
             decoration: const InputDecoration(labelText: 'Stellen der Nummer'),
             items: [for (final n in const [1, 2, 3, 4]) DropdownMenuItem(value: n, child: Text('$n (${'1'.padLeft(n, '0')})'))],

@@ -501,7 +501,7 @@ Offen: PC-Grundriss Maße je Zoom ein-/ausblenden; Tims Projekt nach Build 14/15
       3. Home Assistant live, Revisionsöffnungen, Rollen (Eigentümer / Mitarbeit / Gast).
       Danach EIN Build (flutter clean), alles prüfen.
 
-## Build 18 (in Arbeit, NICHT gebaut – Stand 14.11. mittags, Nutzungslimit)
+## Build 18 (14.11. nachmittags gebaut)
 Fertig: Kabelkanäle Typ KK (EL/NW) + Montageschiene MS (Migration 21), lib/core/kanal_montage.dart (Formteile Innen-/Außenecke, Flachwinkel,
 Endkappe, Abzweig, Stoßstellen; Füllgrad; befestigungsabstand/schellenAnzahl/schienenHalter), lib/ui/installation/kanal_felder.dart (Kanal-, Schienen-,
 Leitungs-Führungsfelder), Besorgungsliste mit Kanälen/Schienen/Schellen (Einstellung verschnitt_prozent), Wandansicht zeichnet Kanäle als Band.
@@ -512,3 +512,9 @@ Planung und Vorgaben (verschnitt, Regeln, revision_reichweite, bohr_radius, Abgl
 kennung), Benutzer und Rollen. Wartungsplan aus Geräten (lib/core/wartung.dart, Knopf in Aufgaben). Tests: kanal_geraete_test, build18_bild_test.
 Offen: volle Testsuite + Analyze nach den letzten Änderungen (Wartungsplan), Test für Wartungsplan, dann Inhaltspakete (Bibliothek Export/Import),
 Wohnflächen-Aufstellung, iPad-Oberfläche, KI-Assistent Stufe 2; danach EIN Build 18 (version.dart hochzählen, flutter clean).
+
+Nachtrag Build 18: Touch-Gesten (lib/ui/zwei_finger.dart: zwei Finger zoomen/verschieben, erster Finger wird kurz zurückgehalten; Maus/Stift unverändert) in
+Grundriss, Installation, Wandansicht. PC-Seite für iPad mit voller BauSpur: PcDienst projekt/zip (GET) und projekt/datenbank (PUT, nur Eigentümer-Code),
+lib/core/ipad_austausch.dart, AppState._projektZip/ipadStandUebernehmen, Karte in Speicher und Abgleich. Tim 14.11.: iPad erst NACH dem Test von PC/iPhone.
+Offen iPad: main.dart Tablet → volle BauSpur (BauSpurApp) statt MobilApp, Start-Seite „Projekt vom PC holen“ (PcSpeicher.projektHolen + projektEntpacken),
+„Stand an den PC schicken“ (projektZurueck), iPad-Layout (größere Ziele, Seitenleisten einklappen, Stift). Außerdem offen: Inhaltspakete, Wohnflächen-Aufstellung.

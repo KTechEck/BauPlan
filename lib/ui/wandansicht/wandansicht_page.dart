@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import '../zwei_finger.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/symbole.dart';
@@ -286,6 +288,60 @@ class _WandansichtPageState extends State<WandansichtPage> {
   Offset get _ursprung => _ursprungBei(_massstab) + _pan;
 
   /// Mausrad: um den Cursor zoomen.
+  final _zf = ZweiFinger();
+
+  /// Maus-/Stift-/Fingerdruck auf der Zeichenfläche.
+  void _druck(PointerDownEvent e) {
+              if (e.buttons == kMiddleMouseButton || e.buttons == kSecondaryMouseButton) {
+                _panStart = e.localPosition;
+                return;
+              }
+              if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) _eigFenster.nachKlickOeffnen(context);
+              if (e.buttons != kPrimaryMouseButton) return;
+              _fokus.requestFocus();
+              final a = _gerastert(_zuAnsicht(e.localPosition));
+              if (_zeichnen) {
+                final p = _leitungFangen(_zuAnsicht(e.localPosition));
+                if (_entwurf.isNotEmpty && (_entwurf.last - p).distance < 1) {
+                  _leitungAbschliessen(); // gleicher Punkt = fertig
+                } else {
+                  final linie = _fangLinie;
+                  setState(() {
+                    _entwurf.add(p);
+                    _entwurfBezug.add(_fangBezug);
+                  });
+                  if (linie != null && _entwurf.length >= 2) _uebergabeFragen(e.position, linie);
+                }
+                return;
+              }
+              if (_setzen) {
+                _objektSetzen(a);
+                return;
+              }
+              if (_bohren) {
+                setState(() => _bohrpunkt = a);
+                _bohrCheckZeigen(a);
+                return;
+              }
+              final id = _treffer(_zuAnsicht(e.localPosition)) ?? _trefferZug(_zuAnsicht(e.localPosition));
+              final zusatz = HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed;
+              setState(() {
+                if (id == null) {
+                  if (!zusatz) _mehr.clear();
+                  _rahmenA = _zuAnsicht(e.localPosition);
+                  _rahmenB = _rahmenA;
+                } else if (zusatz) {
+                  if (_auswahl != null) _mehr.add(_auswahl!);
+                  if (!_mehr.remove(id)) _mehr.add(id);
+                } else if (!_mehr.contains(id)) {
+                  _mehr.clear();
+                }
+                _auswahl = id ?? (zusatz ? _auswahl : null);
+                _ziehStart = id == null ? null : a;
+                _versatz = Offset.zero;
+              });
+            }
+
   void _zoomen(Offset cursor, double faktor) {
     final alt = _ursprung;
     final neuZoom = (_zoom * faktor).clamp(0.3, 20.0);
@@ -857,56 +913,17 @@ class _WandansichtPageState extends State<WandansichtPage> {
               if (e.scale != 1) _zoomen(e.localPosition, e.scale.clamp(0.9, 1.1));
             },
             onPointerDown: (e) {
-              if (e.buttons == kMiddleMouseButton || e.buttons == kSecondaryMouseButton) {
-                _panStart = e.localPosition;
-                return;
-              }
-              if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) _eigFenster.nachKlickOeffnen(context);
-              if (e.buttons != kPrimaryMouseButton) return;
-              _fokus.requestFocus();
-              final a = _gerastert(_zuAnsicht(e.localPosition));
-              if (_zeichnen) {
-                final p = _leitungFangen(_zuAnsicht(e.localPosition));
-                if (_entwurf.isNotEmpty && (_entwurf.last - p).distance < 1) {
-                  _leitungAbschliessen(); // gleicher Punkt = fertig
-                } else {
-                  final linie = _fangLinie;
-                  setState(() {
-                    _entwurf.add(p);
-                    _entwurfBezug.add(_fangBezug);
-                  });
-                  if (linie != null && _entwurf.length >= 2) _uebergabeFragen(e.position, linie);
-                }
-                return;
-              }
-              if (_setzen) {
-                _objektSetzen(a);
-                return;
-              }
-              if (_bohren) {
-                setState(() => _bohrpunkt = a);
-                _bohrCheckZeigen(a);
-                return;
-              }
-              final id = _treffer(_zuAnsicht(e.localPosition)) ?? _trefferZug(_zuAnsicht(e.localPosition));
-              final zusatz = HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isControlPressed;
-              setState(() {
-                if (id == null) {
-                  if (!zusatz) _mehr.clear();
-                  _rahmenA = _zuAnsicht(e.localPosition);
-                  _rahmenB = _rahmenA;
-                } else if (zusatz) {
-                  if (_auswahl != null) _mehr.add(_auswahl!);
-                  if (!_mehr.remove(id)) _mehr.add(id);
-                } else if (!_mehr.contains(id)) {
-                  _mehr.clear();
-                }
-                _auswahl = id ?? (zusatz ? _auswahl : null);
-                _ziehStart = id == null ? null : a;
-                _versatz = Offset.zero;
-              });
+              if (_zf.runter(e)) return;
+              _druck(e);
             },
             onPointerMove: (e) {
+              if (_zf.ausloesenBeiBewegung(e) case final w?) _druck(w);
+              if (_zf.zweiFinger(e) case final g?) {
+                setState(() => _pan += g.verschiebung);
+                _zoomen(g.mitte, g.faktor);
+                return;
+              }
+              if (_zf.aktiv) return;
               final ps = _panStart;
               if (ps != null) {
                 setState(() {
@@ -923,7 +940,10 @@ class _WandansichtPageState extends State<WandansichtPage> {
               if (s == null) return;
               setState(() => _versatz = _gerastert(_zuAnsicht(e.localPosition)) - s);
             },
-            onPointerUp: (_) {
+            onPointerUp: (e) {
+              final h = _zf.hoch(e);
+              if (h.wartend case final w?) _druck(w);
+              if (h.geste) return;
               if (_panStart != null) {
                 _panStart = null;
                 return;

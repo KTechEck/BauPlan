@@ -257,6 +257,28 @@ class PcSpeicher implements Speicher {
   @override
   Future<bool> loeschen(String pfad) async => false;
 
+  /// Volle BauSpur auf dem iPad: ganzes Projekt als ZIP holen.
+  Future<Uint8List?> projektHolen() async {
+    final c = _client(zeit: const Duration(seconds: 5));
+    try {
+      final a = await c.getUrl(_uri('projekt/zip'));
+      a.headers.set('x-bauspur-code', code);
+      final r = await a.close().timeout(const Duration(minutes: 5));
+      if (r.statusCode == 401) throw CodeFalsch();
+      final b = await _rumpf(r);
+      return r.statusCode == 200 ? b : null;
+    } finally {
+      c.close();
+    }
+  }
+
+  /// Volle BauSpur auf dem iPad: Projektdatenbank an den PC zurückschicken.
+  Future<bool> projektZurueck(List<int> datenbank) async {
+    final r = await _anfrage('PUT', 'projekt/datenbank', daten: datenbank);
+    await r.drain<void>();
+    return r.statusCode == 200;
+  }
+
   /// Prüft Adresse und Code; liefert die Auskunft des PCs.
   Future<Map<String, dynamic>> pruefen() async {
     final r = await _anfrage('GET', 'pruefen');
@@ -275,6 +297,12 @@ class PcDienst {
 
   /// Planstand für einen Benutzer zuschneiden (freigegebene Räume).
   final List<int> Function(List<int> plan, Map<String, dynamic> benutzer)? planFiltern;
+
+  /// Volle BauSpur auf dem iPad: ganzes Projekt als ZIP liefern (nur Eigentümer).
+  Future<List<int>?> Function()? projektZip;
+
+  /// Volle BauSpur auf dem iPad: zurückgeschickte Projektdatenbank ablegen (nur Eigentümer).
+  void Function(List<int> datenbank)? ipadStand;
 
   /// Austauschordner des offenen Projekts (null: kein Projekt offen).
   final String? Function() ordner;
@@ -330,6 +358,28 @@ class PcDienst {
     final basis = ordner();
     final rel = teile.skip(1).join('/');
     if (basis == null) return _antwort(a, 503, {'fehler': 'Am PC ist kein Projekt geöffnet.'});
+    // Projekt für die volle BauSpur auf dem iPad (nur mit dem Code des Eigentümers)
+    if (kopf == 'projekt' && nutzer == null) {
+      if (rel == 'zip' && a.method == 'GET' && projektZip != null) {
+        final z = await projektZip!();
+        if (z == null) return _antwort(a, 500);
+        a.response.headers.contentType = ContentType.binary;
+        a.response.add(z);
+        return a.response.close();
+      }
+      if (rel == 'datenbank' && a.method == 'PUT' && ipadStand != null) {
+        final b = BytesBuilder(copy: false);
+        await for (final t in a) {
+          b.add(t);
+        }
+        final d = b.takeBytes();
+        // SQLite-Datei erkennen, sonst ablehnen
+        if (d.length < 100 || String.fromCharCodes(d.sublist(0, 15)) != 'SQLite format 3') return _antwort(a, 400);
+        ipadStand!(d);
+        return _antwort(a, 200);
+      }
+      return _antwort(a, 404);
+    }
     if (!_pfadErlaubt(rel) || !(rel.startsWith('planstand') || rel.startsWith('eingang'))) return _antwort(a, 403);
     final lokal = OrdnerSpeicher(basis);
     if (kopf == 'liste' && a.method == 'GET') return _antwort(a, 200, await lokal.liste(rel));

@@ -8,6 +8,7 @@ import '../app/qr_bild.dart';
 import '../app/theme.dart';
 import '../core/speicher.dart';
 import '../data/austausch.dart';
+import '../core/ipad_austausch.dart';
 import '../state/app_state.dart';
 import 'benutzer_rollen.dart';
 
@@ -54,6 +55,53 @@ class _SpeicherEinstellungenState extends State<SpeicherEinstellungenAnsicht> {
     setState(() {});
     await state.speicherAnwenden();
     if (mounted) setState(() {});
+  }
+
+  /// Volle BauSpur auf dem iPad: Projekt holt das iPad über WLAN, zurück kommt die Datenbank.
+  Widget _ipadKarte() {
+    final st = state.store;
+    if (st == null) return const SizedBox.shrink();
+    final vom = ipadStandVom(austauschOrdner(st));
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('iPad mit voller BauSpur', style: Theme.of(context).textTheme.titleMedium),
+          const Text(
+            'Auf dem iPad „Projekt vom PC holen“ wählen (gleicher Kopplungscode wie oben). Nach der Arbeit schickt das iPad den Stand zurück; '
+            'übernommen wird er erst hier, vorher legt BauSpur eine Sicherung an. In der Zwischenzeit am PC nichts ändern, sonst gehen die PC-Änderungen verloren.',
+            style: TextStyle(fontSize: 12, color: BsFarben.textLeise),
+          ),
+          const SizedBox(height: 8),
+          if (vom == null)
+            const Text('Kein Stand vom iPad da.')
+          else
+            Wrap(spacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('Stand vom iPad von ${vom.day}.${vom.month}. ${vom.hour}:${vom.minute.toString().padLeft(2, '0')} liegt bereit.'),
+              FilledButton.icon(
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Stand vom iPad übernehmen?'),
+                      content: const Text('Der Projektstand am PC wird durch den vom iPad ersetzt. Vorher wird eine Sicherung angelegt (Einstellungen › Projekt und Geschosse).'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
+                        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Übernehmen')),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
+                  state.ipadStandUebernehmen();
+                  if (mounted) setState(() {});
+                },
+                icon: const Icon(Icons.tablet_mac, size: 18),
+                label: const Text('Stand vom iPad übernehmen'),
+              ),
+            ]),
+        ]),
+      ),
+    );
   }
 
   /// Eingaben übernehmen und den gewählten Speicher wirklich ansprechen.
@@ -285,6 +333,8 @@ class _SpeicherEinstellungenState extends State<SpeicherEinstellungenAnsicht> {
           ]),
         ),
       ),
+      const SizedBox(height: 8),
+      _ipadKarte(),
       const SizedBox(height: 8),
       BenutzerRollenKarte(state: state),
       const SizedBox(height: 8),
