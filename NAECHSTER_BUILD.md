@@ -663,3 +663,14 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Laufend: Bauablauf-Hinweise in der Projektprüfung (verdeckt ohne Druckprobe/Dichtheit/Isolationsmessung; Einstellung bauablauf_aus, Schalter in Darstellung),
   Eigenleistung/Lohn in den Kosten ausblendbar (darstellung.eigenleistung_aus).
 - Tests test/build28_test.dart; 283 Tests grün.
+
+## Neues Paket (Tim 14.11. abends): Prio 1 Keller/Sockel/Putzprofile/Fensterbänke, dann WLAN + Außenbereich, dann KI-Raumbilder (OpenAI-Schnittstelle, austauschbar). Alarmanlage weiter nicht.
+## Build 29 (14.11.) – Keller, Sockel, Putzprofile, Fensterbänke
+- lib/core/keller_sockel.dart: Kellertrockenlegung (Lastfall DIN 18533 W1.1/W1.2/W2.1-E, Außenabdichtung PMBC, Hohlkehle, Noppenbahn, Drainage DIN 4095 mit
+  Schächten/Vlies/Kies, Horizontalsperre Injektion/Mauersäge/Chromstahl, Innenabdichtung, Sanierputz WTA), Kellerdämmung (Perimeter, innen kapillaraktiv,
+  Kellerdecke; uKellerwand), Sockeldämmung als eigener Bereich (unter/über GOK, XPS/EPS-P/PU/Schaumglas, Abdichtung, Sockelputz, Kiesstreifen),
+  16 Putzprofile außen/innen mit Mengen aus dem Plan + Stäben, Fensterbänke außen (Alu/Naturstein/Kunststein/Klinker/Titanzink: Tiefe = Laibung + WDVS + Überstand,
+  Bordprofile, Gefälle, Hinweise) und innen (Holz/Werzalit/Naturstein/…).
+- Dialog lib/ui/floorplan/keller_dialog.dart (Grundriss › Optionen „Keller, Sockel, Putzprofile, Fensterbänke …“): Einstellungen `keller_<geschossId>`, `sockel`,
+  `putzprofile` (Zusatzmengen), Öffnung eigenschaften fb_aussen/fb_innen/laibung_aussen/laibung_innen; Bestellliste, CSV.
+- Tests test/build29_test.dart; 286 Tests grün.
