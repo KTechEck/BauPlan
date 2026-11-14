@@ -29,6 +29,9 @@ class AppSettings {
   /// Home Assistant: Adresse, Zugangs-Token, Fremdzugriff (JSON, siehe HaEinstellung).
   Map<String, dynamic>? ha;
 
+  /// Zugang zum C.M.I. der Technischen Alternative (Benutzer, Passwort) – nur auf diesem Gerät.
+  Map<String, dynamic>? cmi;
+
   /// Erklärungen der Werkzeuge rechts anzeigen.
   bool hilfeAnzeigen = true;
 
@@ -51,6 +54,7 @@ class AppSettings {
         s.fensterMaximiert = m['fensterMaximiert'] as bool? ?? true;
         s.ki = (m['ki'] as Map?)?.cast<String, dynamic>();
         s.ha = (m['ha'] as Map?)?.cast<String, dynamic>();
+        s.cmi = (m['cmi'] as Map?)?.cast<String, dynamic>();
         s.hilfeAnzeigen = m['hilfe'] as bool? ?? true;
         s.darstellung = Map<String, dynamic>.from(m['darstellung'] as Map? ?? const {});
         s.speicher = Map<String, dynamic>.from(m['speicher'] as Map? ?? const {});
@@ -86,6 +90,7 @@ class AppSettings {
       'fensterMaximiert': fensterMaximiert,
       'ki': ki,
       'ha': ha,
+      'cmi': cmi,
       'hilfe': hilfeAnzeigen,
       'darstellung': darstellung,
       'speicher': speicher,

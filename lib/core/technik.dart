@@ -32,12 +32,17 @@ const technikVorlagen = <TechnikVorlage>[
   (name: 'Zählerschrank', typ: 'VT', b: 800, t: 210, h: 1100, montage: 'Wand', vorn: 1200, links: 0, rechts: 0, oben: 0),
   (name: 'Netzwerkschrank 12 HE', typ: 'AP', b: 600, t: 450, h: 640, montage: 'Wand', vorn: 800, links: 0, rechts: 0, oben: 0),
   (name: 'Lüftungsgerät', typ: 'LG', b: 700, t: 600, h: 800, montage: 'Wand', vorn: 700, links: 100, rechts: 300, oben: 300),
+  (name: 'Smart-Home-Verteiler', typ: 'VT', b: 550, t: 140, h: 950, montage: 'Wand', vorn: 800, links: 50, rechts: 50, oben: 100),
+  (name: 'Unterverteiler 230 V', typ: 'VT', b: 550, t: 140, h: 800, montage: 'Wand', vorn: 800, links: 50, rechts: 50, oben: 100),
+  (name: 'Wärmepumpe Kompaktgerät (Innen)', typ: 'HZ', b: 600, t: 700, h: 1800, montage: 'Boden', vorn: 800, links: 100, rechts: 100, oben: 300),
 ];
 
 /// Vorlagensätze für typische Räume.
 const raumVorlagen = <String, List<String>>{
   'Heizraum': ['Wärmepumpe Innengerät', 'Trinkwasserspeicher 300 l', 'Pufferspeicher 200 l', 'Ausdehnungsgefäß 35 l', 'Heizkreisverteiler (Aufputz)'],
   'Technikraum': ['Hausanschluss Wasser', 'Hausanschlusskasten Strom', 'Zählerschrank', 'Netzwerkschrank 12 HE', 'Lüftungsgerät'],
+  'Technikwand Büro': ['Netzwerkschrank 12 HE', 'Smart-Home-Verteiler', 'Unterverteiler 230 V'],
+  'Heizraum kompakt': ['Wärmepumpe Kompaktgerät (Innen)', 'Ausdehnungsgefäß 35 l', 'Heizkreisverteiler (Aufputz)'],
 };
 
 /// Grundriss eines Technikgeräts: Mitte (mm), Maße und Drehung (Grad, 0 =

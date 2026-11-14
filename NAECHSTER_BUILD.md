@@ -596,3 +596,18 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   ihren Patchfeld-Port, Kamera/Bewegungsmelder mit Erfassungssektor (winkel, reichweite, drehung), Zutritt (ZU/TS) prüft Türöffner in der Nähe.
 - Migration 24: NW KA Kamera, ZU Zutrittsleser, TS Türsprechstelle; EL TO Türöffner/Motorschloss.
 - Tests test/build24_test.dart; 269 Tests grün.
+
+## Build 25 (14.11.) – Roadmap 6 (Technikbereiche, Haustechnik)
+- Technikbereiche (lib/core/technikbereich.dart): Räume mit Technik/Heiz/HWR im Namen automatisch (lösbar: Einstellung `technikbereich_aus`), eigene Bereiche
+  als Raum oder Technikwand mit Schränken (Einstellung `technikbereiche`); Technikplaner wählt Bereiche, zeigt die Schränke; Dialog
+  lib/ui/haustechnik/technikbereiche_dialog.dart. Neue Vorlagen „Technikwand Büro“, „Heizraum kompakt“ (+ Geräte Smart-Home-Verteiler, UV 230 V, WP kompakt).
+- Hydraulikschema-Editor (lib/core/hydraulik_schema.dart, lib/ui/haustechnik/hydraulik_schema_ansicht.dart): 20 Symbole, Leitungsarten VL/RL/TWW/KW/Zirk/Sole/Signal,
+  Ziehen, Drehen, Verknüpfung mit Grundriss-Objekt („Im Grundriss zeigen“), SVG-Ausgabe (Einstellung `hydraulikschema`).
+- Regelung Technische Alternative (lib/core/ta_regler.dart, lib/ui/haustechnik/regelung_ansicht.dart): Regler UVR16x2/UVR610/RSM610/UVR1611/CAN-I/O45,
+  E/A-Belegung mit Kapazitätswarnung, Fühlerkabel geschätzt (laufen in die Kabel-/Rohrliste), TAPPS2-Vorlage (Text), C.M.I.-Schemaseite (SVG mit Platzhaltern + CSV),
+  Live-Werte über C.M.I.-JSON-API (nur Heimnetz, Zugang in AppSettings.cmi). Einstellung `ta_regelung`.
+- Lüftung (lib/core/klima_lueftung.dart, lib/ui/haustechnik/lueftung_ansicht.dart): DIN 1946-6 vereinfacht (Nennlüftung, Stufen, Zu/Ab/Überström je Raum, Abluft-
+  Mindestwerte, balanciert), Rohr-DN je Raum, Überströmquerschnitt, Hauptleitung, längster Luftkanal, eigene Komponenten im Druckverlust, Gerätegrenzen,
+  Dämmhinweise, Kühloption mit Taupunkt (Einstellung `lueftung`).
+- Kühlung & Klima: Taupunkt, Kühl-Vorlauf ≥ Taupunkt+2 K, Kühllast-Richtwert je Raum (Fenster nach Richtung/Fc), Gerätegröße, Vergleich mit Klimageräten (Einstellung `klima`).
+- Tests test/build25_test.dart; 274 Tests grün.

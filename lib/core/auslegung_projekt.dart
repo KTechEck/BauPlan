@@ -5,6 +5,7 @@ import 'auslegung.dart';
 import 'fbh.dart';
 import 'height.dart';
 import 'leitung_wand.dart';
+import 'ta_regler.dart';
 
 /// Vorgaben der Auslegung (Projekteinstellung `auslegung`).
 class AuslegungVorgaben {
@@ -353,6 +354,18 @@ List<LeitungsStueck> leitungsStuecke(ProjectStore store, {String? Function(Strin
         if (!erfasst && e['rohr'] is String) {
           aus.add((art: 'Rohr', bezeichnung: nm(e['rohr'] as String?, t.name), laengeM: m, woher: woher, geschaetzt: false));
         }
+    }
+  }
+  // Fühlerkabel der Regelung (Technische Alternative), geschätzt aus der Lage
+  final ta = TaBelegung.ausJson(store.einstellung<Map>('ta_regelung'));
+  if (ta.kanaele.isNotEmpty) {
+    final pkt = {for (final o in store.alleObjekte()) if (o.punkte.length == 1) o.id: o.punkte.first};
+    for (final k in ta.kanaele.where((k) => k.eingang)) {
+      final g = ta.geraete.where((x) => x.id == k.regler).firstOrNull;
+      final a = pkt[g?.objekt], b = pkt[k.objekt];
+      final m = k.kabelM ?? (a != null && b != null ? taKabelweg((a.x, a.y), (b.x, b.y)) : null);
+      if (m == null) continue;
+      aus.add((art: 'Kabel', bezeichnung: taKabeltyp(k.typ), laengeM: m, woher: 'Regelung ${g?.name.isNotEmpty == true ? g!.name : g?.typ ?? ''} ${k.kurz}', geschaetzt: k.kabelM == null));
     }
   }
   // Stromkreise ohne gezeichnete Leitung: Länge schätzen

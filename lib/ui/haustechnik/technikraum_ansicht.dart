@@ -17,6 +17,8 @@ import '../bauteile/bauelement_wahl.dart';
 import '../../core/drei_d.dart';
 import '../widgets.dart';
 import 'technik_3d.dart';
+import 'technikbereiche_dialog.dart';
+import '../../core/technikbereich.dart';
 
 /// Technik- und Heizraumplaner: Geräte mit echten Maßen und Wartungsfreiräumen
 /// im Grundriss eines Raums, Kollisionen und Hinweise.
@@ -33,6 +35,7 @@ class _TechnikraumAnsichtState extends State<TechnikraumAnsicht> {
   final _eigFenster = EigenschaftenFenster();
   final _doppel = Doppelklick();
   String? _raumId;
+  String? _bereichId;
   String? _auswahl;
   TechnikVorlage? _setzen;
   Offset? _ziehStart;
@@ -203,8 +206,11 @@ class _TechnikraumAnsichtState extends State<TechnikraumAnsicht> {
     if (raeume.isEmpty) {
       return const Center(child: Text('Erst im Grundriss einen Raum anlegen (z. B. Heizraum oder Technikraum).'));
     }
+    final bereiche = technikbereiche(store).where((b) => raeume.any((e) => e.$1.id == b.raumId)).toList();
     final technisch = raeume.where((e) => RegExp('heiz|technik|hwr|hausanschluss|keller', caseSensitive: false).hasMatch(e.$1.name));
-    _raumId ??= (technisch.isNotEmpty ? technisch.first : raeume.first).$1.id;
+    _raumId ??= bereiche.isNotEmpty ? bereiche.first.raumId : (technisch.isNotEmpty ? technisch.first : raeume.first).$1.id;
+    if (_bereichId == null && bereiche.isNotEmpty && bereiche.first.raumId == _raumId) _bereichId = bereiche.first.id;
+    final bereich = bereiche.where((b) => b.id == _bereichId).firstOrNull;
     final (raum, g) = raeume.firstWhere((e) => e.$1.id == _raumId, orElse: () => raeume.first);
     final umriss = raum.umriss!;
     final xs = umriss.map((p) => p.x), ys = umriss.map((p) => p.y);
@@ -255,13 +261,48 @@ class _TechnikraumAnsichtState extends State<TechnikraumAnsicht> {
             decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: BsFarben.rand))),
             child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
               DropdownButton<String>(
-                value: raum.id,
-                items: [for (final (r, gg) in raeume) DropdownMenuItem(value: r.id, child: Text('${gg.kuerzel} · ${r.name}'))],
+                value: bereich != null ? 'b:${bereich.id}' : 'r:${raum.id}',
+                items: [
+                  for (final b in bereiche)
+                    DropdownMenuItem(
+                        value: 'b:${b.id}',
+                        child: Text('${b.istWand ? 'Technikwand' : 'Technikbereich'}: ${b.name}${b.automatisch ? ' (erkannt)' : ''}')),
+                  for (final (r, gg) in raeume)
+                    if (!bereiche.any((b) => b.raumId == r.id && !b.istWand)) DropdownMenuItem(value: 'r:${r.id}', child: Text('${gg.kuerzel} · ${r.name}')),
+                ],
                 onChanged: (v) => setState(() {
-                  _raumId = v;
+                  if (v == null) return;
+                  if (v.startsWith('b:')) {
+                    _bereichId = v.substring(2);
+                    _raumId = bereiche.firstWhere((b) => b.id == _bereichId).raumId;
+                  } else {
+                    _bereichId = null;
+                    _raumId = v.substring(2);
+                  }
                   _auswahl = null;
                 }),
               ),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await technikbereicheDialog(context, _s);
+                  if (mounted) setState(() {});
+                },
+                icon: const Icon(Icons.dashboard_outlined, size: 18),
+                label: const Text('Technikbereiche …'),
+              ),
+              if (bereich != null)
+                ...() {
+                  final ids = schraenkeImBereich(store, bereich);
+                  final sch = [for (final s in store.schraenke()) if (ids.contains(s.id)) s];
+                  return [
+                    for (final s in sch)
+                      ActionChip(
+                        avatar: const Icon(Icons.electrical_services, size: 16),
+                        label: Text('${s.kennzeichen} ${s.art.label}'),
+                        onPressed: () => _s.modulWaehlen(Modul.verteiler),
+                      ),
+                  ];
+                }(),
               DropdownButton<String?>(
                 value: _setzen?.name,
                 hint: const Text('Gerät setzen …'),
