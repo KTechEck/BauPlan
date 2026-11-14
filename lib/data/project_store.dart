@@ -173,6 +173,11 @@ class ProjectStore {
           _objekttypErgaenzen('EL', 'SR', 'Steigleitung Elektro (über Geschosse)', 'punkt');
         }
         if (version == 19) _objekttypErgaenzen('AL', 'RO', 'Revisionsöffnung', 'flaeche');
+        if (version == 20) {
+          _objekttypErgaenzen('EL', 'KK', 'Kabelkanal / Brüstungskanal', 'linie');
+          _objekttypErgaenzen('NW', 'KK', 'Kabelkanal / Kabelrinne', 'linie');
+          _objekttypErgaenzen('AL', 'MS', 'Montageschiene (Rohre, Kabel)', 'linie');
+        }
         version++;
         db.userVersion = version;
         db.execute('COMMIT');
@@ -361,6 +366,51 @@ class ProjectStore {
     );
     _protokoll('geschoss', id, 'anlegen', {'name': name, 'kuerzel': kuerzel});
     return id;
+  }
+
+  /// Geschoss ändern (Name, Kürzel, Bezugshöhen in mm).
+  void geschossAendern(String id, {String? name, String? kuerzel, int? rfb, int? ffb, int? rohdecke, int? meterriss}) {
+    final felder = <String, Object?>{
+      if (name != null) 'name': name,
+      if (kuerzel != null) 'kuerzel': kuerzel.toUpperCase(),
+      if (rfb != null) 'rfb_mm': rfb,
+      if (ffb != null) 'ffb_mm': ffb,
+      if (rohdecke != null) 'rohdecke_mm': rohdecke,
+      if (meterriss != null) 'meterriss_mm': meterriss,
+    };
+    if (felder.isEmpty) return;
+    db.execute('UPDATE geschoss SET ${felder.keys.map((k) => '$k = ?').join(', ')} WHERE id = ?', [...felder.values, id]);
+    _protokoll('geschoss', id, 'aendern', felder);
+  }
+
+  /// Gebäude umbenennen.
+  void gebaeudeUmbenennen(String id, String name) {
+    db.execute('UPDATE gebaeude SET name = ? WHERE id = ?', [name, id]);
+    _protokoll('gebaeude', id, 'aendern', {'name': name});
+  }
+
+  /// Eigener Objekttyp in einem Gewerk.
+  String objekttypAnlegen({required String gewerkId, required String name, required String kuerzel, required Geometrieart geometrie}) {
+    final id = neueId();
+    db.execute('INSERT INTO objekttyp (id, gewerk_id, name, kuerzel, geometrie) VALUES (?, ?, ?, ?, ?)', [id, gewerkId, name, kuerzel.toUpperCase(), geometrie.name]);
+    _protokoll('objekttyp', id, 'anlegen', {'name': name, 'kuerzel': kuerzel});
+    return id;
+  }
+
+  /// Objekttyp umbenennen (Kürzel bleibt, damit Kennungen und Regeln stimmen).
+  void objekttypUmbenennen(String id, String name) {
+    db.execute('UPDATE objekttyp SET name = ? WHERE id = ?', [name, id]);
+    _protokoll('objekttyp', id, 'aendern', {'name': name});
+  }
+
+  /// Sicherung jetzt anlegen (backup/, die letzten 20 Stände bleiben).
+  void sicherungJetzt() => _sicherungAnlegen(ordner);
+
+  /// Vorhandene Sicherungen, neueste zuerst.
+  List<File> sicherungen() {
+    final d = Directory(p.join(ordner, 'backup'));
+    if (!d.existsSync()) return const [];
+    return d.listSync().whereType<File>().where((f) => p.basename(f.path).startsWith('projekt_')).toList()..sort((a, b) => b.path.compareTo(a.path));
   }
 
   // ------------------------------------------------------------- Räume
@@ -1520,11 +1570,17 @@ class ProjectStore {
     final vorhandene = db
         .select('SELECT kennung FROM objekt WHERE geschoss_id = ?', [geschossId])
         .map((r) => r['kennung'] as String);
+    final schema = einstellung<Map>('kennung') ?? const {};
     final kennung = naechsteKennung(
       geschoss: g?.kuerzel ?? 'G',
       raum: raum ?? 'ALLG',
       typ: typ.kuerzel,
       vorhandene: vorhandene,
+      trenner: schema['trenner'] as String? ?? '-',
+      stellen: (schema['stellen'] as num?)?.toInt() ?? 2,
+      mitGeschoss: schema['geschoss'] as bool? ?? true,
+      mitRaum: schema['raum'] as bool? ?? true,
+      praefix: schema['praefix'] as String? ?? '',
     );
     final id = neueId();
     final zeit = jetzt();

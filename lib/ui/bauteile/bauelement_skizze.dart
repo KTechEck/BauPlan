@@ -147,6 +147,8 @@ List<(String, Offset)> _platz(_Skizze s) => switch (s) {
           ('beschreibung', Offset(330, 30)),
           ('akku', Offset(330, 30)),
           ('seriennummer', Offset(330, 100)),
+          ('profil', Offset(330, 30)),
+          ('spannbereich', Offset(330, 100)),
           ('breite', Offset(110, 268)),
           ('hoehe', Offset(0, 130)),
         ],

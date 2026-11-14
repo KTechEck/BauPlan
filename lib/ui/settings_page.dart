@@ -9,9 +9,10 @@ import 'assistent/ki_einstellungen.dart';
 import 'bauphysik/bauphysik_page.dart' show heizlastParameter, systemTemperaturen;
 import 'widgets.dart';
 import 'speicher_einstellungen.dart';
+import 'einstellungen_mehr.dart';
 import 'package:flutter/services.dart';
 
-enum _Bereich { allgemein, darstellung, ki, speicher, klima, gewerke, materialien, wandtypen, sensoren }
+enum _Bereich { allgemein, darstellung, zeichnen, ki, speicher, projekt, vorgaben, klima, gewerke, objekttypen, kennungen, benutzer, materialien, wandtypen, sensoren }
 
 /// Einstellungen: Gewerke und Farben, Materialien, Wandtypen (Projekteinstellung).
 class SettingsPage extends StatefulWidget {
@@ -69,15 +70,16 @@ class _SettingsPageState extends State<SettingsPage> {
               _eintrag('Darstellung im Plan', _Bereich.darstellung),
               _eintrag('KI-Assistent', _Bereich.ki),
               _eintrag('Speicher und Abgleich', _Bereich.speicher),
-              _eintrag('Zeichnen'),
+              _eintrag('Zeichnen', _Bereich.zeichnen),
               const SizedBox(height: 12),
               const _Ueberschrift('PROJEKT'),
-              _eintrag('Projekt und Geschosse'),
+              _eintrag('Projekt und Geschosse', _Bereich.projekt),
+              _eintrag('Planung und Vorgaben', _Bereich.vorgaben),
               _eintrag('Standort und Klima', _Bereich.klima),
               _eintrag('Gewerke und Farben', _Bereich.gewerke),
-              _eintrag('Objekttypen und Symbole'),
-              _eintrag('Kennungen'),
-              _eintrag('Benutzer und Rollen'),
+              _eintrag('Objekttypen und Symbole', _Bereich.objekttypen),
+              _eintrag('Kennungen', _Bereich.kennungen),
+              _eintrag('Benutzer und Rollen', _Bereich.benutzer),
               const SizedBox(height: 12),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -93,6 +95,12 @@ class _SettingsPageState extends State<SettingsPage> {
             _Bereich.ki => KiEinstellungenAnsicht(state: state),
             _Bereich.speicher => SpeicherEinstellungenAnsicht(state: state),
             _Bereich.darstellung => _darstellung(context),
+            _Bereich.zeichnen => ZeichnenAnsicht(state: state),
+            _Bereich.projekt => ProjektGeschosseAnsicht(state: state),
+            _Bereich.vorgaben => VorgabenAnsicht(state: state),
+            _Bereich.objekttypen => ObjekttypenAnsicht(state: state),
+            _Bereich.kennungen => KennungenAnsicht(state: state),
+            _Bereich.benutzer => BenutzerAnsicht(state: state),
             _Bereich.klima => _klima(context),
             _Bereich.gewerke => _gewerke(context),
             _Bereich.materialien => MaterialienAnsicht(state: state),

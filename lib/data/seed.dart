@@ -21,6 +21,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('LR', 'Leerrohr', 'linie'),
     ('VT', 'Verteiler / Zählerschrank', 'punkt'),
     ('LB', 'LED-Streifen / Lichtband', 'linie'),
+    ('KK', 'Kabelkanal / Brüstungskanal', 'linie'),
     ('SR', 'Steigleitung Elektro (über Geschosse)', 'punkt'),
   ]),
   GewerkVorlage('KX', 'KNX / Smart Home', 0xFF2F9E44, 'dashed', false, [
@@ -35,6 +36,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('ND', 'Netzwerkdose', 'punkt'),
     ('NK', 'Netzwerkkabel', 'linie'),
     ('AP', 'Access Point / Kamera', 'punkt'),
+    ('KK', 'Kabelkanal / Kabelrinne', 'linie'),
   ]),
   GewerkVorlage('SA', 'Sanitär', 0xFF1C7ED6, 'solid', true, [
     ('KW', 'Kaltwasserleitung', 'linie'),
@@ -72,6 +74,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('TP', 'Treppenpodest / Zwischenpodest', 'flaeche'),
     ('KM', 'Kamin / Schornstein', 'flaeche'),
     ('RO', 'Revisionsöffnung', 'flaeche'),
+    ('MS', 'Montageschiene (Rohre, Kabel)', 'linie'),
   ]),
 ];
 

@@ -537,8 +537,18 @@ class _BauteilePageState extends State<BauteilePage> {
       const SizedBox(height: 12),
       Wrap(spacing: 16, runSpacing: 12, children: [
         for (final f in e.kategorie.felder)
-          if (!skizzenFelder(e.kategorie).contains(f.schluessel)) feld(f),
+          if (!skizzenFelder(e.kategorie).contains(f.schluessel) && !geraetFeldGruppen.values.any((g) => g.contains(f.schluessel))) feld(f),
       ]),
+      for (final g in geraetFeldGruppen.entries)
+        if (e.kategorie.felder.any((f) => g.value.contains(f.schluessel) && !skizzenFelder(e.kategorie).contains(f.schluessel))) ...[
+          const SizedBox(height: 16),
+          Text(g.key, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 6),
+          Wrap(spacing: 16, runSpacing: 12, children: [
+            for (final f in e.kategorie.felder)
+              if (g.value.contains(f.schluessel) && !skizzenFelder(e.kategorie).contains(f.schluessel)) feld(f),
+          ]),
+        ],
       if (kategorieMitAnschluessen(e.kategorie)) ...[
         const SizedBox(height: 20),
         AnschlussEditor(element: e, setzen: (d) => _speichern(e.mit(daten: d))),

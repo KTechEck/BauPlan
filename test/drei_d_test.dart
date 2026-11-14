@@ -23,7 +23,7 @@ void main() {
 
   test('Formteile aus dem Leitungsverlauf schätzen', () {
     final m = formteileSchaetzen([
-      (punkte: const [(0.0, 0.0), (2000.0, 0.0), (2000.0, 1500.0), (3000.0, 2500.0)], dimension: '16×2', anderLeitung: true),
+      (punkte: const [(0.0, 0.0), (2000.0, 0.0), (2000.0, 1500.0), (3000.0, 2500.0)], dimension: '16×2', anderLeitung: true, abstand: 1000.0),
     ]);
     expect(m['Winkel 90° · 16×2'], 1);
     expect(m['Winkel 45° · 16×2'], 1);

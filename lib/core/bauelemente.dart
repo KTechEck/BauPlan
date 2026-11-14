@@ -38,14 +38,14 @@ enum BauelementKategorie {
   tuer('Tür', BauelementGruppe.gebaeudehuelle, _tuer),
   sonnenschutz('Rollladen / Jalousie / Raffstore', BauelementGruppe.gebaeudehuelle, _sonnenschutz),
   fensterbank('Fensterbank', BauelementGruppe.gebaeudehuelle, _fensterbank),
-  elektro('Schalter / Steckdose / Elektro', BauelementGruppe.elektro, _elektro),
-  leuchte('Leuchte', BauelementGruppe.elektro, _leuchte),
-  sensor('Sensor / Melder', BauelementGruppe.elektro, _sensorFelder),
-  brandschutz('Rauchmelder / Brandschutz', BauelementGruppe.brandschutz, _brandschutz),
+  elektro('Schalter / Steckdose / Elektro', BauelementGruppe.elektro, _elektroG),
+  leuchte('Leuchte', BauelementGruppe.elektro, _leuchteG),
+  sensor('Sensor / Melder', BauelementGruppe.elektro, _sensorG),
+  brandschutz('Rauchmelder / Brandschutz', BauelementGruppe.brandschutz, _brandschutzG),
   schrankgeraet('Schaltschrankgerät', BauelementGruppe.schaltschrank, _schrankgeraet),
-  technik('Technikgerät (Heizung, Speicher, Lüftung …)', BauelementGruppe.haustechnik, _technik),
-  heizkoerper('Heizkörper / Heizfläche', BauelementGruppe.haustechnik, _heizkoerper),
-  sanitaer('Sanitärobjekt', BauelementGruppe.haustechnik, _sanitaer),
+  technik('Technikgerät (Heizung, Speicher, Lüftung …)', BauelementGruppe.haustechnik, _technikG),
+  heizkoerper('Heizkörper / Heizfläche', BauelementGruppe.haustechnik, _heizkoerperG),
+  sanitaer('Sanitärobjekt', BauelementGruppe.haustechnik, _sanitaerG),
   verbinder('Verbindungselement (Fitting, Verschraubung, Halter)', BauelementGruppe.haustechnik, _verbinder),
   armatur('Armatur / Ventil', BauelementGruppe.haustechnik, _armatur),
   daemmstoff('Dämmstoff', BauelementGruppe.material, _daemmstoff),
@@ -55,6 +55,8 @@ enum BauelementKategorie {
   kabel('Kabel / Leitung', BauelementGruppe.material, _kabel),
   rohr('Rohr / Leerrohr', BauelementGruppe.material, _rohr),
   dose('Dose (Unterputz, Hohlwand …)', BauelementGruppe.material, _dose),
+  kabelkanal('Kabelkanal / Brüstungskanal / Rinne', BauelementGruppe.material, _kabelkanal),
+  montage('Montageschiene / Schelle / Halter', BauelementGruppe.material, _montage),
   kleinmaterial('Kleinmaterial / Befestigung', BauelementGruppe.material, _kleinmaterial),
   werkzeug('Werkzeug', BauelementGruppe.werkzeug, _werkzeug),
   sonstiges('Sonstiges Bauteil', BauelementGruppe.sonstiges, _sonstiges);
@@ -70,6 +72,63 @@ const _masse = [
   FeldDef('hoehe', 'Höhe', einheit: 'mm'),
   FeldDef('tiefe', 'Tiefe', einheit: 'mm'),
   FeldDef('gewicht', 'Gewicht', einheit: 'kg'),
+];
+
+/// Gerätedaten für alle Geräte (Elektro, Sensoren, Technik, Sanitär …):
+/// Montage, Einbauposition, Elektrik, Freiräume, Wartung.
+const _gMontageart = FeldDef('montageart', 'Montageart', typ: FeldTyp.auswahl, optionen: ['Unterputz', 'Aufputz', 'Hohlwand', 'Wand (Halter)', 'Decke', 'Abgehängt', 'Boden / stehend', 'Hutschiene', 'Einbau in Möbel', 'Vorwand']);
+const _gHoehe = FeldDef('einbauhoehe', 'Standard-Einbauhöhe (Mitte über FFB)', einheit: 'mm', hilfe: 'wird beim Zuordnen als Höhe übernommen, wenn noch keine gesetzt ist');
+const _gWand = FeldDef('wandabstand', 'Abstand zur Wand (hinten)', einheit: 'mm');
+const _gSpannung = FeldDef('spannung', 'Spannung', typ: FeldTyp.auswahl, optionen: ['230 V', '400 V', '24 V DC', '12 V DC', '48 V DC', 'SELV', 'Bus', 'Batterie', 'keine']);
+const _gLeistung = FeldDef('leistungsaufnahme', 'Leistungsaufnahme', einheit: 'W');
+const _gSchutzklasse = FeldDef('schutzklasse', 'Schutzklasse', typ: FeldTyp.auswahl, optionen: ['I', 'II', 'III']);
+const _gIp = FeldDef('ip', 'Schutzart', typ: FeldTyp.text, hilfe: 'z. B. IP20, IP44, IP65');
+const _gFrei = [
+  FeldDef('freiraum_vorne', 'Freiraum vorne (Bedienung/Wartung)', einheit: 'mm'),
+  FeldDef('freiraum_seite', 'Freiraum seitlich', einheit: 'mm'),
+  FeldDef('freiraum_oben', 'Freiraum oben', einheit: 'mm'),
+];
+const _gUnten = FeldDef('freiraum_unten', 'Freiraum unten', einheit: 'mm');
+const _gWartung = FeldDef('wartung', 'Wartungsintervall', einheit: 'Monate');
+const _gRest = [
+  FeldDef('garantie', 'Garantie', einheit: 'Jahre'),
+  FeldDef('datenblatt', 'Datenblatt / Anleitung (Link oder Datei)', typ: FeldTyp.text),
+];
+
+const _kabelkanal = [
+  FeldDef('kanalart', 'Art', typ: FeldTyp.auswahl, optionen: ['Wandkanal', 'Leistenkanal', 'Brüstungskanal', 'Sockelleistenkanal', 'Fußbodenkanal', 'Unterflurkanal', 'Kabelrinne', 'Gitterrinne', 'Verdrahtungskanal (Schrank)', 'Unterputzkanal (eingelassen)']),
+  FeldDef('breite', 'Breite (sichtbar)', einheit: 'mm'),
+  FeldDef('tiefe', 'Tiefe (von der Wand)', einheit: 'mm'),
+  FeldDef('kammern', 'Kammern', einheit: ''),
+  FeldDef('material', 'Material', typ: FeldTyp.auswahl, optionen: ['PVC', 'PVC halogenfrei', 'Aluminium', 'Stahl verzinkt', 'Edelstahl', 'Holz']),
+  FeldDef('farbe', 'Farbe', typ: FeldTyp.text, hilfe: 'z. B. reinweiß RAL 9010'),
+  FeldDef('stange', 'Lieferlänge', einheit: 'mm', hilfe: 'meist 2000'),
+  FeldDef('geraeteeinbau', 'Geräteeinbau möglich (45-mm-Geräte)', typ: FeldTyp.jaNein),
+  FeldDef('befestigung', 'Befestigungsabstand', einheit: 'mm', hilfe: 'Dübel/Schrauben, meist 500'),
+  ..._lager,
+];
+
+const _montage = [
+  FeldDef('montageteil', 'Art', typ: FeldTyp.auswahl, optionen: [
+    'Montageschiene',
+    'Rohrschelle',
+    'Rohrschelle mit Gummieinlage',
+    'Gleitschelle / Festpunkt',
+    'Konsole / Wandausleger',
+    'Gewindestange',
+    'Schienenmutter',
+    'Kabelschelle',
+    'Sammelhalter / Bügelschelle',
+    'Rohrhalter Kunststoff (Clip)',
+    'Kabelbinder / Halter',
+  ]),
+  FeldDef('profil', 'Profil / Größe', typ: FeldTyp.text, hilfe: 'z. B. 41×21, 27×18, ½" 20–24 mm'),
+  FeldDef('spannbereich', 'Spannbereich / für Ø', typ: FeldTyp.text, hilfe: 'z. B. 15–19 mm'),
+  FeldDef('gewinde', 'Anschlussgewinde', typ: FeldTyp.text, hilfe: 'z. B. M8, M10'),
+  FeldDef('last', 'max. Last', einheit: 'kg'),
+  FeldDef('halterabstand', 'Halter-/Konsolenabstand', einheit: 'mm', hilfe: 'Montageschiene: meist 1000'),
+  FeldDef('stange', 'Lieferlänge', einheit: 'mm'),
+  ..._lager,
 ];
 
 const _fenster = [
@@ -639,6 +698,8 @@ class Bauelement {
       BauelementKategorie.kabel => [daten['kabeltyp'] as String?, z('adern', '×'), z('querschnitt', ' mm²'), z('aussendurchmesser', ' mm Ø')],
       BauelementKategorie.rohr => [daten['rohrart'] as String?, daten['nennweite'] as String?, z('aussendurchmesser', ' mm Ø')],
       BauelementKategorie.dose => [daten['dosenart'] as String?, z('durchmesser', ' mm Ø'), z('tiefe', ' mm tief')],
+      BauelementKategorie.kabelkanal => [daten['kanalart'] as String?, z('breite', ' ×'), z('tiefe', ' mm'), z('kammern', ' Kammern'), daten['material'] as String?],
+      BauelementKategorie.montage => [daten['montageteil'] as String?, daten['profil'] as String?, daten['spannbereich'] as String?],
       _ => [for (final f in kategorie.felder.take(3)) daten[f.schluessel] == null ? null : '${daten[f.schluessel]}${f.einheit.isEmpty ? '' : ' ${f.einheit}'}'],
     };
     return teile.whereType<String>().where((t) => t.isNotEmpty).join(' · ');
@@ -767,3 +828,19 @@ Map<String, dynamic> kiWerteBereinigen(Map<String, dynamic> m, BauelementKategor
   }
   return w;
 }
+
+// Gerätekategorien mit den gemeinsamen Gerätedaten (Montage, Einbauhöhe, Elektrik, Freiräume, Wartung)
+const _elektroG = [..._elektro, _gHoehe, _gSpannung, _gSchutzklasse, ..._gFrei, _gUnten, _gWartung, ..._gRest];
+const _leuchteG = [..._leuchte, _gMontageart, _gHoehe, _gWand, _gSpannung, _gSchutzklasse, ..._gFrei, _gUnten, _gWartung, ..._gRest];
+const _sensorG = [..._sensorFelder, _gMontageart, _gHoehe, _gSpannung, ..._gFrei, _gUnten, _gWartung, ..._gRest];
+const _brandschutzG = [..._brandschutz, _gHoehe, _gSpannung, ..._gFrei, _gUnten, ..._gRest];
+const _technikG = [..._technik, _gMontageart, _gHoehe, _gWand, _gSpannung, _gLeistung, _gSchutzklasse, _gIp, _gUnten, _gWartung, ..._gRest];
+const _heizkoerperG = [..._heizkoerper, _gMontageart, _gHoehe, _gWand, ..._gFrei, _gUnten, _gWartung, ..._gRest];
+const _sanitaerG = [..._sanitaer, _gMontageart, _gHoehe, _gWand, ..._gFrei, _gUnten, _gWartung, ..._gRest];
+
+/// Überschriften für die gemeinsamen Gerätedaten im Bibliothek-Editor.
+const geraetFeldGruppen = <String, List<String>>{
+  'Montage und Einbauposition': ['montageart', 'einbauhoehe', 'wandabstand'],
+  'Elektrik': ['spannung', 'leistungsaufnahme', 'schutzklasse'],
+  'Freiräume, Wartung, Unterlagen': ['freiraum_vorne', 'freiraum_seite', 'freiraum_oben', 'freiraum_unten', 'wartung', 'garantie', 'datenblatt'],
+};

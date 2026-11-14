@@ -467,7 +467,7 @@ class _WandansichtSeiteState extends State<WandansichtSeite> {
     final p = _bohrpunkt;
     if (p == null) return;
     final s = _seite;
-    final treffer = bohrCheck(p, [for (final t in teile) t.wandTeil]);
+    final treffer = bohrCheck(p, [for (final t in teile) t.wandTeil], radius: ((k.plan.daten['vorgaben'] as Map?)?['bohr_radius'] as num? ?? 300).toDouble());
     final zonen = installationszonen(s.laenge, hoehe, [for (final o in oeff) (o.x1, o.x2)]);
     final inZone = zonen.any((r) => r.contains(p));
     final inOeffnung = oeff.any((o) => p.dx >= o.x1 && p.dx <= o.x2 && p.dy >= o.z1 && p.dy <= o.z2);

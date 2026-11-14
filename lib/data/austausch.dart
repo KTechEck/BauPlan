@@ -193,6 +193,7 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
     'einkauf': _einkaufFuerApp(store, raumName, gewerkName, produkte),
     'aufmass': [for (final a in aufmassListe(store)) if (a['status'] == 'offen') a],
     'verkleidungen': verkleidungenLesen?.call(store) ?? const [],
+    'vorgaben': {'bohr_radius': store.einstellung<num>('bohr_radius') ?? 300},
     'aufgaben': [
       for (final a in store.aufgaben())
         if (a.status != AufgabenStatus.erledigt)

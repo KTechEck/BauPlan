@@ -9,6 +9,8 @@ import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/bauelemente.dart';
 import '../../core/einkauf.dart';
+import '../../core/kanal_montage.dart';
+import '../installation/kanal_felder.dart';
 import '../../core/fbh.dart';
 import '../../core/oberflaechen.dart';
 import '../bauphysik/oberflaechen_ansicht.dart' show lichteHoeheVon;
@@ -448,6 +450,8 @@ List<BedarfZeile> besorgungsliste(AppState s) {
   }
 
   final hkTyp = {for (final t in store.objekttypen()) if (t.kuerzel == 'HK') t.id};
+  final kuerzel = {for (final t in store.objekttypen()) t.id: t.kuerzel};
+  final verschnitt = 1 + ((store.einstellung<num>('verschnitt_prozent')) ?? 10) / 100;
   for (final o in store.alleObjekte()) {
     final e = o.eigenschaften;
     plus(e['bauelement'] as String?, 1, 'Installation');
@@ -463,7 +467,9 @@ List<BedarfZeile> besorgungsliste(AppState s) {
       continue;
     }
     if (o.punkte.length >= 2) {
-      final m = o.laenge / 1000 * 1.1;
+      final m = o.laenge / 1000 * verschnitt;
+      if (kuerzel[o.typId] == 'KK') plus(e['kanal'] as String?, m, 'Kabelkanäle');
+      if (kuerzel[o.typId] == 'MS') plus(e['schiene'] as String?, m, 'Montageschienen');
       plus(e['rohr'] as String?, m, 'Leitungen');
       for (final k in (e['kabel_liste'] as List? ?? const [])) {
         plus('$k', m, 'Leitungen');
@@ -503,7 +509,7 @@ List<BedarfZeile> besorgungsliste(AppState s) {
     final m = e.value;
     l.add((
       element: el,
-      bedarf: (el.daten['einheit'] == 'm' || herkunft[e.key]!.contains('Leitungen') || einheitVorgabe[e.key] != null && einheitVorgabe[e.key] != 'Stk')
+      bedarf: (el.daten['einheit'] == 'm' || herkunft[e.key]!.contains('Leitungen') || herkunft[e.key]!.contains('Kabelkanäle') || einheitVorgabe[e.key] != null && einheitVorgabe[e.key] != 'Stk')
           ? (m * 10).ceilToDouble() / 10
           : m.ceilToDouble(),
       bestand: bestand[e.key] ?? 0,
@@ -561,12 +567,41 @@ Future<void> besorgungslisteZeigen(BuildContext context, AppState s) async {
   final formteile = formteileSchaetzen([
     for (final o in store.alleObjekte())
       if (o.punkte.length >= 2 && o.eigenschaften['rohr'] is String)
-        (
-          punkte: [for (final p in o.punkte) (p.x, p.y)],
-          dimension: s.bibliothek.fuerProjekt(store, o.eigenschaften['rohr'] as String)?.daten['nennweite'] as String? ?? '?',
-          anderLeitung: (o.eigenschaften['anfang'] as Map?)?['leitung'] != null || (o.eigenschaften['ende'] as Map?)?['leitung'] != null,
-        ),
+        () {
+          final r = s.bibliothek.fuerProjekt(store, o.eigenschaften['rohr'] as String);
+          final aussen = r?.zahl('aussendurchmesser')?.toDouble() ?? 16;
+          return (
+            punkte: [for (final p in o.punkte) (p.x, p.y)],
+            dimension: '${r?.daten['nennweite'] ?? '?'}${o.eigenschaften['schiene'] != null ? ' (auf Schiene)' : ''}',
+            anderLeitung: (o.eigenschaften['anfang'] as Map?)?['leitung'] != null || (o.eigenschaften['ende'] as Map?)?['leitung'] != null,
+            // im Kabelkanal keine Schellen
+            abstand: o.eigenschaften['kanal'] != null ? double.infinity : befestigungsabstand(r?.daten['rohrart'] as String?, aussen),
+          );
+        }(),
   ]);
+  // Kabelkanäle: Formteile je Kanalgröße, Montageschienen: Konsolen
+  final typenK = {for (final t in store.objekttypen()) t.id: t};
+  for (final geb in store.gebaeude()) {
+    for (final gs in store.geschosse(geb.id)) {
+      final alle = store.objekte(gs.id);
+      final raeume = store.raeume(gs.id);
+      for (final o in alle) {
+        final k = typenK[o.typId]?.kuerzel;
+        if (k == 'KK' && o.punkte.length >= 2) {
+          final m = kanalMasse(s, o);
+          for (final f in kanalFormteileVon(s, o, alle, raeume, typenK).entries) {
+            final key = '${f.key} · Kanal ${m.breite.round()}×${m.tiefe.round()}';
+            formteile[key] = (formteile[key] ?? 0) + f.value;
+          }
+        } else if (k == 'MS' && o.punkte.length >= 2) {
+          final bel = s.bibliothek.fuerProjekt(store, o.eigenschaften['schiene'] as String?);
+          final abst = (o.eigenschaften['halterabstand'] as num?)?.toDouble() ?? bel?.zahl('halterabstand')?.toDouble() ?? 1000;
+          const key = 'Konsole / Halter für Montageschiene';
+          formteile[key] = (formteile[key] ?? 0) + schienenHalter(o.laenge, halterAbstand: abst);
+        }
+      }
+    }
+  }
   await showDialog<void>(
     context: context,
     builder: (c) => AlertDialog(
@@ -580,7 +615,7 @@ Future<void> besorgungslisteZeigen(BuildContext context, AppState s) async {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 if (formteile.isNotEmpty) ...[
                   const Text('Formteile und Halter (geschätzt aus dem Leitungsverlauf)', style: TextStyle(fontWeight: FontWeight.w600)),
-                  const Text('Richtungswechsel = Winkel, Anschluss an eine andere Leitung = T-Stück, etwa je Meter eine Schelle.',
+                  const Text('Richtungswechsel = Winkel, Anschluss an eine andere Leitung = T-Stück, Schellen nach Befestigungsabstand je Rohr; Kabelkanäle mit Ecken, Endkappen, Abzweigen und Stoßstellen.',
                       style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
                   Wrap(spacing: 8, runSpacing: 4, children: [
                     for (final e in (formteile.entries.toList()..sort((a, b) => a.key.compareTo(b.key))))

@@ -106,9 +106,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
   Werkzeug _werkzeug = Werkzeug.wand;
   int _massAusrichtung = 0; // 0 direkt, 1 waagerecht, 2 senkrecht, 3 parallel zur Wand
   bool _seiteZu = false; // Eigenschaften rechts eingeklappt
-  int _wandDicke = 240;
+  late int _wandDicke = (widget.state.settings.darstellung['wand_dicke'] as num?)?.toInt() ?? 240;
   String? _wandtypId; // null = freie Dicke
-  int _rasterMm = 50;
+  late int _rasterMm = (widget.state.settings.darstellung['raster_mm'] as num?)?.toInt() ?? 50;
   WandZustand _zustand = WandZustand.bestand;
 
   Offset? _kettenStart;

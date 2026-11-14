@@ -397,4 +397,6 @@ const List<List<String>> migrationen = [
   [],
   // Version 20 – Revisionsöffnung (Allgemein, Fläche in Decke oder Wand; Startbestand in _migrieren)
   [],
+  // Version 21 – Kabelkanal (Elektro, Netzwerk) und Montageschiene (Allgemein) (Startbestand in _migrieren)
+  [],
 ];

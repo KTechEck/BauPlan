@@ -15,6 +15,7 @@ import '../../core/verdrahtungskette.dart';
 import '../../core/geschossuebergreifend.dart';
 import 'leitung_lage_felder.dart';
 import 'ha_live_ebene.dart';
+import 'kanal_felder.dart';
 import '../../core/revision.dart';
 import '../../core/ha_live.dart' show HaEinstellung;
 import '../../core/height.dart';
@@ -73,10 +74,21 @@ class _Daten {
   final Geschoss? geschoss;
 }
 
-/// Standardhöhe und Lage beim Setzen, je Objekttyp.
-(int?, Hoehenbezug?, String?) objektVorgabe(Objekttyp t) {
+/// Standardhöhe und Lage beim Setzen, je Objekttyp. [eigene] = Vorgaben aus
+/// den Einstellungen (Einstellung `objekt_vorgaben` {Kürzel: {z, bezug, lage}}).
+(int?, Hoehenbezug?, String?) objektVorgabe(Objekttyp t, {Map? eigene}) {
+  final e = eigene?[t.kuerzel];
+  if (e is Map) {
+    final std = objektVorgabe(t);
+    return (
+      (e['z'] as num?)?.round() ?? std.$1,
+      Hoehenbezug.values.where((b) => b.name == e['bezug']).firstOrNull ?? std.$2,
+      (e['lage'] as String?)?.isNotEmpty == true ? e['lage'] as String : std.$3,
+    );
+  }
   const anDecke = {'LE', 'PM', 'BM', 'LV', 'AP'};
   return switch (t.geometrie) {
+    Geometrieart.linie when t.kuerzel == 'KK' || t.kuerzel == 'MS' => (300, Hoehenbezug.ffb, 'auf Wand'),
     Geometrieart.punkt when anDecke.contains(t.kuerzel) => (0, Hoehenbezug.rohdecke, 'an Decke'),
     Geometrieart.punkt when t.kuerzel == 'TA' || t.kuerzel == 'KX' => (1050, Hoehenbezug.ffb, 'in Wand'),
     Geometrieart.punkt when t.kuerzel == 'WD' => (300, Hoehenbezug.ffb, 'durch Wand'),
@@ -579,7 +591,7 @@ class _InstallationPageState extends State<InstallationPage> {
     final t = _typ;
     final d = _daten;
     if (t == null || d == null || _s.geschossId == null) return;
-    final (z, bezug, vorgabeLage) = objektVorgabe(t);
+    final (z, bezug, vorgabeLage) = objektVorgabe(t, eigene: _s.store!.einstellung<Map>('objekt_vorgaben'));
     var lage = _ebeneNeu ?? vorgabeLage;
     // Gerät auf der Wandoberfläche gefangen: sitzt in der Wand
     if (_ebeneNeu == null && t.geometrie == Geometrieart.punkt && punkte.isNotEmpty) {
@@ -1498,9 +1510,13 @@ class _InstallationPageState extends State<InstallationPage> {
         return eig['breite_hand'] == true ? ((eig['breite_mm'] as num?)?.toDouble() ?? b) : b;
       }
 
+      final d = _daten;
+      final kk = typ.kuerzel == 'KK', ms = typ.kuerzel == 'MS';
+      if (ms && d != null) return schienenFelder(context, _s, o, d.objekte, setzen);
       return [
+        if (kk && d != null) ...kanalFelder(context, _s, o, d.objekte, d.raeume, d.typen, setzen),
         const SizedBox(height: 10),
-        Text('Material der Leitung', style: Theme.of(context).textTheme.titleSmall),
+        Text(kk ? 'Kabel direkt im Kanal' : 'Material der Leitung', style: Theme.of(context).textTheme.titleSmall),
         BauelementWahl(
           state: _s,
           label: 'Rohr / Leerrohr',
@@ -1545,6 +1561,7 @@ class _InstallationPageState extends State<InstallationPage> {
           Text('Breite ${(eig['breite_mm'] as num).toStringAsFixed(1).replaceAll('.', ',')} mm – so breit zeichnen Plan und Wandansicht die Leitung.',
               style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
         ...leitungLageFelder(context, o, setzen),
+        if (!kk && d != null) ...leitungMontageFelder(context, _s, o, d.objekte, d.typen, setzen),
       ];
     }
     if (typ.geometrie != Geometrieart.punkt || !elektro) return const [];
@@ -2545,6 +2562,11 @@ class _InstallationPageState extends State<InstallationPage> {
         kategorien: kategorienFuerKuerzel(typ?.kuerzel ?? ''),
         onChanged: (e) => aendern({
           'eigenschaften': jsonEncode({...o.eigenschaften, 'bauelement': e?.id}..removeWhere((_, v) => v == null)),
+          // Standard-Einbauhöhe des Geräts übernehmen (Punktobjekte in/an der Wand)
+          if (e?.zahl('einbauhoehe') != null && typ?.geometrie == Geometrieart.punkt && o.zBezug != Hoehenbezug.rohdecke) ...{
+            'z_mm': e!.zahl('einbauhoehe')!.round(),
+            'z_bezug': Hoehenbezug.ffb.name,
+          },
         }),
       ),
       ..._einbauFelder(o, typ, aendern),

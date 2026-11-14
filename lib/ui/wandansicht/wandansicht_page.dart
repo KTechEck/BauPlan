@@ -141,6 +141,8 @@ class _WandansichtPageState extends State<WandansichtPage> {
   late List<(Objekt, List<Offset>)> _zuege; // in der Ansicht gezeichnete Leitungen: (x, z) je Punkt
   /// Leitungen aus anderen Geschossen und Steigleitungen, die durch diese Wand laufen (nur Anzeige).
   late List<(Objekt, List<Offset>, String)> _fremd;
+  /// Bohrlöcher der Geräte (aus der Bibliothek): Lage (x, z) und Durchmesser.
+  List<(Offset, int)> _bohrloecher = [];
   /// Andockpunkte für Leitungen: Geräteanschlüsse und Enden von Leitungen, die hier
   /// ankommen (aus dem Grundriss oder um die Ecke von der Nachbarwand).
   late List<({Offset xz, String text, Map<String, dynamic> bezug})> _andock;
@@ -227,6 +229,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
     // Andockpunkte
     _alleObjekte = store.objekte(g.id);
     _andock = [];
+    _bohrloecher = [];
     for (final (o, x, z) in _punkte) {
       final t = _typen[o.typId];
       if (t == null) continue;
@@ -237,6 +240,10 @@ class _WandansichtPageState extends State<WandansichtPage> {
       final bel = widget.state.bibliothek.fuerProjekt(store, o.eigenschaften['bauelement'] as String?);
       if (bel != null) {
         final b = bel.zahl('breite') ?? bel.zahl('baulaenge') ?? 0, hh = bel.zahl('hoehe') ?? bel.zahl('bauhoehe') ?? 0;
+        for (final bl in (bel.daten['bohrungen'] as List? ?? const [])) {
+          if (bl is! Map) continue;
+          _bohrloecher.add((Offset(x + ((bl['x'] as num?) ?? 0) - b / 2, z + ((bl['y'] as num?) ?? 0) - hh / 2), ((bl['d'] as num?) ?? 8).round()));
+        }
         for (final a in geraeteAnschluesse(bel.daten)) {
           _andock.add((xz: Offset(x + a.x - b / 2, z + a.y - hh / 2), text: '${o.kennung} ${a.anzeige}${a.groesse.isEmpty ? '' : ' ${a.groesse}'}', bezug: {'objekt': o.id, 'anschluss': a.anzeige}));
         }
@@ -535,7 +542,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
   }
 
   void _bohrCheckZeigen(Offset a) {
-    final treffer = bohrCheck(a, _wandTeile());
+    final treffer = bohrCheck(a, _wandTeile(), radius: (_s.store!.einstellung<num>('bohr_radius') ?? 300).toDouble());
     final w = _seite.wand;
     final a0 = Offset(w.x1.toDouble(), w.y1.toDouble());
     final u = (Offset(w.x2.toDouble(), w.y2.toDouble()) - a0) / math.max(1.0, w.laenge);
@@ -964,6 +971,7 @@ class _WandansichtPageState extends State<WandansichtPage> {
                 leitungen: _leitungen,
                 zuege: _zuege,
                 fremd: _fremd,
+                bohrloecher: _bohrloecher,
                 bohrpunkt: _bohren ? _bohrpunkt : null,
                 andock: [for (final a in _andock) (a.xz, a.text, a.bezug.containsKey('leitung'))],
                 fangText: _zeichnen ? _fangText : null,
@@ -1135,7 +1143,10 @@ class _AnsichtPainter extends CustomPainter {
     this.rahmen,
     this.fremd = const [],
     this.bohrpunkt,
+    this.bohrloecher = const [],
   });
+
+  final List<(Offset, int)> bohrloecher;
 
   final List<(Objekt, List<Offset>, String)> fremd;
   final Offset? bohrpunkt;
@@ -1311,6 +1322,25 @@ class _AnsichtPainter extends CustomPainter {
       final farbe = Color(gewerke[typen[o.typId]?.gewerkId]?.farbe ?? 0xFF888888);
       final gewaehlt = o.id == auswahl;
       final bild = versetzterZug([for (final q in pts) _p(q.dx, q.dy)], i, versatz, 5);
+      final kuerzel = typen[o.typId]?.kuerzel;
+      if (kuerzel == 'KK' || kuerzel == 'MS') {
+        // Kabelkanal / Montageschiene als Band in echter Breite mit Kontur
+        final b = math.max(6.0, ((o.eigenschaften['breite_mm'] as num?)?.toDouble() ?? (kuerzel == 'MS' ? 41 : 40)) * massstab);
+        final pfad = Path()..addPolygon(bild, false);
+        canvas.drawPath(pfad, Paint()
+          ..style = PaintingStyle.stroke
+          ..color = farbe
+          ..strokeWidth = b + 2
+          ..strokeJoin = StrokeJoin.miter);
+        canvas.drawPath(pfad, Paint()
+          ..style = PaintingStyle.stroke
+          ..color = Color.lerp(farbe, Colors.white, o.eigenschaften['kanal_montage'] == 'eingelassen' ? 0.55 : 0.8)!
+          ..strokeWidth = b
+          ..strokeJoin = StrokeJoin.miter);
+        final m = pts.length >= 2 ? (pts[0] + pts[1]) / 2 : pts.first;
+        _text(canvas, '${o.kennung} · ${meterText(o.laenge)}${o.eigenschaften['kanal_montage'] == 'eingelassen' ? ' · eingelassen' : ''}', _p(m.dx, m.dy) + Offset(5, b / 2 + 2), farbe: farbe, groesse: 9, fett: o.id == auswahl);
+        continue;
+      }
       canvas.drawPath(
         Path()..addPolygon(bild, false),
         Paint()
@@ -1357,6 +1387,18 @@ class _AnsichtPainter extends CustomPainter {
       }
       final m = bild.length >= 2 ? (bild[0] + bild[1]) / 2 : bild.first;
       _text(canvas, '${o.kennung} $text', m + const Offset(6, 0), farbe: farbe, groesse: 9);
+    }
+    // Bohrlöcher der Geräte (zum Anzeichnen)
+    for (final (q, d) in bohrloecher) {
+      final p = _p(q.dx, q.dy);
+      final r = math.max(2.5, d * massstab / 2);
+      final stift = Paint()
+        ..style = PaintingStyle.stroke
+        ..color = const Color(0xFF343A40)
+        ..strokeWidth = 1;
+      canvas.drawCircle(p, r, stift);
+      canvas.drawLine(p - Offset(r + 3, 0), p + Offset(r + 3, 0), stift);
+      canvas.drawLine(p - Offset(0, r + 3), p + Offset(0, r + 3), stift);
     }
     // Bohrstelle
     if (bohrpunkt case final bp?) {

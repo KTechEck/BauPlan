@@ -144,7 +144,7 @@ BauelementKategorie kategorieRaten(String text) {
 /// Formteile und Halter aus dem Leitungsverlauf schätzen: Richtungswechsel
 /// > 30° = Winkel/Bogen, Leitungsende an einer anderen Leitung = T-Stück,
 /// je angefangenem Meter eine Rohrschelle. Schlüssel: „Art · Dimension“.
-Map<String, int> formteileSchaetzen(List<({List<(double, double)> punkte, String dimension, bool anderLeitung})> leitungen, {double schellenAbstand = 1000}) {
+Map<String, int> formteileSchaetzen(List<({List<(double, double)> punkte, String dimension, bool anderLeitung, double abstand})> leitungen) {
   final m = <String, int>{};
   void plus(String k, int n) => m[k] = (m[k] ?? 0) + n;
   for (final l in leitungen) {
@@ -165,7 +165,7 @@ Map<String, int> formteileSchaetzen(List<({List<(double, double)> punkte, String
       }
     }
     if (l.anderLeitung) plus('T-Stück · ${l.dimension}', 1);
-    if (laenge > 0) plus('Rohrschelle · ${l.dimension}', (laenge / schellenAbstand).ceil() + 1);
+    if (laenge > 0 && l.abstand.isFinite && l.abstand > 0) plus('Rohrschelle · ${l.dimension}', (laenge / l.abstand).ceil() + 1);
   }
   return m;
 }
