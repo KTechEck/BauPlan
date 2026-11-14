@@ -157,7 +157,7 @@ class _HeizlastAnsichtState extends State<HeizlastAnsicht> {
     }
     final oeff = <HlOeffnung>[];
     for (final o in store.oeffnungen(g.id)) {
-      if (o.art == OeffnungsArt.durchbruch) continue;
+      if (o.art == OeffnungsArt.durchbruch || o.art == OeffnungsArt.nische) continue;
       final be = _s.bibliothek.fuerProjekt(store, o.eigenschaften['bauelement'] as String?);
       final rolll = _s.bibliothek.fuerProjekt(store, o.eigenschaften['sonnenschutz'] as String?);
       final psi = ((o.eigenschaften['einbau'] as Map?)?['psi'] as num?)?.toDouble();

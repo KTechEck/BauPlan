@@ -133,7 +133,36 @@ class FloorplanPainter extends CustomPainter {
       _raumFlaeche(canvas, r);
     }
     for (final w in waende) {
-      _wand(canvas, w, auswahl.contains(w.id));
+      if (w.teilhoch) {
+        // teilhohe Wand: heller, gestrichelte Achse, Höhe an der Wand
+        canvas.saveLayer(null, Paint()..color = const Color(0x73000000));
+        _wand(canvas, w, auswahl.contains(w.id));
+        canvas.restore();
+        final a = _s(Offset(w.x1.toDouble(), w.y1.toDouble())), b = _s(Offset(w.x2.toDouble(), w.y2.toDouble()));
+        final l = (b - a).distance;
+        if (l > 4) {
+          final u = (b - a) / l;
+          final strich = Paint()
+            ..color = Colors.white
+            ..strokeWidth = 1.2;
+          for (var t = 0.0; t < l; t += 10) {
+            canvas.drawLine(a + u * t, a + u * math.min(l, t + 5), strich);
+          }
+          if (massstab * w.laenge > 60 && w.hoehe != null) {
+            final tp = TextPainter(
+              text: TextSpan(
+                text: 'h = ${(w.hoehe! / 1000).toStringAsFixed(2).replaceAll('.', ',')}',
+                style: const TextStyle(fontSize: 10, color: BsFarben.textLeise, fontFamily: 'Roboto', backgroundColor: Color(0xCCFFFFFF)),
+              ),
+              textDirection: TextDirection.ltr,
+            )..layout();
+            final m = (a + b) / 2;
+            tp.paint(canvas, m - Offset(tp.width / 2, tp.height + math.max(4.0, w.dicke * massstab / 2 + 2)));
+          }
+        }
+      } else {
+        _wand(canvas, w, auswahl.contains(w.id));
+      }
       if (w.gesperrt) _schloss(canvas, _s(Offset((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2)));
     }
     final wandNach = {for (final w in waende) w.id: w};
@@ -516,6 +545,21 @@ class FloorplanPainter extends CustomPainter {
     final t0 = abstand.toDouble().clamp(0.0, l), t1 = (abstand + breite).toDouble().clamp(0.0, l);
     Offset pt(double t, double quer) => _s(a + u * t + nl * quer);
     final rand = 1 / massstab; // 1 px über die Wandkante, damit nichts stehen bleibt
+    if (art == OeffnungsArt.nische) {
+      // Nische: nur von einer Wandseite aus eingetieft (Seite über „aufgehen links“)
+      final seite = aufgehenLinks ? 1.0 : -1.0;
+      final tiefe = math.min(100.0, w.dicke * 0.6);
+      final nische = Path()
+        ..addPolygon([pt(t0, seite * (h + rand)), pt(t1, seite * (h + rand)), pt(t1, seite * (h - tiefe)), pt(t0, seite * (h - tiefe))], true);
+      canvas.drawPath(nische, Paint()..color = BsFarben.zeichenflaeche);
+      canvas.drawPath(
+          nische,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = gewaehlt ? 2 : 1
+            ..color = gewaehlt || vorschau ? BsFarben.akzentDunkel : BsFarben.wandBestand);
+      return;
+    }
     final luecke = Path()
       ..addPolygon([pt(t0, h + rand), pt(t1, h + rand), pt(t1, -h - rand), pt(t0, -h - rand)], true);
     canvas.drawPath(luecke, Paint()..color = BsFarben.zeichenflaeche);
@@ -566,6 +610,8 @@ class FloorplanPainter extends CustomPainter {
         for (final q in [h, -h, h / 4, -h / 4]) {
           canvas.drawLine(pt(t0, q), pt(t1, q), glas);
         }
+      case OeffnungsArt.nische:
+        break;
       case OeffnungsArt.durchbruch:
         final d = Paint()
           ..color = farbe.withValues(alpha: 0.6)

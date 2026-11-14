@@ -180,6 +180,22 @@ void main() {
     expect(o.single.kennung, startsWith('EG-'));
   });
 
+  testWidgets('Installation: Bad-Dialog zeigt Abdichtung eines Bads mit Dusche', (tester) async {
+    final g = state.geschossId!;
+    final r = store.raeume(g).single;
+    store.raumAendern(r.id, name: 'Bad');
+    final du = store.objekttypen().firstWhere((t) => t.kuerzel == 'DU');
+    store.objektAnlegen(geschossId: g, typ: du, raumId: r.id, punkte: const [Punkt(120, 120), Punkt(1120, 120), Punkt(1120, 1120), Punkt(120, 1120)]);
+    await zeigen(tester, () => InstallationPage(state: state));
+    await tester.tap(find.byIcon(Icons.bathtub_outlined));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Bad und Abdichtung'), findsOneWidget);
+    expect(find.textContaining('Wände im Dusch-/Wannenbereich'), findsOneWidget);
+    expect(find.textContaining('Dichtband'), findsOneWidget);
+    await tester.tap(find.text('Schließen'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('Fotos: Modul öffnet mit leerer Galerie', (tester) async {
     await zeigen(tester, () => FotosPage(state: state));
     expect(find.text('Fotos importieren'), findsOneWidget);

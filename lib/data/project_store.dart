@@ -178,6 +178,11 @@ class ProjectStore {
           _objekttypErgaenzen('NW', 'KK', 'Kabelkanal / Kabelrinne', 'linie');
           _objekttypErgaenzen('AL', 'MS', 'Montageschiene (Rohre, Kabel)', 'linie');
         }
+        if (version == 21) {
+          for (final t in badTypen) {
+            _objekttypErgaenzen('SA', t.$1, t.$2, t.$3);
+          }
+        }
         version++;
         db.userVersion = version;
         db.execute('COMMIT');
@@ -538,7 +543,8 @@ class ProjectStore {
 
   /// Erkennt alle geschlossenen Wandzüge im Geschoss. Abbruchwände zählen
   /// nicht mit – die Räume zeigen den Zustand nach dem Umbau.
-  List<ErkannterRaum> flaechenErkennen(String geschossId) => erkenneAusWaenden(waende(geschossId));
+  /// Teilhohe Wände (Raumtrenner, Vorwand …) bilden keine Raumgrenze.
+  List<ErkannterRaum> flaechenErkennen(String geschossId) => erkenneAusWaenden([for (final w in waende(geschossId)) if (!w.teilhoch) w]);
 
   static List<ErkannterRaum> erkenneAusWaenden(List<Wand> waende) => raeumeErkennen(
       [for (final w in waende) if (w.zustand != WandZustand.abbruch) w.achse]);
@@ -659,7 +665,7 @@ class ProjectStore {
         bool bei(int x, int y) => (x - a.x2).abs() <= 2 && (y - a.y2).abs() <= 2;
         for (final b in alle) {
           if (b.id == a.id || b.gesperrt || b.laenge < 1) continue;
-          if (a.dicke != b.dicke || a.wandtypId != b.wandtypId || a.zustand != b.zustand) continue;
+          if (a.dicke != b.dicke || a.wandtypId != b.wandtypId || a.zustand != b.zustand || a.hoehe != b.hoehe || a.teilhoch != b.teilhoch) continue;
           final umgedreht = bei(b.x2, b.y2);
           if (!bei(b.x1, b.y1) && !umgedreht) continue;
           final (bx2, by2) = umgedreht ? (b.x1, b.y1) : (b.x2, b.y2);
@@ -713,6 +719,17 @@ class ProjectStore {
         {'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'dicke': dicke, 'wandtyp': wandtypId});
     _raeumeAbgleichen(geschossId);
     return id;
+  }
+
+  /// Zusätze einer Wand setzen (null entfernt den Schlüssel), z. B. Höhe und Art teilhoher Wände.
+  void wandEigenschaftenSetzen(String id, Map<String, Object?> werte) {
+    final r = db.select('SELECT eigenschaften FROM wand WHERE id = ?', [id]).firstOrNull;
+    if (r == null) return;
+    final alt = Map<String, dynamic>.from(jsonDecode(r['eigenschaften'] as String? ?? '{}') as Map);
+    final neu = {...alt, ...werte}..removeWhere((k, v) => v == null);
+    db.execute('UPDATE wand SET eigenschaften = ? WHERE id = ?', [jsonEncode(neu), id]);
+    _protokoll('wand', id, 'aendern', {'eigenschaften': neu});
+    _nachWandAenderung(id);
   }
 
   void wandAendern(String id, {int? dicke, WandZustand? zustand}) {

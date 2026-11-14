@@ -186,11 +186,23 @@ class Wand {
     this.massanzeige,
     this.gesperrt = false,
     this.verbinden,
+    this.eigenschaften = const {},
   });
 
   final String id;
   final String geschossId;
   final int x1, y1, x2, y2;
+
+  /// Zusätze: `hoehe` (mm, fehlt = raumhoch), `art` (siehe [WandArt]).
+  final Map<String, dynamic> eigenschaften;
+
+  /// Höhe einer teilhohen Wand (mm) oder null = raumhoch.
+  int? get hoehe => (eigenschaften['hoehe'] as num?)?.round();
+
+  /// Teilhohe Wand (Raumtrenner, Schamwand, Vorwand, Brüstung): bildet keine Raumgrenze.
+  bool get teilhoch => hoehe != null || (eigenschaften['art'] != null && eigenschaften['art'] != 'raumhoch');
+
+  WandArt get art => WandArt.values.where((a) => a.name == eigenschaften['art']).firstOrNull ?? (hoehe != null ? WandArt.raumtrenner : WandArt.raumhoch);
   final int dicke;
   final WandZustand zustand;
   final String? wandtypId;
@@ -225,7 +237,39 @@ class Wand {
         massanzeige: MassAnzeige.values.where((m) => m.name == r['massanzeige']).firstOrNull,
         gesperrt: (r['gesperrt'] as int? ?? 0) == 1,
         verbinden: r['verbinden'] == null ? null : r['verbinden'] == 1,
+        eigenschaften: _jsonOderLeer(r['eigenschaften']),
       );
+}
+
+Map<String, dynamic> _jsonOderLeer(Object? v) {
+  if (v is! String || v.isEmpty) return const {};
+  try {
+    return Map<String, dynamic>.from(jsonDecode(v) as Map);
+  } catch (_) {
+    return const {};
+  }
+}
+
+/// Art einer Wand: raumhoch oder teilhoch (bildet dann keine Raumgrenze).
+enum WandArt { raumhoch, raumtrenner, schamwand, vorwand, bruestung }
+
+extension WandArtText on WandArt {
+  String get label => switch (this) {
+        WandArt.raumhoch => 'raumhoch',
+        WandArt.raumtrenner => 'Raumtrenner (teilhoch)',
+        WandArt.schamwand => 'Schamwand (z. B. am WC)',
+        WandArt.vorwand => 'Vorwand / Installationswand',
+        WandArt.bruestung => 'Brüstung / Mäuerchen',
+      };
+
+  /// übliche Höhe in mm
+  int get standardHoehe => switch (this) {
+        WandArt.raumhoch => 0,
+        WandArt.raumtrenner => 1200,
+        WandArt.schamwand => 1200,
+        WandArt.vorwand => 1200,
+        WandArt.bruestung => 900,
+      };
 }
 
 class Baustoff {
@@ -361,7 +405,7 @@ class Planvorlage {
       );
 }
 
-enum OeffnungsArt { tuer, fenster, balkontuer, durchbruch }
+enum OeffnungsArt { tuer, fenster, balkontuer, durchbruch, nische }
 
 
 extension OeffnungsArtText on OeffnungsArt {
@@ -370,6 +414,7 @@ extension OeffnungsArtText on OeffnungsArt {
         OeffnungsArt.fenster => 'Fenster',
         OeffnungsArt.balkontuer => 'Balkontür / Fenstertür',
         OeffnungsArt.durchbruch => 'Durchbruch',
+        OeffnungsArt.nische => 'Nische (nicht durchgehend)',
       };
 
   /// Übliche Rohbaumaße (Breite, Höhe, Brüstung) in mm.
@@ -378,6 +423,7 @@ extension OeffnungsArtText on OeffnungsArt {
         OeffnungsArt.fenster => (1010, 1385, 900),
         OeffnungsArt.balkontuer => (1010, 2260, 0),
         OeffnungsArt.durchbruch => (800, 2010, 0),
+        OeffnungsArt.nische => (300, 600, 1100),
       };
 
   /// verglast wie ein Fenster (Uw, Laibung, Einbaudetail, Sonnenschutz)

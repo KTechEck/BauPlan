@@ -225,7 +225,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
     final store = _s.store!;
     final g = _s.geschossId;
     final waende = g == null ? <Wand>[] : store.waende(g);
-    final flaechen = ProjectStore.erkenneAusWaenden(waende);
+    final flaechen = ProjectStore.erkenneAusWaenden([for (final w in waende) if (!w.teilhoch) w]);
     final raeume = g == null ? <Raum>[] : store.raeume(g);
     final zuordnung = <String, ErkannterRaum>{};
     for (final r in raeume) {
@@ -1774,6 +1774,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
     OeffnungsArt.fenster: [510, 635, 760, 885, 1010, 1135, 1260, 1510, 1760, 2010],
     OeffnungsArt.balkontuer: [760, 885, 1010, 1135, 1260, 1510, 1760, 2010],
     OeffnungsArt.durchbruch: [500, 625, 750, 875, 1000, 1250, 1500, 2000],
+    OeffnungsArt.nische: [200, 300, 400, 500, 600, 800, 1000, 1200],
   };
 
   /// Lage einer neuen Öffnung unter dem Zeiger: Wand und Abstand (auf Raster).
@@ -1870,6 +1871,23 @@ class _FloorplanPageState extends State<FloorplanPage> {
         zahl('Höhe (Rohbau)', 'hoehe_mm', o.hoehe),
         zahl('Brüstung', 'bruestung_mm', o.bruestung),
         zahl('Abstand vom Wandanfang', 'abstand_mm', o.abstand, max: wandLaenge - o.breite),
+        if (o.art == OeffnungsArt.nische) ...[
+          SpeicherFeld(
+            key: ValueKey('nt-${o.id}-${o.eigenschaften['tiefe']}'),
+            initialValue: '${o.eigenschaften['tiefe'] ?? 100}',
+            decoration: const InputDecoration(labelText: 'Tiefe der Nische', suffixText: 'mm'),
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onFieldSubmitted: (t) => aendern({'eigenschaften': jsonEncode({...o.eigenschaften, 'tiefe': int.tryParse(t) ?? 100})}),
+          ),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: () => aendern({'aufgehen_links': o.aufgehenLinks ? 0 : 1}),
+            icon: const Icon(Icons.swap_vert, size: 18),
+            label: const Text('Wandseite wechseln'),
+          ),
+          const Text('Nischen in Dusch- und Wannenbereichen zählen in der Abdichtung mit (Laibungen).',
+              style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+        ],
         if (o.art == OeffnungsArt.tuer || o.art == OeffnungsArt.balkontuer)
           Wrap(spacing: 8, runSpacing: 6, children: [
             OutlinedButton.icon(
@@ -1883,7 +1901,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
               label: const Text('Aufschlagseite wechseln'),
             ),
           ]),
-        if (o.art != OeffnungsArt.durchbruch) ...[
+        if (o.art != OeffnungsArt.durchbruch && o.art != OeffnungsArt.nische) ...[
           const Divider(height: 24),
           BauelementWahl(
             state: _s,
@@ -4061,6 +4079,52 @@ class _FloorplanPageState extends State<FloorplanPage> {
             _s.geaendert();
           },
         ),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            flex: 3,
+            child: DropdownButtonFormField<WandArt>(
+              key: ValueKey('wart-${w.id}-${w.art.name}'),
+              isExpanded: true,
+              initialValue: w.art,
+              decoration: const InputDecoration(labelText: 'Höhe / Art'),
+              items: [for (final a in WandArt.values) DropdownMenuItem(value: a, child: Text(a.label, overflow: TextOverflow.ellipsis))],
+              onChanged: (a) {
+                if (a == null) return;
+                final alt = {'art': w.eigenschaften['art'], 'hoehe': w.eigenschaften['hoehe']};
+                store.wandEigenschaftenSetzen(w.id, a == WandArt.raumhoch ? {'art': null, 'hoehe': null} : {'art': a.name, 'hoehe': w.hoehe ?? a.standardHoehe});
+                _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, alt));
+                _s.geaendert();
+              },
+            ),
+          ),
+          if (w.teilhoch) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: SpeicherFeld(
+                key: ValueKey('whoehe-${w.id}-${w.hoehe}'),
+                initialValue: '${w.hoehe ?? w.art.standardHoehe}',
+                decoration: const InputDecoration(labelText: 'Höhe', suffixText: 'mm'),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onFieldSubmitted: (t) {
+                  final h = int.tryParse(t);
+                  if (h == null || h <= 0) return;
+                  final alt = w.eigenschaften['hoehe'];
+                  store.wandEigenschaftenSetzen(w.id, {'hoehe': h});
+                  _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'hoehe': alt}));
+                  _s.geaendert();
+                },
+              ),
+            ),
+          ],
+        ]),
+        if (w.teilhoch)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Teilhohe Wand: bildet keine Raumgrenze, im Plan heller mit Höhe gezeichnet.',
+                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          ),
         const SizedBox(height: 12),
         Text('von (${mmText(w.x1)} | ${mmText(w.y1)})  nach (${mmText(w.x2)} | ${mmText(w.y2)})',
             style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),

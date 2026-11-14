@@ -19,6 +19,7 @@ import '../project_tree.dart';
 import '../tastenkuerzel.dart';
 import '../widgets.dart';
 import 'foto_markieren_page.dart';
+import 'foto_zuordnen_dialog.dart';
 
 /// Modul Fotos: Fotos importieren, im Grundriss mit Blickrichtung verorten
 /// und Objekten zuordnen (z. B. Leerrohre vor dem Estrich).
@@ -289,6 +290,16 @@ class _FotosPageState extends State<FotosPage> {
                 onPressed: _einpassen,
                 icon: const Icon(Sym.allesZeigen, size: 18),
                 label: const Text('Alles zeigen'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _s.geschossId == null
+                    ? null
+                    : () async {
+                        await fotosZuordnenDialog(context, _s);
+                        if (mounted) setState(() {});
+                      },
+                icon: const Icon(Icons.auto_fix_high, size: 18),
+                label: const Text('Zuordnen …'),
               ),
               Text(
                 '${_fotos.length} Fotos im Geschoss · ${_fotos.where((e) => !e.verortet).length} noch nicht verortet',

@@ -399,4 +399,6 @@ const List<List<String>> migrationen = [
   [],
   // Version 21 – Kabelkanal (Elektro, Netzwerk) und Montageschiene (Allgemein) (Startbestand in _migrieren)
   [],
+  // Version 22 – Eigenschaften für Wände (teilhohe Wände: Höhe, Art) und Badobjekte (Dusche, Wanne, WC, Waschtisch; Startbestand in _migrieren)
+  ["ALTER TABLE wand ADD COLUMN eigenschaften TEXT NOT NULL DEFAULT '{}'"],
 ];

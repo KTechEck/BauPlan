@@ -55,7 +55,7 @@ class Geschoss3d extends StatelessWidget {
         z: 0,
         b: l + w.dicke,
         t: w.dicke.toDouble(),
-        h: hoehe,
+        h: w.hoehe?.toDouble() ?? hoehe,
         drehung: (math.atan2(dy, dx) * 180 / math.pi).round(),
       ));
     }

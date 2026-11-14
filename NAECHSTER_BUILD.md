@@ -549,3 +549,20 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   `leitung_gekauft`), CSV und HTML-Abhakliste nach exporte/, auch in der Einkaufsliste der iPhone-App (Eingang einkauf mit `leitung`).
   Erreichbar über Verteiler › Stromkreise und Bibliothek (Kabel-Symbol).
 - Test test/auslegung_test.dart; 253 Tests grün.
+
+## Build 22 (14.11.) – Roadmap 1 (KI lokal) + 2 (Bad, teilhohe Wände)
+- Migration 22: wand.eigenschaften (hoehe, art = WandArt raumtrenner/schamwand/vorwand/bruestung), Badtypen DU/WA (Fläche), WC/WT/UR (Punkt) im Gewerk
+  Sanitär (seed.dart badTypen). Teilhohe Wände bilden keine Raumgrenze (flaechenErkennen filtert, waendeZusammenfuehren trennt), werden heller mit
+  gestrichelter Achse und „h = …“ gezeichnet, 3D nutzt die Höhe. Grundriss-Wandpanel: „Höhe / Art“ + Höhe. store.wandEigenschaftenSetzen.
+- OeffnungsArt.nische (eine Wandseite, Seite über aufgehen_links, eigenschaften.tiefe), nicht in Heizlast.
+- Bad: lib/core/bad.dart (istNassraum am Namen, lösbar über raum.eigenschaften.nassraum; abdichtungBerechnen nach DIN 18534: W1-I/W0-I, Zonen an
+  Dusche/Wanne +20 cm, 2 m hoch bzw. 0,8 m bei Wanne ohne Brause, Sockelstreifen, Nischenlaibungen, Dichtband, Ecken, Manschetten, kg Flüssigabdichtung;
+  badAbstaende DIN 18022). Dialog lib/ui/installation/bad_dialog.dart (Installation › Werkzeug „Bad“, auch „Abdichtung im Raum …“ an Dusche/Wanne).
+  Objektfelder bodengleich/brause/abdichtung_hoehe; WC/WT ohne Produkt mit üblichen Maßen gezeichnet.
+- KI lokal: Diktat (lib/core/diktat.dart: Windows-Spracherkennung System.Speech per PowerShell, Phrasen live, nur Text; diktatAufbereiten, diktatAuswerten
+  → Aufgaben/Mängel/Messwerte, kiDiktatAnfrage), lib/ui/diktat_dialog.dart (DiktatKnopf, Tagebuch › „Diktat“ mit Bestätigung). iPhone: Kachel „Diktat“
+  (Tastatur-Diktat) → Eingang notiz+diktat → PC legt Tagebuch + Aufgaben „bitte prüfen“ an.
+  Typenschild: lib/core/typenschild.dart (Regeln + KI-JSON), lib/ui/installation/typenschild_dialog.dart (Objektfoto oder Datei, Windows-OCR, „Mit KI lesen“),
+  speichert eigenschaften.typenschild (+ leistung_w). Fotos zuordnen: lib/core/foto_zuordnung.dart (Zeitnachbarn ±10 min, KI-Vorschlag),
+  lib/ui/fotos/foto_zuordnen_dialog.dart (Fotos › „Zuordnen …“, nur Angehaktes).
+- Tests test/build22_test.dart + Widget-Test Bad-Dialog; 259 Tests grün. Tims PC hat die deutsche Spracherkennung (de-DE) installiert.

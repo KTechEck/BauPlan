@@ -38,7 +38,10 @@ import '../sensoren_page.dart' show sensorVorlagen;
 import '../verteiler/verteiler_editor.dart';
 import '../tastenkuerzel.dart';
 import '../bauteile/bauelement_wahl.dart';
+import 'bad_dialog.dart';
+import 'typenschild_dialog.dart';
 import 'heizkreise_dialog.dart';
+import '../../core/bad.dart' show badObjektMasse;
 import '../floorplan/geschoss_3d.dart';
 import '../symbole_plan.dart';
 import '../widgets.dart';
@@ -1066,6 +1069,12 @@ class _InstallationPageState extends State<InstallationPage> {
                 _entwurf.clear();
               })),
         ]),
+        WerkzeugKnopf(
+            symbol: Icons.bathtub_outlined,
+            text: 'Bad',
+            tooltip: 'Bad und Abdichtung: Nassräume, Abdichtungsflächen (DIN 18534), Dichtband, Manschetten, Abstände',
+            aktiv: false,
+            onTap: () => badDialogZeigen(context, _s)),
         WerkzeugKnopf(
             symbol: Icons.sensors,
             text: 'Live',
@@ -2324,6 +2333,57 @@ class _InstallationPageState extends State<InstallationPage> {
     ];
   }
 
+  /// Dusche/Wanne: bodengleich, Brause, Abdichtungshöhe; WC/Waschtisch: Maße.
+  List<Widget> _badFelder(Objekt o, _Daten d, void Function(Map<String, Object?>) aendern) {
+    final k = d.typen[o.typId]?.kuerzel;
+    if (k != 'DU' && k != 'WA' && !badObjektMasse.containsKey(k)) return const [];
+    void setzen(Map<String, Object?> w) {
+      final neu = {...o.eigenschaften, ...w}..removeWhere((k, v) => v == null);
+      aendern({'eigenschaften': jsonEncode(neu)});
+    }
+
+    return [
+      const SizedBox(height: 10),
+      Text('Bad', style: Theme.of(context).textTheme.titleSmall),
+      if (k == 'DU')
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('bodengleich (Ablauf/Rinne im Boden)'),
+          value: o.eigenschaften['bodengleich'] != false,
+          onChanged: (v) => setzen({'bodengleich': v}),
+        ),
+      if (k == 'WA')
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('mit Brause (Wand bis 2 m abdichten)'),
+          value: o.eigenschaften['brause'] != false,
+          onChanged: (v) => setzen({'brause': v}),
+        ),
+      if (k == 'DU' || k == 'WA')
+        SpeicherFeld(
+          key: ValueKey('abdh-${o.id}-${o.eigenschaften['abdichtung_hoehe']}'),
+          initialValue: '${o.eigenschaften['abdichtung_hoehe'] ?? 2000}',
+          decoration: const InputDecoration(labelText: 'Abdichtungshöhe an der Wand', suffixText: 'mm'),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onFieldSubmitted: (t) => setzen({'abdichtung_hoehe': int.tryParse(t)}),
+        ),
+      if (badObjektMasse.containsKey(k))
+        Text('Grundfläche ${badObjektMasse[k]!.$1} × ${badObjektMasse[k]!.$2} mm (oder aus dem Produkt der Bibliothek), '
+            'Bewegungsfläche davor beachten.',
+            style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () => badDialogZeigen(context, _s, raumId: o.raumId),
+          icon: const Icon(Icons.water_drop_outlined, size: 18),
+          label: const Text('Abdichtung im Raum …'),
+        ),
+      ),
+    ];
+  }
+
   /// Grundfläche der Geräte aus ihrem Produkt (Breite × Tiefe bzw. Baulänge × Bautiefe).
   Map<String, (double, double)> _abmasse(_Daten d) {
     final store = _s.store!;
@@ -2331,7 +2391,12 @@ class _InstallationPageState extends State<InstallationPage> {
     for (final o in d.objekte) {
       if (o.punkte.length != 1) continue;
       final be = _s.bibliothek.fuerProjekt(store, o.eigenschaften['bauelement'] as String?);
-      if (be == null) continue;
+      if (be == null) {
+        // Badobjekte ohne Produkt: übliche Maße
+        final std = badObjektMasse[d.typen[o.typId]?.kuerzel];
+        if (std != null) m[o.id] = (std.$1.toDouble(), std.$2.toDouble());
+        continue;
+      }
       final b = be.zahl('breite') ?? be.zahl('baulaenge');
       final t = be.zahl('tiefe') ?? be.zahl('bautiefe');
       if (b != null && t != null && b > 0 && t > 0) m[o.id] = (b.toDouble(), t.toDouble());
@@ -2684,6 +2749,26 @@ class _InstallationPageState extends State<InstallationPage> {
       ),
       ..._geschossuebergreifend(o, d, aendern),
       ..._revisionFelder(o, d, aendern),
+      ..._badFelder(o, d, aendern),
+      if (d.typen[o.typId]?.geometrie == Geometrieart.punkt) ...[
+        const SizedBox(height: 8),
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: () => typenschildDialog(context, _s, o),
+            icon: const Icon(Icons.qr_code_2, size: 18),
+            label: Text(o.eigenschaften['typenschild'] is Map ? 'Typenschild ändern …' : 'Typenschild lesen …'),
+          ),
+          const SizedBox(width: 8),
+          if (o.eigenschaften['typenschild'] is Map)
+            Expanded(
+              child: Text(
+                [for (final k in const ['hersteller', 'typ', 'seriennummer']) if ((o.eigenschaften['typenschild'] as Map)[k] != null) '${(o.eigenschaften['typenschild'] as Map)[k]}'].join(' · '),
+                style: const TextStyle(fontSize: 12, color: BsFarben.textLeise),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ]),
+      ],
       const SizedBox(height: 12),
       DropdownButtonFormField<ObjektStatus>(
         key: ValueKey('status-${o.id}-${o.status.name}'),

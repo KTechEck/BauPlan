@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../diktat_dialog.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -101,6 +102,15 @@ class _TagebuchPageState extends State<TagebuchPage> {
                 ),
                 IconButton(tooltip: 'Rückgängig (Strg+Z)', onPressed: _rueckgaengig.isEmpty ? null : _rueck, icon: const Icon(Sym.rueckgaengig)),
                 if (_ansicht == 0) FilledButton.icon(onPressed: () => _eintragDialog(), icon: const Icon(Sym.hinzufuegen), label: const Text('Eintrag')),
+                if (_ansicht == 0 || _ansicht == 1)
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await diktatInsTagebuch(context, widget.state);
+                      if (mounted) setState(() {});
+                    },
+                    icon: const Icon(Icons.mic_none, size: 18),
+                    label: const Text('Diktat'),
+                  ),
                 if (_ansicht == 1) ...[
                   FilledButton.icon(onPressed: () => _aufgabeDialog(), icon: const Icon(Sym.hinzufuegen), label: const Text('Aufgabe')),
                   FilterChip(label: const Text('erledigte zeigen'), selected: _erledigteZeigen, onSelected: (v) => setState(() => _erledigteZeigen = v)),
@@ -158,7 +168,10 @@ class _TagebuchPageState extends State<TagebuchPage> {
                     child: const Text('Datum ändern'),
                   ),
                 ]),
-                TextField(controller: text, maxLines: 5, decoration: const InputDecoration(labelText: 'Was wurde gemacht?')),
+                TextField(
+                    controller: text,
+                    maxLines: 5,
+                    decoration: InputDecoration(labelText: 'Was wurde gemacht?', suffixIcon: DiktatKnopf(state: widget.state, controller: text))),
                 Row(children: [
                   Expanded(child: TextField(controller: stunden, decoration: const InputDecoration(labelText: 'Stunden', suffixText: 'h'))),
                   const SizedBox(width: 12),

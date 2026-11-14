@@ -7,6 +7,7 @@ import '../core/abgleich_projekt.dart';
 import '../core/auswertung.dart';
 import '../core/aufmass.dart';
 import '../core/brandschutz.dart';
+import '../core/diktat.dart';
 import '../core/geschossuebergreifend.dart';
 import '../core/leitung_wand.dart';
 import '../core/height.dart';
@@ -390,6 +391,21 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
           final liste = [...(o.eigenschaften['erfassungen'] as List? ?? const []), {'art': art, 'text': text, 'wert': e['wert'], 'einheit': e['einheit'], 'zeit': zeit.toIso8601String(), 'autor': autor}];
           store.objektAendern(objektId, {'eigenschaften': jsonEncode({...o.eigenschaften, 'erfassungen': liste})});
         }
+      }
+      if (e['diktat'] == true) {
+        // Diktat aus der App: Text aufbereiten, erkannte Aufgaben/Mängel als Aufgaben (löschbar, „bitte prüfen“)
+        final teile = diktatAuswerten(diktatAufbereiten(text));
+        store.tagebuchAnlegen(datum: zeit, text: 'Diktat: ${teile.notiz} – $autor (App)', raeume: [if (raumId != null) raumId]);
+        for (final a in teile.aufgaben) {
+          store.aufgabeAnlegen(titel: a, beschreibung: 'aus Diktat (App, $autor) – bitte prüfen', raumId: raumId);
+        }
+        for (final m in teile.maengel) {
+          store.aufgabeAnlegen(titel: 'Mangel: $m', beschreibung: 'aus Diktat (App, $autor) – bitte prüfen', raumId: raumId);
+        }
+        if (teile.aufgaben.isNotEmpty || teile.maengel.isNotEmpty) {
+          hinweise.add('Diktat ($autor): ${teile.aufgaben.length + teile.maengel.length} Aufgabe(n) erkannt – bitte prüfen');
+        }
+        break;
       }
       store.tagebuchAnlegen(datum: zeit, text: '$titel$wert${text.isEmpty ? '' : ': $text'} – $autor (App)', raeume: [if (raumId != null) raumId]);
     case 'einkauf':

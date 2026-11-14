@@ -125,6 +125,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
         children: [
           _kachel(Icons.photo_camera_outlined, 'Foto', _fotoErfassen),
           _kachel(Icons.edit_note, 'Notiz', () => _formular('notiz')),
+          _kachel(Icons.mic_none, 'Diktat', () => _formular('diktat')),
           _kachel(Icons.speed, 'Messwert', () => _formular('messwert')),
           _kachel(Icons.inventory_2_outlined, 'Material', () => _formular('material')),
           _kachel(Icons.task_alt, 'Status', _statusErfassen),
@@ -192,7 +193,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
     if (_geschoss == null) return;
     final ergebnis = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(
       builder: (_) => ZuordnenSeite(
-        titel: switch (art) { 'messwert' => 'Messwert', 'material' => 'Material', _ => 'Notiz' },
+        titel: switch (art) { 'messwert' => 'Messwert', 'material' => 'Material', 'diktat' => 'Diktat', _ => 'Notiz' },
         k: k,
         geschoss: _geschoss!,
         objekte: _objekteImRaum(),
@@ -201,7 +202,8 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
     ));
     if (ergebnis == null) return;
     final foto = ergebnis.remove('_foto') as List<int>?;
-    await k.erfasst({..._basis(), 'art': art, ...ergebnis}, foto: foto);
+    // Diktat = Notiz mit Kennzeichen; der PC erkennt Aufgaben und Mängel darin
+    await k.erfasst({..._basis(), 'art': art == 'diktat' ? 'notiz' : art, if (art == 'diktat') 'diktat': true, ...ergebnis}, foto: foto);
   }
 
   /// Kassenbon/Rechnung fotografieren: geht an den PC, dort werden die
@@ -320,7 +322,7 @@ class _ZuordnenSeiteState extends State<ZuordnenSeite> {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bitte einen Wert eingeben.')));
               return;
             }
-            if (widget.art == 'notiz' && _text.text.trim().isEmpty) {
+            if ((widget.art == 'notiz' || widget.art == 'diktat') && _text.text.trim().isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bitte eine Notiz eingeben.')));
               return;
             }
@@ -375,7 +377,14 @@ class _ZuordnenSeiteState extends State<ZuordnenSeite> {
           ]),
         ],
         const SizedBox(height: 8),
-        if (widget.art != 'notiz')
+        if (widget.art == 'diktat')
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('Tippe ins Feld und dann aufs Mikrofon der Tastatur. Es wird nur Text gespeichert, kein Ton. '
+                'Sätze mit „Aufgabe …“, „noch …“ oder „Mangel …“ werden am PC als Aufgabe vorgeschlagen.',
+                style: TextStyle(fontSize: 13, color: BsFarben.textLeise)),
+          ),
+        if (widget.art != 'notiz' && widget.art != 'diktat')
           OutlinedButton.icon(
             onPressed: _markieren,
             icon: const Icon(Icons.draw_outlined),
@@ -386,9 +395,9 @@ class _ZuordnenSeiteState extends State<ZuordnenSeite> {
         const SizedBox(height: 12),
         TextField(
           controller: _text,
-          autofocus: widget.art == 'notiz',
-          minLines: 2,
-          maxLines: 6,
+          autofocus: widget.art == 'notiz' || widget.art == 'diktat',
+          minLines: widget.art == 'diktat' ? 8 : 2,
+          maxLines: widget.art == 'diktat' ? 16 : 6,
           decoration: InputDecoration(
             labelText: switch (widget.art) { 'material' => 'Was (z. B. NYM-J 3×1,5)', 'messwert' => 'Was wurde gemessen?', _ => 'Notiz' },
             helperText: 'Diktieren: Mikrofon auf der Tastatur',

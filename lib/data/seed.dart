@@ -45,6 +45,7 @@ const gewerkVorlagen = <GewerkVorlage>[
     ('AW', 'Abwasserleitung', 'linie'),
     ('EN', 'Entnahmestelle / Ablauf', 'punkt'),
     ('SR', 'Steigleitung / Fallrohr (über Geschosse)', 'punkt'),
+    ...badTypen,
   ]),
   GewerkVorlage('HZ', 'Heizungsanlage', 0xFFE03131, 'solid', true, [
     ('VL', 'Vorlauf', 'linie'),
@@ -142,4 +143,13 @@ const wandtypVorlagen = <(String, List<(String, int)>)>[
     ('Mineralwolle', 75),
     ('Gipskarton', 25),
   ]),
+];
+
+/// Badobjekte (Gewerk Sanitär, Migration 22).
+const badTypen = [
+  ('DU', 'Dusche / Duschfläche', 'flaeche'),
+  ('WA', 'Badewanne', 'flaeche'),
+  ('WC', 'WC', 'punkt'),
+  ('WT', 'Waschtisch', 'punkt'),
+  ('UR', 'Urinal / Bidet', 'punkt'),
 ];
