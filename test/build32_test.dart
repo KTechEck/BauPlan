@@ -98,9 +98,11 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pump();
     expect(listenLesen((k) => store.einstellung<Object>(k)).single.positionen.single.abgehakt, isTrue);
-    await tester.enterText(find.widgetWithText(TextField, 'Begriff suchen, z. B. kv, Uw, Spreizung'), 'Uw');
+    await tester.enterText(find.widgetWithText(TextField, 'Begriff nachschlagen, z. B. kv, Uw'), 'Uw');
     await tester.pump();
-    expect(find.textContaining('Uw (Fenster gesamt)'), findsOneWidget);
+    await tester.tap(find.text('Uw (Fenster gesamt)'));
+    await tester.pump();
+    expect(find.textContaining('Was eingeben'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

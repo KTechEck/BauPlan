@@ -717,3 +717,4 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 ## Vorgemerkt für Build 33 (erst nach Tims Test von Build 32)
 - Ideen aus SCC-CAD (Ziemer) übernehmen, soweit passend (Recherche-Zusammenfassung an Tim).
 - iPhone: Steckdosen und alle anderen Installationen aufmessen können; Reiter Aufmessen/Erfassen übersichtlich neu gliedern.
+- Hilfe-Panel zeigt nur noch die Erklärung zum gewählten Feld (auch Auswahllisten), darunter Nachschlagen per Suche – schon im Code (nach Build 32), noch nicht gebaut.
