@@ -720,3 +720,6 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Hilfe-Panel zeigt nur noch die Erklärung zum gewählten Feld (auch Auswahllisten), darunter Nachschlagen per Suche – schon im Code (nach Build 32), noch nicht gebaut.
 - iPad „Projekt holen“: PC packt das Projekt selbst (ZipSchreiber) statt mit Windows-tar – behebt „Packen fehlgeschlagen: tar: null“ (im Code, noch nicht gebaut).
 - Rückmeldung Tim zu B32 (vorgemerkt): 3D-Darstellung von Steckdosen/Installationen verbessern; Suche nach Kabel/Leitung, die im Plan hervorgehoben wird.
+- Aus SCC-CAD für Build 33 (Tims Wahl): automatische Legende im Plan (Symbole + Montagehöhen, je Gewerk/Blatt); Kabelwege über mehrere Geschosse mit
+  Kabelzugliste; Gerätebibliothek nach SCC-Vorbild auf Basis der bestehenden Bibliothek/Inhaltspakete: DIN-Symbole mit Suche, Favoriten, Schnellleiste,
+  echte Produktdaten (Hersteller, Modell, Leistung, Maße), Bereiche Elektro, Sicherheit, Netzwerk, Smart Home.
