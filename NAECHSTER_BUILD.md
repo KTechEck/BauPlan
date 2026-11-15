@@ -718,3 +718,5 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Ideen aus SCC-CAD (Ziemer) übernehmen, soweit passend (Recherche-Zusammenfassung an Tim).
 - iPhone: Steckdosen und alle anderen Installationen aufmessen können; Reiter Aufmessen/Erfassen übersichtlich neu gliedern.
 - Hilfe-Panel zeigt nur noch die Erklärung zum gewählten Feld (auch Auswahllisten), darunter Nachschlagen per Suche – schon im Code (nach Build 32), noch nicht gebaut.
+- iPad „Projekt holen“: PC packt das Projekt selbst (ZipSchreiber) statt mit Windows-tar – behebt „Packen fehlgeschlagen: tar: null“ (im Code, noch nicht gebaut).
+- Rückmeldung Tim zu B32 (vorgemerkt): 3D-Darstellung von Steckdosen/Installationen verbessern; Suche nach Kabel/Leitung, die im Plan hervorgehoben wird.

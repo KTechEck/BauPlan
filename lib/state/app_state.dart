@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../app/version.dart';
 import '../core/bauelemente.dart';
 import '../core/speicher.dart';
+import '../core/zip_schreiben.dart';
 import '../core/ipad_austausch.dart';
 import '../data/app_settings.dart';
 import '../data/austausch.dart';
@@ -129,13 +130,23 @@ class AppState extends ChangeNotifier {
       if (a == null) Ausleihe(geraet: geraet, name: name, seit: DateTime.now(), amPc: true).schreiben(st.ordner);
       if (!st.nurLesen) st.nurLesenSetzen(true);
       notifyListeners();
-      final tmp = Directory.systemTemp.createTempSync('bauspur_ipad_');
-      final datei = p.join(tmp.path, 'projekt.zip');
-      final r = await Process.run('tar', ['-a', '-c', '-f', datei, '--exclude=projekt.lock', '--exclude=backup', '--exclude=austausch', '--exclude=$ausleiheDatei', '-C', st.ordner, '.']);
-      if (r.exitCode != 0) return (500, null, 'Packen fehlgeschlagen: ${r.stderr}');
-      final b = File(datei).readAsBytesSync();
-      tmp.deleteSync(recursive: true);
-      return (200, b, null);
+      // Selbst packen statt Windows-tar: tar scheiterte an gesperrten bzw.
+      // OneDrive-Dateien („tar: null“). Nicht lesbare Nebendateien werden übersprungen.
+      final z = ZipSchreiber();
+      final basis = Directory(st.ordner);
+      final fehlt = <String>[];
+      for (final f in basis.listSync(recursive: true, followLinks: false).whereType<File>()) {
+        final rel = p.relative(f.path, from: st.ordner).replaceAll(r'\', '/');
+        if (rel == 'projekt.lock' || rel == ausleiheDatei || rel.startsWith('backup/') || rel.startsWith('austausch/') || rel.endsWith('.tmp')) continue;
+        try {
+          z.hinzu(rel, f.readAsBytesSync());
+        } catch (e) {
+          if (rel == 'projekt.db') return (500, null, 'Projektdatei lässt sich nicht lesen: $e');
+          fehlt.add(rel);
+        }
+      }
+      if (fehlt.isNotEmpty) debugPrint('Ausleihe: übersprungen ${fehlt.join(', ')}');
+      return (200, z.fertig(), null);
     } catch (e) {
       return (500, null, '$e');
     }
