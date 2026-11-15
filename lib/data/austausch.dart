@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../core/einkaufslisten.dart';
+
 import '../core/abgleich_projekt.dart';
 import '../core/auswertung.dart';
 import '../core/aufmass.dart';
@@ -287,6 +289,30 @@ List<Map<String, dynamic>> _einkaufFuerApp(ProjectStore store, Map<String, Strin
   try {
     einkauf.addAll(zusatzEinkauf?.call(store) ?? const []);
   } catch (_) {}
+  // Benannte Einkäufe: Listenname an die Zeile, Positionen von Hand dazu
+  final listen = listenLesen((k) => store.einstellung<Object>(k));
+  final zu = zuordnung(listen);
+  for (final e in einkauf) {
+    final n = zu[schluesselAusAppId('${e['id']}')];
+    if (n != null) e['liste'] = n;
+  }
+  for (final l in listen) {
+    if (l.erledigt) continue;
+    for (final x in l.positionen) {
+      if (!x.manuell) continue;
+      einkauf.add({
+        'id': appIdAusSchluessel(x.schluessel),
+        'quelle': 'manuell',
+        'text': x.text,
+        'menge': x.menge,
+        'einheit': x.einheit,
+        'haendler': x.haendler.isEmpty ? 'ohne Händler' : x.haendler,
+        'status': x.abgehakt ? 'geliefert' : 'geplant',
+        'herkunft': 'von Hand',
+        'liste': l.name,
+      });
+    }
+  }
   return einkauf;
 }
 
@@ -360,8 +386,16 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
     anhang.copySync(p.join(ziel.path, name));
     store.einstellungSetzen('belege_offen', [
       ...(store.einstellung<List>('belege_offen') ?? const []),
-      {'datei': 'belege/$name', 'zeit': zeit.toIso8601String(), 'autor': autor, 'text': text},
+      {'datei': 'belege/$name', 'zeit': zeit.toIso8601String(), 'autor': autor, 'text': text, if (e['liste'] != null) 'liste': e['liste']},
     ]);
+    // Kassenbon zu einem benannten Einkauf: dort vermerken
+    if (e['liste'] != null) {
+      final listen = listenLesen((k) => store.einstellung<Object>(k));
+      for (final l in listen) {
+        if (l.name == e['liste'] && !l.erledigt) l.beleg = 'belege/$name';
+      }
+      listenSchreiben((k, v) => store.einstellungSetzen(k, v), listen);
+    }
     hinweise.add('Kassenbon von $autor – am PC unter Einkauf erfassen auslesen');
     return;
   }
@@ -412,7 +446,15 @@ void _eintragUebernehmen(ProjectStore store, Map<String, dynamic> e, File? anhan
       final id = e['position'] as String?;
       final element = e['element'] as String?;
       final leitung = e['leitung'] as String?;
-      if (leitung != null) {
+      // In benannten Einkäufen mit abhaken
+      final schluessel = leitung != null ? 'l:$leitung' : (element != null ? 'e:$element' : (id == null ? null : schluesselAusAppId(id)));
+      if (schluessel != null) {
+        final listen = listenLesen((k) => store.einstellung<Object>(k));
+        if (listenAbhaken(listen, schluessel, e['erledigt'] != false)) listenSchreiben((k, v) => store.einstellungSetzen(k, v), listen);
+      }
+      if (id != null && id.startsWith('m-')) {
+        hinweise.add('${e['text'] ?? 'Artikel'} ${e['erledigt'] == false ? 'wieder offen' : 'gekauft'} ($autor)');
+      } else if (leitung != null) {
         // Kabel-/Rohrliste: abgehakt = gekauft (Meter merken)
         final m = Map<String, dynamic>.from(store.einstellung<Map>('leitung_gekauft') ?? const {});
         if (e['erledigt'] == false) {

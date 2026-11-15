@@ -37,7 +37,7 @@ class _ObjekteSeiteState extends State<ObjekteSeite> {
           o
     ]..sort((a, b) => '${a['kennung']}'.compareTo('${b['kennung']}'));
     return Scaffold(
-      appBar: AppBar(title: Text('Objekte ${g?['kuerzel'] ?? ''}')),
+      appBar: AppBar(title: Text('Objekte ${g?['name'] ?? g?['kuerzel'] ?? ''}')),
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),

@@ -131,9 +131,12 @@ class Kamera {
 
   /// Projektion in Bildschirmkoordinaten (Mitte = 0,0) und Tiefe.
   (double, double, double) projizieren(V3 p) {
+    // Grundriss-y zeigt nach unten: für die Ansicht spiegeln, sonst wäre
+    // das Bild seitenverkehrt.
     final d = p - ziel;
+    final dy = -d.y;
     final ca = math.cos(azimut), sa = math.sin(azimut);
-    final x1 = d.x * ca - d.y * sa, y1 = d.x * sa + d.y * ca;
+    final x1 = d.x * ca - dy * sa, y1 = d.x * sa + dy * ca;
     final cn = math.cos(neigung), sn = math.sin(neigung);
     final y2 = y1 * cn - d.z * sn, z2 = y1 * sn + d.z * cn;
     final tiefe = abstand + y2;

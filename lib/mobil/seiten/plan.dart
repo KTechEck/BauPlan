@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/raumerkennung.dart' as re;
 import '../kontext.dart';
 import '../planstand.dart';
 import 'aufmass.dart';
@@ -42,7 +43,7 @@ class _PlanSeiteState extends State<PlanSeite> {
             Padding(
               padding: const EdgeInsets.only(right: 6),
               child: ChoiceChip(
-                label: Text('${x['kuerzel']}'),
+                label: Text('${x['name'] ?? x['kuerzel']}'),
                 selected: x['id'] == g['id'],
                 onSelected: (_) => setState(() {
                   k.einstellungen.geschoss = x['id'] as String;
@@ -628,24 +629,44 @@ class _PlanPainter extends CustomPainter {
   final Object? nurRaum;
   final String? hervor;
 
-  void _text(Canvas canvas, String t, Offset p, {double groesse = 10, Color farbe = BsFarben.textLeise, double winkel = 0, bool fett = false, Color? grund}) {
+  /// Schon belegte Textflächen (Zeichenfläche), damit nichts übereinander steht.
+  final List<Rect> _belegt = [];
+
+  /// Text zeichnen. Mit [platz] (Bildschirm-px der Strecke) entfällt er, wenn
+  /// er nicht hineinpasst; mit [frei] entfällt er, wenn er einen anderen Text
+  /// überdeckt. Liefert, ob er gezeichnet wurde.
+  bool _text(Canvas canvas, String t, Offset p,
+      {double groesse = 10, Color farbe = BsFarben.textLeise, double winkel = 0, bool fett = false, Color? grund, double? platz, bool frei = false}) {
     final tp = TextPainter(
       text: TextSpan(text: t, style: TextStyle(fontFamily: 'Roboto', fontSize: groesse * schrift / zoom, color: farbe, fontWeight: fett ? FontWeight.w700 : FontWeight.w400, backgroundColor: grund)),
       textDirection: TextDirection.ltr,
     )..layout();
-    canvas.save();
-    canvas.translate(p.dx, p.dy);
+    if (platz != null && tp.width * zoom * dichte + 8 > platz) return false;
     var w = winkel;
     if (w > math.pi / 2) w -= math.pi;
     if (w < -math.pi / 2) w += math.pi;
+    if (frei) {
+      final c = math.cos(w).abs(), sn = math.sin(w).abs();
+      final r = Rect.fromCenter(center: p, width: tp.width * c + tp.height * sn, height: tp.width * sn + tp.height * c);
+      final eng = r.deflate(1 / zoom);
+      if (_belegt.any((b) => b.overlaps(eng))) return false;
+      _belegt.add(r);
+    }
+    canvas.save();
+    canvas.translate(p.dx, p.dy);
     canvas.rotate(w);
     tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
     canvas.restore();
+    return true;
   }
+
+  /// Ab diesem Zoom (Pixel je Meter) erscheinen Wandmaße.
+  bool get _masseSichtbar => m * zoom * 1000 >= 22 * dichte;
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    _belegt.clear();
     for (final r in Planstand.liste(g['raeume'])) {
       final u = punkte(r['umriss']);
       if (u.length < 3) continue;
@@ -656,19 +677,19 @@ class _PlanPainter extends CustomPainter {
           _text(canvas, String.fromCharCode(65 + i), zuBild(u[i]), groesse: 11, farbe: BsFarben.akzent, fett: true, grund: Colors.white);
         }
       }
-      var cx = 0.0, cy = 0.0;
-      for (final q in u) {
-        cx += q.dx;
-        cy += q.dy;
-      }
-      final mitte = zuBild(Offset(cx / u.length, cy / u.length));
-      _text(canvas, '${r['name']}', mitte - const Offset(0, 7), groesse: 11, farbe: const Color(0xFF343A40), fett: true);
+      final ip = re.punktImInneren([for (final q in u) re.Punkt(q.dx, q.dy)]);
+      final mitte = zuBild(Offset(ip.x, ip.y));
       final breite = (u.map((q) => q.dx).reduce(math.max) - u.map((q) => q.dx).reduce(math.min)) * m * zoom;
+      final zeile = 7 * schrift / zoom;
+      if (!_text(canvas, '${r['name']}', mitte - Offset(0, zeile), groesse: 11, farbe: const Color(0xFF343A40), fett: true, platz: breite * 1.15, frei: true) &&
+          !_text(canvas, '${r['kuerzel'] ?? r['name']}', mitte, groesse: 10, farbe: const Color(0xFF343A40), fett: true, platz: breite * 1.15, frei: true)) {
+        continue;
+      }
       if (masse && r['flaeche'] != null && breite > 80 * dichte * schrift) {
         final kk = k;
         final hm = kk == null ? null : massAnzeige(kk, r, 'hoehe', raumHoehe(g, r['id'] as String?));
-        _text(canvas, '${((r['flaeche'] as num) / 1e6).toStringAsFixed(2).replaceAll('.', ',')} m²${hm == null ? '' : ' · h ${hm.text}'}', mitte + const Offset(0, 7),
-            groesse: 9, farbe: hm?.farbe ?? BsFarben.textLeise);
+        _text(canvas, '${((r['flaeche'] as num) / 1e6).toStringAsFixed(2).replaceAll('.', ',')} m²${hm == null ? '' : ' · h ${hm.text}'}', mitte + Offset(0, zeile),
+            groesse: 9, farbe: hm?.farbe ?? BsFarben.textLeise, platz: breite, frei: true);
       }
     }
     final oeffnungen = Planstand.liste(g['oeffnungen']);
@@ -694,7 +715,7 @@ class _PlanPainter extends CustomPainter {
           ..color = o['art'] == 'fenster' ? const Color(0xFFA5D8FF) : Colors.white
           ..strokeWidth = math.max(1.5, ((w['d'] as num?)?.toDouble() ?? 175) * m - 1));
       }
-      if (!masse || !hier) continue;
+      if (!masse || !hier || (!_masseSichtbar && nurRaum == null)) continue;
       // Maße beider Wandseiten
       final nl = Offset(u.dy, -u.dx);
       final winkel = math.atan2(u.dy, u.dx);
@@ -720,7 +741,7 @@ class _PlanPainter extends CustomPainter {
             final rs = (wand: w, links: links, t1: t1, t2: t2, voll: false);
             final anz = kk == null ? (text: mmCm(t2 - t1), farbe: massGrob) : raumSeiteAnzeige(kk, rs, '${x[0]}');
             final p = zuBild(sw.a + sw.u * ((t1 + t2) / 2) + nl * ((links ? 1 : -1) * (d / 2 + 9 * schrift / (m * zoom))));
-            _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF));
+            _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF), platz: (t2 - t1) * m * zoom, frei: true);
           }
           continue;
         }
@@ -732,7 +753,7 @@ class _PlanPainter extends CustomPainter {
             : massAnzeige(kk, w, 'laenge', plan, seite: links ? 'l' : 'r', bezug: 'innen', abzug: kk.einstellungen.massart == 'fertig' ? seitenAbzugVoll(w, links) : 0);
         final s = links ? 1.0 : -1.0;
         final p = zuBild((a + b) / 2 + nl * (s * (d / 2 + 9 * schrift / (m * zoom))));
-        _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF));
+        _text(canvas, anz.text, p, groesse: 9, farbe: anz.farbe, winkel: winkel, fett: anz.farbe != massGrob, grund: const Color(0xCCFFFFFF), platz: plan * m * zoom, frei: true);
       }
     }
     // eigene Bemaßungen
@@ -751,7 +772,7 @@ class _PlanPainter extends CustomPainter {
         canvas.drawLine(zuBild(e), zuBild(e + n), stift);
         final kk = k;
         final anz = kk == null ? (text: mmCm(bm['l'] as num), farbe: const Color(0xFF1C7ED6)) : massAnzeige(kk, bm, 'laenge', bm['l'] as num);
-        _text(canvas, anz.text, zuBild((a + e) / 2 + n), groesse: 9, farbe: anz.farbe == massGrob ? const Color(0xFF1C7ED6) : anz.farbe, winkel: math.atan2(d.dy, d.dx), grund: Colors.white);
+        _text(canvas, anz.text, zuBild((a + e) / 2 + n), groesse: 9, farbe: anz.farbe == massGrob ? const Color(0xFF1C7ED6) : anz.farbe, winkel: math.atan2(d.dy, d.dx), grund: Colors.white, frei: true);
       }
     }
     final kk = k;

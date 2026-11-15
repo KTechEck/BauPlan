@@ -30,6 +30,7 @@ enum Modul {
   assistent('KI-Assistent'),
   fotos('Fotos'),
   kosten('Kosten'),
+  einkauf('Einkauf'),
   tagebuch('Tagebuch'),
   export('Export'),
   einstellungen('Einstellungen');

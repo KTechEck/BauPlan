@@ -48,6 +48,7 @@ class _Raum3dAnsichtState extends State<Raum3dAnsicht> {
   late Kamera _k;
   Offset? _letzte;
   bool _verschieben = false;
+  double _pz = 1;
 
   @override
   void initState() {
@@ -67,6 +68,13 @@ class _Raum3dAnsichtState extends State<Raum3dAnsicht> {
           onPointerSignal: (e) {
             if (e is PointerScrollEvent) setState(() => _k = _k.mit(abstand: _k.abstand * (e.scrollDelta.dy > 0 ? 1.12 : 1 / 1.12)));
           },
+          onPointerPanZoomStart: (_) => _pz = 1,
+          onPointerPanZoomUpdate: (e) {
+            if (e.scale > 0 && (e.scale - _pz).abs() > 0.001) {
+              setState(() => _k = _k.mit(abstand: _k.abstand * _pz / e.scale));
+              _pz = e.scale;
+            }
+          },
           onPointerDown: (e) {
             _letzte = e.localPosition;
             _verschieben = e.buttons == kSecondaryMouseButton || e.buttons == kMiddleMouseButton;
@@ -81,7 +89,7 @@ class _Raum3dAnsichtState extends State<Raum3dAnsicht> {
                 final f = _k.abstand / _k.brennweite;
                 final ca = math.cos(_k.azimut), sa = math.sin(_k.azimut);
                 final dx = -d.dx * f, dy = d.dy * f;
-                _k = _k.mit(ziel: _k.ziel + V3(dx * ca + dy * sa, -dx * sa + dy * ca, 0));
+                _k = _k.mit(ziel: _k.ziel + V3(dx * ca + dy * sa, dx * sa - dy * ca, 0));
               } else {
                 _k = _k.mit(azimut: _k.azimut + d.dx * 0.008, neigung: _k.neigung + d.dy * 0.006);
               }

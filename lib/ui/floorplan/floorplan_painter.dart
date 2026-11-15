@@ -76,7 +76,33 @@ class FloorplanPainter extends CustomPainter {
     this.bezugPunkt,
     this.massDichte = 1,
     this.massSchrift = 1,
+    this.raster = true,
+    this.massAbPxJeM = 25,
+    this.beideAbPxJeM = 70,
   });
+
+  /// Raster zeigen (Option „Raster ausblenden“).
+  final bool raster;
+
+  /// Zoomschwellen in Pixel je Meter: darunter keine Wandmaße; unter
+  /// [beideAbPxJeM] nur ein Maß je Wand (innen) statt innen und außen.
+  final double massAbPxJeM, beideAbPxJeM;
+  bool get _masseSichtbar => massstab * 1000 >= massAbPxJeM;
+  bool get _beideSeiten => massstab * 1000 >= beideAbPxJeM;
+
+  /// Schon belegte Textflächen (Bildschirm) – damit sich Maße und Raumnamen
+  /// nicht überdecken. Je Zeichnen neu.
+  final List<Rect> _belegt = [];
+
+  /// Prüft, ob ein (gedrehter) Text an [mitte] frei ist, und belegt ihn dann.
+  bool _frei(Offset mitte, double breite, double hoehe, double winkel, {bool erzwingen = false}) {
+    final c = math.cos(winkel).abs(), s = math.sin(winkel).abs();
+    final r = Rect.fromCenter(center: mitte, width: breite * c + hoehe * s, height: breite * s + hoehe * c);
+    final eng = r.deflate(1.5);
+    if (!erzwingen && _belegt.any((b) => b.overlaps(eng))) return false;
+    _belegt.add(r);
+    return true;
+  }
 
   /// Maße je Zoom: Schriftgröße (Faktor) und wie dicht Maße stehen dürfen.
   /// Ein Maßtext erscheint nur, wenn er mit Abstand auf seine Strecke passt
@@ -126,13 +152,18 @@ class FloorplanPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = weissHintergrund ? Colors.white : BsFarben.zeichenflaeche);
-    if (!weissHintergrund) _raster(canvas, size);
+    _belegt.clear();
+    if (!weissHintergrund && raster) _raster(canvas, size);
 
     _vorlageZeichnen(canvas);
     for (final r in raeume) {
       _raumFlaeche(canvas, r);
     }
     for (final w in waende) {
+      if (w.istKante) {
+        _kante(canvas, w, auswahl.contains(w.id));
+        continue;
+      }
       if (w.teilhoch) {
         // teilhohe Wand: heller, gestrichelte Achse, Höhe an der Wand
         canvas.saveLayer(null, Paint()..color = const Color(0x73000000));
@@ -187,6 +218,12 @@ class FloorplanPainter extends CustomPainter {
     if (ov != null && wandNach[ov.$1] != null) {
       _oeffnung(canvas, wandNach[ov.$1]!, ov.$2, ov.$3, ov.$4, false, false, false, vorschau: true);
     }
+    // Raumnamen zuerst belegen (gewählter Raum zuerst), Maße weichen ihnen aus.
+    final raumTexte = <(TextPainter, Offset)>[];
+    for (final r in [...raeume.where((r) => r.ausgewaehlt), ...raeume.where((r) => !r.ausgewaehlt)]) {
+      final t = _raumTextLayout(r);
+      if (t != null) raumTexte.add(t);
+    }
     for (final w in waende) {
       final st = raumStuecke[w.id];
       if (st != null && st.isNotEmpty && (w.massanzeige ?? massVoreinstellung) != MassAnzeige.keine) {
@@ -199,8 +236,8 @@ class FloorplanPainter extends CustomPainter {
           flanken: flanken[w.id],
           anzeige: w.massanzeige ?? massVoreinstellung);
     }
-    for (final r in raeume) {
-      _raumText(canvas, r);
+    for (final (tp, p) in raumTexte) {
+      tp.paint(canvas, p);
     }
 
     for (final b in bemassungen) {
@@ -372,31 +409,43 @@ class FloorplanPainter extends CustomPainter {
     }
   }
 
-  void _raumText(Canvas canvas, RaumBild r) {
-    final tp = TextPainter(
-      textAlign: TextAlign.center,
-      text: TextSpan(children: [
-        TextSpan(
-          text: r.beschriftung,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: r.zugeordnet ? FontWeight.w600 : FontWeight.w400,
-            fontStyle: r.zugeordnet ? FontStyle.normal : FontStyle.italic,
-            color: r.warnung
-                ? const Color(0xFFB91C1C)
-                : (r.zugeordnet ? BsFarben.leiste : BsFarben.textLeise),
-          ),
-        ),
-        if (r.unterzeile != null)
-          TextSpan(
-            text: '\n${r.unterzeile}',
-            style: const TextStyle(fontSize: 11, color: BsFarben.textLeise),
-          ),
-      ]),
-      textDirection: TextDirection.ltr,
-    )..layout();
+  /// Raumname (und Unterzeile) so groß, wie es in den Raum passt; überdeckt
+  /// er einen schon gesetzten Namen, entfällt er (der gewählte Raum nie).
+  (TextPainter, Offset)? _raumTextLayout(RaumBild r) {
     final c = _s(r.innenpunkt);
-    tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    var breiteRaum = double.infinity;
+    if (r.umriss.length >= 3) {
+      final pts = [for (final p in r.umriss) _s(p)];
+      final xs = pts.map((p) => p.dx), ys = pts.map((p) => p.dy);
+      breiteRaum = math.min(xs.reduce(math.max) - xs.reduce(math.min), (ys.reduce(math.max) - ys.reduce(math.min)) * 3);
+    }
+    TextPainter bauen(double faktor, bool mitUnterzeile) => TextPainter(
+          textAlign: TextAlign.center,
+          text: TextSpan(children: [
+            TextSpan(
+              text: r.beschriftung,
+              style: TextStyle(
+                fontSize: 13 * faktor,
+                fontWeight: r.zugeordnet ? FontWeight.w600 : FontWeight.w400,
+                fontStyle: r.zugeordnet ? FontStyle.normal : FontStyle.italic,
+                color: r.warnung ? const Color(0xFFB91C1C) : (r.zugeordnet ? BsFarben.leiste : BsFarben.textLeise),
+              ),
+            ),
+            if (mitUnterzeile && r.unterzeile != null)
+              TextSpan(text: '\n${r.unterzeile}', style: TextStyle(fontSize: 11 * faktor, color: BsFarben.textLeise)),
+          ]),
+          textDirection: TextDirection.ltr,
+        )..layout();
+    var tp = bauen(1, true);
+    if (tp.width > breiteRaum * 0.92) tp = bauen(1, false);
+    if (tp.width > breiteRaum * 0.92) tp = bauen(0.8, false);
+    if (tp.width > breiteRaum * 1.3 && !r.ausgewaehlt) return null; // Raum zu klein für den Namen
+    if (!_frei(c, tp.width + 4, tp.height + 2, 0, erzwingen: r.ausgewaehlt)) {
+      if (r.unterzeile == null) return null;
+      tp = bauen(0.8, false);
+      if (!_frei(c, tp.width + 4, tp.height + 2, 0)) return null;
+    }
+    return (tp, c - Offset(tp.width / 2, tp.height / 2));
   }
 
   void _wand(Canvas canvas, Wand w, bool ausgewaehlt) {
@@ -449,6 +498,40 @@ class FloorplanPainter extends CustomPainter {
         ..strokeWidth = w.zustand == WandZustand.bestand ? 1.2 : 2.2;
       canvas.drawLine(p[0], p[1], kante);
       canvas.drawLine(p[3], p[2], kante);
+    }
+  }
+
+  /// Offene Kante (Balkon-/Terrassenrand): heller Plattenrand, außen eine
+  /// kräftige Linie, mit Geländer zusätzlich Pfosten.
+  void _kante(Canvas canvas, Wand w, bool ausgewaehlt) {
+    final a = _s(Offset(w.x1.toDouble(), w.y1.toDouble())), b = _s(Offset(w.x2.toDouble(), w.y2.toDouble()));
+    final l = (b - a).distance;
+    if (l < 1) return;
+    final u = (b - a) / l;
+    final n = Offset(u.dy, -u.dx);
+    final h = math.max(1.5, w.dicke * massstab / 2);
+    final flaeche = Path()..addPolygon([a + n * h, b + n * h, b - n * h, a - n * h], true);
+    if (ausgewaehlt) {
+      canvas.drawPath(flaeche, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..color = BsFarben.akzent);
+    }
+    canvas.drawPath(flaeche, Paint()..color = const Color(0xFFE3E1DA));
+    final stift = Paint()
+      ..color = BsFarben.wandBestand
+      ..strokeWidth = 1.2;
+    canvas.drawLine(a + n * h, b + n * h, stift);
+    canvas.drawLine(a - n * h, b - n * h, stift);
+    if (w.gelaender) {
+      final g = Paint()
+        ..color = const Color(0xFF495057)
+        ..strokeWidth = 1;
+      canvas.drawLine(a, b, g);
+      final schritt = math.max(10.0, 1200 * massstab);
+      for (var t = 0.0; t <= l; t += schritt) {
+        canvas.drawCircle(a + u * t, math.max(1.5, 30 * massstab), Paint()..color = const Color(0xFF495057));
+      }
     }
   }
 
@@ -805,6 +888,7 @@ class FloorplanPainter extends CustomPainter {
     final a = Offset(w.x1.toDouble(), w.y1.toDouble()), b = Offset(w.x2.toDouble(), w.y2.toDouble());
     final l = (b - a).distance;
     if (l * massstab < 40) return;
+    if (!hervorheben && !_masseSichtbar) return;
     final u = (b - a) / l;
     final nl = Offset(u.dy, -u.dx);
     final farbe = hervorheben ? BsFarben.akzentDunkel : const Color(0xFF5C6B7A);
@@ -819,6 +903,7 @@ class FloorplanPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
       if (!_passt(tp.width, streckePx)) return false;
+      if (!_frei(p, tp.width, tp.height, winkel, erzwingen: hervorheben)) return false;
       canvas.save();
       canvas.translate(p.dx, p.dy);
       canvas.rotate(winkel);
@@ -831,6 +916,7 @@ class FloorplanPainter extends CustomPainter {
       final hier = [for (final x in st) if (x.$3 == seite) x];
       final versatz = w.dicke / 2 + 14 / massstab;
       if (hier.isEmpty) {
+        if (!_beideSeiten && !hervorheben) continue; // weit weg: nur die Raumseite
         final len = f == null ? l : (seite > 0 ? f.$1 : f.$2);
         beschriften(mmText(len), _s((a + b) / 2 + nl * (seite * (w.dicke / 2 + 16 / massstab))), len * massstab);
         continue;
@@ -879,6 +965,7 @@ class FloorplanPainter extends CustomPainter {
       if (!hervorheben && !_passt(tp.width, laenge * massstab)) return;
       final abstand = dicke * massstab / 2 + 6 + tp.height / 2;
       final c = mitte + links * (seite * abstand);
+      if (!_frei(c, tp.width, tp.height, winkel, erzwingen: hervorheben)) return;
       canvas.save();
       canvas.translate(c.dx, c.dy);
       canvas.rotate(winkel);
@@ -892,6 +979,11 @@ class FloorplanPainter extends CustomPainter {
     if (anzeige == MassAnzeige.keine) {
       if (zusatz != null) text(zusatz, 1);
       return;
+    }
+    if (!hervorheben && !_masseSichtbar) return;
+    // Weit herausgezoomt: nur ein Maß je Wand (innen bzw. Achse)
+    if (!hervorheben && !_beideSeiten) {
+      if (anzeige == MassAnzeige.innenAussen || anzeige == MassAnzeige.achseInnen) anzeige = MassAnzeige.innen;
     }
     if (gleich) {
       // Beide Seiten gleich lang (freie Wand oder gerade durchlaufend)
@@ -932,6 +1024,10 @@ class FloorplanPainter extends CustomPainter {
       old.massstab != massstab ||
       old.massDichte != massDichte ||
       old.massSchrift != massSchrift ||
+      old.raster != raster ||
+      old.massAbPxJeM != massAbPxJeM ||
+      old.beideAbPxJeM != beideAbPxJeM ||
+      old.raumStuecke != raumStuecke ||
       old.verschiebung != verschiebung ||
       !setEquals(old.auswahl, auswahl) ||
       old.rahmen != rahmen ||

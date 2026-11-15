@@ -61,7 +61,7 @@ class GegAnsicht extends StatelessWidget {
     // Außenwände je Wandtyp
     final gesehen = <String>{};
     for (final w in store.waende(g.id)) {
-      if (w.teilhoch) continue;
+      if (w.teilhoch || w.istKante) continue;
       final hw = HlWand(id: w.id, a: Punkt(w.x1.toDouble(), w.y1.toDouble()), b: Punkt(w.x2.toDouble(), w.y2.toDouble()), dicke: w.dicke, u: 1);
       final aussen = wandSeiten(hw, raeume, schritt: 250).any((s) => (s.$3 == null) != (s.$4 == null));
       if (!aussen) continue;
@@ -150,7 +150,7 @@ class SchallAnsicht extends StatelessWidget {
     final name = {for (final r in raeume) r.id: r.name};
     final zeilen = <(String, String, String, double, int?)>[];
     for (final w in store.waende(g.id)) {
-      if (w.teilhoch) continue;
+      if (w.teilhoch || w.istKante) continue;
       final hw = HlWand(id: w.id, a: Punkt(w.x1.toDouble(), w.y1.toDouble()), b: Punkt(w.x2.toDouble(), w.y2.toDouble()), dicke: w.dicke, u: 1);
       final typ = w.wandtypId == null ? null : store.wandtyp(w.wandtypId!);
       final masse = typ == null || typ.schichten.isEmpty

@@ -693,3 +693,27 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Fenster blau, Türen gelb, Objekte mit Namen), Prompt änderbar, Anbieterwahl und Schlüssel (AppSettings.bildki, nur auf diesem PC), Einwilligung „darf an externen
   Dienst“, Kostenhinweis; Bilder unter Projekt/ki_bilder/, Galerie, „Zu den Fotos des Raums“.
 - Tests test/build31_test.dart; 292 Tests grün. Echte Anfrage an OpenAI/Gemini nicht getestet (kein Schlüssel).
+
+## Build 32 (15.11.) – Tims Testpunkte zu Build 31
+- Grundriss: Maße und Raumnamen überdecken sich nicht mehr (Belegungsprüfung, Raumnamen zuerst, gewählte Wand immer), Raumname schrumpft/verliert Unterzeile
+  in kleinen Räumen; Zoomschwellen `mass_ab` / `beide_ab` (px je m, Optionen „Ab welchem Zoom Maße erscheinen …“ und Einstellungen › Darstellung),
+  „Raster ausblenden“ (`raster_aus`). Werkzeug bleibt nach Fensterwechsel (je Projekt gemerkt).
+- 3D neu (lib/core/drei_d_szene.dart, lib/ui/floorplan/geschoss_3d.dart, texturen3d.dart): nicht mehr spiegelverkehrt (y gespiegelt, auch Technik-3D),
+  Wände mit echten Fenstern/Türen (Brüstung, Sturz, Laibung, Glas), verschnittene Ecken, Böden je Raum, prozedurale Texturen (Putz, Farbe, Beton, Ziegel, Klinker,
+  KS, Porenbeton, GK, Holz, Fliesen in Formaten, Parkett, Dielen, Vinyl, Teppich, Naturstein, Estrich, Pflaster, Dämmung), Material aus Beschichtungen/Wandtyp/
+  Raumname, „Oberflächen je Raum …“ (`ansicht3d` im Raum). Zoom per Mausrad, Touchpad, zwei Fingern und Knöpfen; Wände voll/halb/Grundriss; Raum begehen.
+- iPhone: Plan-Beschriftungen ohne Überlappung, Maße blenden sich je Zoom aus/ein; Geschossname statt Kürzel (1. OG). Kürzel folgt beim Umbenennen.
+- iPad: 403 beim Projekt holen erklärt (mit Mitarbeiter-Code gekoppelt) – Eigentümer-Rolle darf holen.
+- Hilfe-Panel rechts (lib/core/glossar.dart, lib/ui/hilfe_panel.dart; ?-Knopf in der Kopfleiste, `hilfe_panel`): ~110 Begriffe mit Bedeutung, Einheit, Eingabe;
+  Klick in ein Feld zeigt den passenden Begriff („Gerade im Feld“).
+- Installation: Hauptwerkzeuge oben, Gewerke-Leiste darunter (Elektro/Auslegung, Bad, Wasser, WLAN, Außenanlagen), Live in der Statuszeile.
+- Balkon/Terrasse: Wandart „Offene Kante / Plattenrand“ (`art: kante`, `gelaender`), begrenzt den Raum, zählt nicht als Wand/Hülle, Plan zeichnet Plattenrand
+  mit Geländerpfosten; Raum-Knopf „Außenränder als offene Kante statt Wand“ (Strg+Z).
+- Einkauf als eigenes Modul (lib/ui/einkauf/einkauf_page.dart, lib/core/einkaufslisten.dart, Einstellung `einkaufslisten`): „Noch zu beschaffen“ aus Planung
+  (Bibliothek, Kabel-/Rohrliste, Material-Kosten), benannte Einkäufe, von Hand ergänzen, Abhaken = gekauft (Bestand), Einkaufszettel-HTML, Kassenzettel verknüpfen.
+  iPhone: Gruppierung „Einkauf“, Abhaken geht an den PC, Kassenzettel-Foto je Einkauf.
+- Tests test/build32_test.dart, test/geschoss3d_bild_test.dart; 297 Tests grün.
+
+## Vorgemerkt für Build 33 (erst nach Tims Test von Build 32)
+- Ideen aus SCC-CAD (Ziemer) übernehmen, soweit passend (Recherche-Zusammenfassung an Tim).
+- iPhone: Steckdosen und alle anderen Installationen aufmessen können; Reiter Aufmessen/Erfassen übersichtlich neu gliedern.

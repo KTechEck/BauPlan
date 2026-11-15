@@ -383,8 +383,14 @@ class PcDienst {
     final basis = ordner();
     final rel = teile.skip(1).join('/');
     if (basis == null) return _antwort(a, 503, {'fehler': 'Am PC ist kein Projekt geöffnet.'});
-    // Projekt für die volle BauSpur auf dem iPad (nur mit dem Code des Eigentümers)
-    if (kopf == 'projekt' && nutzer == null) {
+    // Projekt für die volle BauSpur auf dem iPad (Code des Eigentümers oder eines Benutzers mit Rolle Eigentümer)
+    if (kopf == 'projekt' && nutzer != null && nutzer['rolle'] != 'eigentuemer') {
+      return _antwort(a, 403, {
+        'fehler': 'Dieses Gerät ist mit dem Code von „${nutzer['name'] ?? 'Mitarbeit'}“ (Rolle ${nutzer['rolle'] ?? '?'}) gekoppelt. '
+            'Das ganze Projekt holen geht nur mit dem Eigentümer-Code (PC: Einstellungen › Speicher und Abgleich) – iPad neu koppeln.'
+      });
+    }
+    if (kopf == 'projekt') {
       final geraet = a.headers.value('x-bauspur-geraet') ?? '';
       if (geraet.isEmpty) return _antwort(a, 400, {'fehler': 'Geräte-Kennung fehlt.'});
       if (rel == 'zip' && a.method == 'GET' && projektAusleihen != null) {

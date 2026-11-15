@@ -112,7 +112,19 @@ class _FloorplanPageState extends State<FloorplanPage> {
   final _fokus = FocusNode();
   double _massstab = 0.08; // Pixel pro mm
   Offset _verschiebung = const Offset(120, 120);
-  Werkzeug _werkzeug = Werkzeug.wand;
+  // zuletzt benutztes Werkzeug bleibt beim Wechsel zwischen Modulen/Fenstern erhalten
+  // (je Projekt; neues Projekt beginnt mit dem Wand-Werkzeug)
+  static Werkzeug _letztesWerkzeug = Werkzeug.wand;
+  static String? _werkzeugProjekt;
+  Werkzeug get _werkzeug {
+    if (_werkzeugProjekt != _s.store?.ordner) {
+      _werkzeugProjekt = _s.store?.ordner;
+      _letztesWerkzeug = Werkzeug.wand;
+    }
+    return _letztesWerkzeug;
+  }
+
+  set _werkzeug(Werkzeug w) => _letztesWerkzeug = w;
   int _massAusrichtung = 0; // 0 direkt, 1 waagerecht, 2 senkrecht, 3 parallel zur Wand
   bool _seiteZu = false; // Eigenschaften rechts eingeklappt
   late int _wandDicke = (widget.state.settings.darstellung['wand_dicke'] as num?)?.toInt() ?? 240;
@@ -2461,6 +2473,39 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return KeyEventResult.ignored;
   }
 
+  /// Wände am Rand eines Balkons/einer Terrasse, hinter denen kein Innenraum
+  /// liegt, zur offenen Kante machen (rückgängig machbar).
+  void _raenderAlsKante(Raum r) {
+    final store = _s.store!;
+    final u = r.umriss!;
+    final innen = [for (final x in store.raeume(r.geschossId)) if (x.id != r.id && x.art == RaumArt.raum && x.umriss != null) x.umriss!];
+    final alt = <String, Map<String, Object?>>{};
+    for (final w in store.waende(r.geschossId)) {
+      if (w.istKante || w.teilhoch || w.laenge < 1) continue;
+      final ux = (w.x2 - w.x1) / w.laenge, uy = (w.y2 - w.y1) / w.laenge;
+      final mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
+      final d = w.dicke / 2 + 60;
+      final a = Punkt(mx - uy * d, my + ux * d), b = Punkt(mx + uy * d, my - ux * d);
+      final anA = punktInPolygon(a, u), anB = punktInPolygon(b, u);
+      if (anA == anB) continue; // grenzt nicht an diesen Raum
+      final andere = anA ? b : a;
+      if (innen.any((p) => punktInPolygon(andere, p))) continue; // dahinter liegt ein Innenraum: echte Wand
+      alt[w.id] = {'art': w.eigenschaften['art'], 'hoehe': w.eigenschaften['hoehe'], 'gelaender': w.eigenschaften['gelaender']};
+      store.wandEigenschaftenSetzen(w.id, {'art': 'kante', 'hoehe': null, 'gelaender': true});
+    }
+    if (alt.isEmpty) {
+      zeigeHinweis(context, 'Keine Außenwand an diesem Raum gefunden.');
+      return;
+    }
+    _rueckgaengig.add(() {
+      for (final e in alt.entries) {
+        store.wandEigenschaftenSetzen(e.key, e.value);
+      }
+    });
+    _s.geaendert();
+    zeigeHinweis(context, '${alt.length} Wand/Wände als offene Kante mit Geländer – Strg+Z macht es rückgängig');
+  }
+
   void _auswahlLoeschen() {
     final store = _s.store!;
     final ids = _auswahl.toList();
@@ -3029,10 +3074,19 @@ class _FloorplanPageState extends State<FloorplanPage> {
                       default:
                         d
                           ..remove('mass_dichte')
-                          ..remove('mass_schrift');
+                          ..remove('mass_schrift')
+                          ..remove('mass_ab')
+                          ..remove('beide_ab');
                     }
                   });
                   _s.settings.speichern();
+                case 'raster':
+                  setState(() => _s.settings.darstellung['raster_aus'] = _s.settings.darstellung['raster_aus'] != true);
+                  _s.settings.speichern();
+                case 'schwellen':
+                  masseSchwellenDialog(context, _s).then((_) {
+                    if (mounted) setState(() {});
+                  });
                 case 'unterlage':
                   setState(() => _s.settings.darstellung['geschoss_darunter'] = !_unterlage);
                   _s.settings.speichern();
@@ -3069,7 +3123,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
               const PopupMenuItem(value: 'mass_lockerer', child: Text('Weniger Maße zeigen (lockerer)')),
               const PopupMenuItem(value: 'schrift_groesser', child: Text('Maßschrift größer')),
               const PopupMenuItem(value: 'schrift_kleiner', child: Text('Maßschrift kleiner')),
+              const PopupMenuItem(value: 'schwellen', child: Text('Ab welchem Zoom Maße erscheinen …')),
               const PopupMenuItem(value: 'mass_zurueck', child: Text('Maße zurücksetzen')),
+              CheckedPopupMenuItem(value: 'raster', checked: _s.settings.darstellung['raster_aus'] == true, child: const Text('Raster ausblenden')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'dach', child: ListTile(dense: true, leading: Icon(Icons.roofing), title: Text('Dachgeschoss: Dach, Sparren, Kniestock …'))),
               const PopupMenuDivider(),
@@ -3348,6 +3404,9 @@ class _FloorplanPageState extends State<FloorplanPage> {
                 painter: FloorplanPainter(
                   massDichte: (_s.settings.darstellung['mass_dichte'] as num?)?.toDouble() ?? 1,
                   massSchrift: (_s.settings.darstellung['mass_schrift'] as num?)?.toDouble() ?? 1,
+                  raster: _s.settings.darstellung['raster_aus'] != true,
+                  massAbPxJeM: (_s.settings.darstellung['mass_ab'] as num?)?.toDouble() ?? 25,
+                  beideAbPxJeM: (_s.settings.darstellung['beide_ab'] as num?)?.toDouble() ?? 70,
                   waende: _versatz == Offset.zero ? plan.waende : _verschobeneVorschau(plan.waende),
                   raeume: raumBilder,
                   umrisse: _versatz == Offset.zero ? plan.umrisse : const {},
@@ -3645,6 +3704,16 @@ class _FloorplanPageState extends State<FloorplanPage> {
             _s.geaendert();
           },
         ),
+        if (r.art != RaumArt.raum && !r.istBodenplatte && r.umriss != null) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => _raenderAlsKante(r),
+            icon: const Icon(Icons.border_style),
+            label: const Text('Außenränder als offene Kante statt Wand'),
+          ),
+          const Text('Zählt nicht zur Wohnfläche voll (Balkon nach WoFlV meist 1/4). Rückgängig mit Strg+Z.',
+              style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+        ],
         const SizedBox(height: 16),
         if (r.umriss != null) ...[
           FilledButton.tonalIcon(
@@ -4367,7 +4436,13 @@ class _FloorplanPageState extends State<FloorplanPage> {
               onChanged: (a) {
                 if (a == null) return;
                 final alt = {'art': w.eigenschaften['art'], 'hoehe': w.eigenschaften['hoehe']};
-                store.wandEigenschaftenSetzen(w.id, a == WandArt.raumhoch ? {'art': null, 'hoehe': null} : {'art': a.name, 'hoehe': w.hoehe ?? a.standardHoehe});
+                store.wandEigenschaftenSetzen(
+                    w.id,
+                    a == WandArt.raumhoch
+                        ? {'art': null, 'hoehe': null}
+                        : a == WandArt.kante
+                            ? {'art': 'kante', 'hoehe': null}
+                            : {'art': a.name, 'hoehe': w.hoehe ?? a.standardHoehe});
                 _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, alt));
                 _s.geaendert();
               },
@@ -4400,6 +4475,25 @@ class _FloorplanPageState extends State<FloorplanPage> {
             child: Text('Teilhohe Wand: bildet keine Raumgrenze, im Plan heller mit Höhe gezeichnet.',
                 style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
           ),
+        if (w.istKante) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Offene Kante: begrenzt den Balkon/die Terrasse, ist aber keine Wand (keine Wandfläche, kein Mauerwerk, keine Hüllfläche).',
+                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: w.gelaender,
+            title: const Text('Geländer auf der Kante'),
+            onChanged: (v) {
+              final alt = w.eigenschaften['gelaender'];
+              store.wandEigenschaftenSetzen(w.id, {'gelaender': v == true ? true : null});
+              _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'gelaender': alt}));
+              _s.geaendert();
+            },
+          ),
+        ],
         const SizedBox(height: 12),
         ..._statikFelder(w),
         const SizedBox(height: 12),
@@ -4426,4 +4520,60 @@ enum MassBezug {
   final String label;
   final String kurz;
   final String erklaerung;
+}
+
+
+/// Zoomschwellen der Maße: ab wie vielen Pixeln je Meter Maße erscheinen und
+/// ab wann innen und außen beide stehen. Wirkt sofort, gilt für diesen PC.
+Future<void> masseSchwellenDialog(BuildContext context, AppState s) {
+  final d = s.settings.darstellung;
+  double w(String k, double std) => (d[k] as num?)?.toDouble() ?? std;
+  return showDialog<void>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setD) => AlertDialog(
+        title: const Text('Maße je Zoom'),
+        content: SizedBox(
+          width: 460,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Beim Herauszoomen blenden sich Maße aus, beim Hineinzoomen wieder ein. '
+                'Gewählte Wände zeigen ihre Maße immer.', style: TextStyle(color: BsFarben.textLeise)),
+            const SizedBox(height: 16),
+            Text('Wandmaße erst ab ${w('mass_ab', 25).round()} px je Meter'),
+            Slider(
+              value: w('mass_ab', 25).clamp(5, 120),
+              min: 5,
+              max: 120,
+              divisions: 23,
+              onChanged: (v) => setD(() {
+                d['mass_ab'] = v;
+                if (w('beide_ab', 70) < v) d['beide_ab'] = v;
+              }),
+            ),
+            Text('Innen und außen beide ab ${w('beide_ab', 70).round()} px je Meter (darunter nur innen)'),
+            Slider(
+              value: w('beide_ab', 70).clamp(5, 250),
+              min: 5,
+              max: 250,
+              divisions: 49,
+              onChanged: (v) => setD(() => d['beide_ab'] = math.max(v, w('mass_ab', 25))),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => setD(() => d
+                ..remove('mass_ab')
+                ..remove('beide_ab')),
+              child: const Text('Standard')),
+          FilledButton(
+              onPressed: () {
+                s.settings.speichern();
+                Navigator.pop(c);
+              },
+              child: const Text('Fertig')),
+        ],
+      ),
+    ),
+  );
 }

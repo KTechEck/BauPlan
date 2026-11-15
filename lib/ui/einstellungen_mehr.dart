@@ -101,6 +101,16 @@ class _ZeichnenAnsichtState extends State<ZeichnenAnsicht> {
       Text('Maße im Grundriss je Zoom', style: Theme.of(context).textTheme.titleMedium),
       Text('Dichte ${_z('mass_dichte', 1).toStringAsFixed(2).replaceAll('.', ',')} (größer = weniger Maße, kleiner = mehr)'),
       Slider(value: _z('mass_dichte', 1).clamp(0.5, 3.0), min: 0.5, max: 3, divisions: 25, onChanged: (v) => _setzen('mass_dichte', v)),
+      Text('Wandmaße erst ab ${_z('mass_ab', 25).round()} px je Meter Zoom (darunter ausgeblendet)'),
+      Slider(value: _z('mass_ab', 25).clamp(5.0, 120.0), min: 5, max: 120, divisions: 23, onChanged: (v) => _setzen('mass_ab', v)),
+      Text('Innen- und Außenmaß beide ab ${_z('beide_ab', 70).round()} px je Meter (darunter nur innen)'),
+      Slider(value: _z('beide_ab', 70).clamp(5.0, 250.0), min: 5, max: 250, divisions: 49, onChanged: (v) => _setzen('beide_ab', v)),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _d['raster_aus'] == true,
+        title: const Text('Raster im Grundriss ausblenden'),
+        onChanged: (v) => _setzen('raster_aus', v),
+      ),
       Text('Schriftgröße der Maße ${(_z('mass_schrift', 1) * 100).round()} %'),
       Slider(value: _z('mass_schrift', 1).clamp(0.7, 2.0), min: 0.7, max: 2, divisions: 13, onChanged: (v) => _setzen('mass_schrift', v)),
       Align(
@@ -109,6 +119,8 @@ class _ZeichnenAnsichtState extends State<ZeichnenAnsicht> {
           onPressed: () {
             _setzen('mass_dichte', null);
             _setzen('mass_schrift', null);
+            _setzen('mass_ab', null);
+            _setzen('beide_ab', null);
           },
           child: const Text('Maße zurücksetzen'),
         ),
@@ -183,7 +195,10 @@ class _ProjektGeschosseState extends State<ProjektGeschosseAnsicht> {
                     decoration: const InputDecoration(labelText: 'Geschoss', isDense: true),
                     onFieldSubmitted: (v) {
                       if (v.trim().isEmpty) return;
-                      store.geschossAendern(g.id, name: v.trim());
+                      // Kürzel mitziehen, wenn der Name eins erkennen lässt (z. B. „1. OG“ → 1OG)
+                      final n = v.trim().toUpperCase().replaceAll(' ', '').replaceAll('.', '');
+                      final m = RegExp(r'(\d?)(EG|OG|DG|KG|UG|SB)').firstMatch(n.replaceAll('ERDGESCHOSS', 'EG').replaceAll('OBERGESCHOSS', 'OG').replaceAll('DACHGESCHOSS', 'DG').replaceAll('KELLER', 'KG'));
+                      store.geschossAendern(g.id, name: v.trim(), kuerzel: m == null ? null : '${m.group(1)}${m.group(2)}');
                       _neu();
                     },
                   ),

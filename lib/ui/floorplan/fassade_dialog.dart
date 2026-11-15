@@ -21,7 +21,7 @@ Map<String, double> aussenSeiten(List<Wand> waende, List<Raum> raeume) {
   ];
   final aus = <String, double>{};
   for (final w in waende) {
-    if (w.teilhoch) continue;
+    if (w.teilhoch || w.istKante) continue;
     final hw = HlWand(id: w.id, a: Punkt(w.x1.toDouble(), w.y1.toDouble()), b: Punkt(w.x2.toDouble(), w.y2.toDouble()), dicke: w.dicke, u: 1);
     var links = 0.0, rechts = 0.0;
     for (final (von, bis, l, r) in wandSeiten(hw, hl, schritt: 250)) {

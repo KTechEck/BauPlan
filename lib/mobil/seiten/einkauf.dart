@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../kontext.dart';
+import 'erfassen.dart' show fotoAufnehmen;
 
 /// Einkaufsliste nach Lastenheft: alle offenen Positionen, gruppiert nach
 /// Händler (oder nach Herkunft, Kategorie, Raum), abhakbar, mit Produktinfo
@@ -16,7 +17,7 @@ class EinkaufSeite extends StatefulWidget {
   State<EinkaufSeite> createState() => _EinkaufSeiteState();
 }
 
-const _ansichten = {'haendler': 'Händler', 'herkunft': 'Gewerk / Bereich', 'kategorie': 'Kategorie', 'raum': 'Raum'};
+const _ansichten = {'liste': 'Einkauf', 'haendler': 'Händler', 'herkunft': 'Gewerk / Bereich', 'kategorie': 'Kategorie', 'raum': 'Raum'};
 
 class _EinkaufSeiteState extends State<EinkaufSeite> {
   String _suche = '';
@@ -27,6 +28,7 @@ class _EinkaufSeiteState extends State<EinkaufSeite> {
   bool _erledigt(Map<String, dynamic> e) => k.einstellungen.abgehakt.contains(e['id']) || e['status'] == 'geliefert' || e['status'] == 'bezahlt';
 
   String _gruppe(Map<String, dynamic> e) => switch (k.einstellungen.einkaufAnsicht) {
+        'liste' => '${e['liste'] ?? 'ohne Einkauf'}',
         'herkunft' => '${e['herkunft'] ?? e['gewerk'] ?? 'Kosten / ohne Zuordnung'}'.split(',').first.trim(),
         'kategorie' => '${e['kategorie'] ?? 'ohne Kategorie'}',
         'raum' => '${e['raum'] ?? 'ohne Raum'}',
@@ -96,6 +98,13 @@ class _EinkaufSeiteState extends State<EinkaufSeite> {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
                     child: Row(children: [
                       Expanded(child: Text(g, style: Theme.of(context).textTheme.titleSmall)),
+                      if (k.einstellungen.einkaufAnsicht == 'liste' && g != 'ohne Einkauf')
+                        IconButton(
+                          tooltip: 'Kassenzettel zu „$g“ fotografieren',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.receipt_long),
+                          onPressed: () => _beleg(g),
+                        ),
                       Text('${gruppen[g]!.length} · ${_euro(gruppen[g]!.fold<int>(0, (s, e) => s + _summe(e)))}', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
                     ]),
                   ),
@@ -120,6 +129,14 @@ class _EinkaufSeiteState extends State<EinkaufSeite> {
               ]),
       ),
     ]);
+  }
+
+  /// Kassenzettel zu einem Einkauf: Foto geht an den PC und wird dort mit der Liste verknüpft.
+  Future<void> _beleg(String liste) async {
+    final bytes = await fotoAufnehmen(k);
+    if (bytes == null || !mounted) return;
+    await k.erfasst({'art': 'beleg', 'liste': liste, 'text': 'Kassenzettel $liste'}, foto: bytes);
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kassenzettel zu „$liste“ gesendet')));
   }
 
   int _summe(Map<String, dynamic> e) => (((e['preis_cent'] as num?) ?? 0) * ((e['menge'] as num?) ?? 0)).round();

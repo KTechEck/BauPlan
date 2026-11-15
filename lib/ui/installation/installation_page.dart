@@ -36,6 +36,7 @@ import '../wandansicht/wandansicht_page.dart';
 import '../decke/decke_page.dart';
 import '../sensoren_page.dart' show sensorVorlagen;
 import '../verteiler/verteiler_editor.dart';
+import '../verteiler/auslegung_page.dart';
 import '../tastenkuerzel.dart';
 import '../bauteile/bauelement_wahl.dart';
 import 'bad_dialog.dart';
@@ -1066,6 +1067,57 @@ class _InstallationPageState extends State<InstallationPage> {
     }
     final typen = d.typen.values.where((t) => t.gewerkId == _gewerkId).toList();
     if (!typen.any((t) => t.id == _typId)) _typId = typen.firstOrNull?.id;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      _hauptleiste(d, gewerke),
+      _gewerkeLeiste(),
+    ]);
+  }
+
+  /// Gewerke-Werkzeuge gleichberechtigt in einer eigenen Leiste unter den
+  /// Hauptwerkzeugen: Elektro, Bad, Wasser, WLAN, Außenanlagen.
+  Widget _gewerkeLeiste() {
+    Widget chip(IconData i, String text, String tip, VoidCallback onTap, {bool aktiv = false}) => Tooltip(
+          message: tip,
+          child: FilterChip(
+            avatar: Icon(i, size: 16),
+            label: Text(text),
+            selected: aktiv,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => onTap(),
+          ),
+        );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: const BoxDecoration(color: Color(0xFFF6F7F4), border: Border(bottom: BorderSide(color: BsFarben.rand))),
+      child: Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        const Text('Gewerke:', style: TextStyle(fontSize: 12, color: BsFarben.textLeise, fontWeight: FontWeight.w600)),
+        chip(Icons.electrical_services, 'Elektro', 'Kabel- und Rohrauslegung: Querschnitt, Absicherung, Spannungsfall, Leitungsliste', () => AuslegungPage.oeffnen(context, _s)),
+        chip(Icons.bathtub_outlined, 'Bad', 'Bad und Abdichtung: Nassräume, Abdichtungsflächen (DIN 18534), Dichtband, Manschetten, Abstände', () => badDialogZeigen(context, _s)),
+        chip(Icons.water_drop_outlined, 'Wasser', 'Wasser: Abwasser (DN, Gefälle), Trinkwasser-Hausanschluss, Wassermelder mit Absperrventil', () => wasserDialogZeigen(context, _s)),
+        chip(Icons.wifi, 'WLAN', 'WLAN-Abdeckung der Access Points als Farbfläche (grün gut … rot kein Empfang)', () => setState(() {
+              _wlanBand = _wlanBand == null ? WlanBand.g5 : null;
+              _wlanSig = null;
+            }), aktiv: _wlanBand != null),
+        if (_wlanBand != null) ...[
+          DropdownButton<WlanBand>(
+            value: _wlanBand,
+            isDense: true,
+            items: [for (final b in WlanBand.values) DropdownMenuItem(value: b, child: Text(b.label))],
+            onChanged: (b) => setState(() {
+              _wlanBand = b;
+              _wlanSig = null;
+            }),
+          ),
+          TextButton(onPressed: () => wlanDialog(context, _s, _wlanBand!), child: const Text('Auswertung …')),
+        ],
+        chip(Icons.yard_outlined, 'Außenanlagen', 'Außenbereich: Regenwasser, Zisterne, Bewässerung, Außenlicht, Außensteckdosen, Erd- und Außenkabel', () => aussenDialog(context, _s)),
+      ]),
+    );
+  }
+
+  Widget _hauptleiste(_Daten d, List<Gewerk> gewerke) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: BsFarben.rand))),
@@ -1080,50 +1132,6 @@ class _InstallationPageState extends State<InstallationPage> {
                 _entwurf.clear();
               })),
         ]),
-        WerkzeugKnopf(
-            symbol: Icons.bathtub_outlined,
-            text: 'Bad',
-            tooltip: 'Bad und Abdichtung: Nassräume, Abdichtungsflächen (DIN 18534), Dichtband, Manschetten, Abstände',
-            aktiv: false,
-            onTap: () => badDialogZeigen(context, _s)),
-        WerkzeugKnopf(
-            symbol: Icons.wifi,
-            text: 'WLAN',
-            tooltip: 'WLAN-Abdeckung der Access Points als Farbfläche (grün gut … rot kein Empfang)',
-            aktiv: _wlanBand != null,
-            onTap: () => setState(() {
-                  _wlanBand = _wlanBand == null ? WlanBand.g5 : null;
-                  _wlanSig = null;
-                })),
-        if (_wlanBand != null) ...[
-          DropdownButton<WlanBand>(
-            value: _wlanBand,
-            items: [for (final b in WlanBand.values) DropdownMenuItem(value: b, child: Text(b.label))],
-            onChanged: (b) => setState(() {
-              _wlanBand = b;
-              _wlanSig = null;
-            }),
-          ),
-          TextButton(onPressed: () => wlanDialog(context, _s, _wlanBand!), child: const Text('Auswertung …')),
-        ],
-        WerkzeugKnopf(
-            symbol: Icons.yard_outlined,
-            text: 'Außen',
-            tooltip: 'Außenbereich: Regenwasser, Zisterne, Bewässerung, Außenlicht, Außensteckdosen, Erd- und Außenkabel',
-            aktiv: false,
-            onTap: () => aussenDialog(context, _s)),
-        WerkzeugKnopf(
-            symbol: Icons.water_drop_outlined,
-            text: 'Wasser',
-            tooltip: 'Wasser: Abwasser (DN, Gefälle), Trinkwasser-Hausanschluss, Wassermelder mit Absperrventil',
-            aktiv: false,
-            onTap: () => wasserDialogZeigen(context, _s)),
-        WerkzeugKnopf(
-            symbol: Icons.sensors,
-            text: 'Live',
-            tooltip: 'Home Assistant live: Zustände (an/aus, Temperatur …) der zugeordneten Entitäten im Plan zeigen – nur lesend',
-            aktiv: _live != null,
-            onTap: _liveUmschalten),
         Tooltip(
           message: 'Wie gesetzt wird: Gerät vorher aus der Liste wählen – oder erst in den Plan klicken und dann im Menü neben dem Cursor wählen',
           child: SegmentedButton<bool>(
@@ -1466,10 +1474,23 @@ class _InstallationPageState extends State<InstallationPage> {
           };
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       color: Colors.white,
-      child: Text('$hinweis   ·   Mittlere/rechte Maustaste: verschieben · Mausrad: zoomen',
-          overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      child: Row(children: [
+        Expanded(
+          child: Text('$hinweis   ·   Mittlere/rechte Maustaste: verschieben · Mausrad: zoomen',
+              overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+        ),
+        Tooltip(
+          message: 'Home Assistant live: Zustände (an/aus, Temperatur …) der zugeordneten Entitäten im Plan zeigen – nur lesend',
+          child: TextButton.icon(
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: _live != null ? const Color(0xFF2F9E44) : BsFarben.textLeise),
+            onPressed: _liveUmschalten,
+            icon: Icon(_live != null ? Icons.sensors : Icons.sensors_off, size: 16),
+            label: Text(_live != null ? 'Live an' : 'Live aus', style: const TextStyle(fontSize: 12)),
+          ),
+        ),
+      ]),
     );
   }
 

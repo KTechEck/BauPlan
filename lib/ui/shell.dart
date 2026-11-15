@@ -1,6 +1,7 @@
 import '../app/symbole.dart';
 import 'fotos/fotos_page.dart';
 import 'kosten/kosten_page.dart';
+import 'einkauf/einkauf_page.dart';
 import 'export/export_page.dart';
 import 'installation/installation_page.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import 'settings_page.dart';
 import 'tagebuch/tagebuch_page.dart';
 import 'verteiler/schrank_page.dart';
 import 'suche.dart';
+import 'hilfe_panel.dart';
 import 'widgets.dart';
 import '../data/tagebuch_models.dart';
 import '../app/version.dart';
@@ -43,6 +45,7 @@ class Shell extends StatelessWidget {
     Modul.assistent: Sym.assistent,
     Modul.fotos: Sym.fotos,
     Modul.kosten: Sym.kosten,
+    Modul.einkauf: Icons.shopping_cart_outlined,
     Modul.tagebuch: Sym.tagebuch,
     Modul.export: Sym.export,
     Modul.einstellungen: Sym.einstellungen,
@@ -55,6 +58,7 @@ class Shell extends StatelessWidget {
         Modul.installation => InstallationPage(state: state),
         Modul.fotos => FotosPage(state: state),
         Modul.kosten => KostenPage(state: state),
+        Modul.einkauf => EinkaufPage(state: state),
         Modul.export => ExportPage(state: state),
         Modul.haustechnik => HaustechnikPage(state: state),
         Modul.verteiler => SchrankPage(state: state),
@@ -68,6 +72,7 @@ class Shell extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = state.store!;
     final geschoss = state.geschossId == null ? null : store.geschoss(state.geschossId!);
+    hilfePanelLaden(state);
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): () => sucheOeffnen(context, state),
@@ -85,6 +90,14 @@ class Shell extends StatelessWidget {
                 icon: const Icon(Icons.search, color: Color(0xFFC9CDD1)),
               ),
               HinweisGlocke(state: state),
+              ValueListenableBuilder<bool>(
+                valueListenable: hilfePanelOffen,
+                builder: (_, offen, __) => IconButton(
+                  tooltip: offen ? 'Hilfe ausblenden' : 'Hilfe: Begriffe und Werte erklärt (rechts)',
+                  onPressed: () => hilfePanelUmschalten(state),
+                  icon: Icon(offen ? Icons.help : Icons.help_outline, color: const Color(0xFFC9CDD1)),
+                ),
+              ),
               PopupMenuButton<String>(
                 tooltip: 'Editoren und Bibliotheken',
                 icon: const Icon(Icons.apps, color: Color(0xFFC9CDD1)),
@@ -163,6 +176,10 @@ class Shell extends StatelessWidget {
               children: [
                 _Modulleiste(state: state, icons: _icons),
                 Expanded(child: _inhalt()),
+                ValueListenableBuilder<bool>(
+                  valueListenable: hilfePanelOffen,
+                  builder: (_, offen, __) => offen ? HilfePanel(state: state) : const SizedBox.shrink(),
+                ),
               ],
             ),
           ),
@@ -262,7 +279,7 @@ class _Modulleiste extends StatelessWidget {
     ('', [Modul.projekt]),
     ('Planen', [Modul.grundriss, Modul.installation, Modul.haustechnik, Modul.verteiler]),
     ('Bibliothek', [Modul.bauteile, Modul.bauphysik]),
-    ('Ausführen', [Modul.kosten, Modul.tagebuch, Modul.fotos]),
+    ('Ausführen', [Modul.kosten, Modul.einkauf, Modul.tagebuch, Modul.fotos]),
     ('Ausgeben', [Modul.export, Modul.assistent]),
   ];
 

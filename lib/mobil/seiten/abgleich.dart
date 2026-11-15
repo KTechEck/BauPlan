@@ -73,7 +73,7 @@ class _AbgleichSeiteState extends State<AbgleichSeite> {
                   style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
               for (final (v, g) in liste) ...[
                 const SizedBox(height: 10),
-                Text('${v['kennung']} · ${k.plan.raumName(v['raum'] as String?)} (${g['kuerzel']})', style: Theme.of(context).textTheme.titleMedium),
+                Text('${v['kennung']} · ${k.plan.raumName(v['raum'] as String?)} (${g['name'] ?? g['kuerzel']})', style: Theme.of(context).textTheme.titleMedium),
                 for (final z in Planstand.liste(v['abgleich']))
                   Builder(builder: (_) {
                     final ist = z['ist_l_min'] as num?;

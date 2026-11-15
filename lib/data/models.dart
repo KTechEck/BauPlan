@@ -200,7 +200,13 @@ class Wand {
   int? get hoehe => (eigenschaften['hoehe'] as num?)?.round();
 
   /// Teilhohe Wand (Raumtrenner, Schamwand, Vorwand, Brüstung): bildet keine Raumgrenze.
-  bool get teilhoch => hoehe != null || (eigenschaften['art'] != null && eigenschaften['art'] != 'raumhoch');
+  bool get teilhoch => !istKante && (hoehe != null || (eigenschaften['art'] != null && eigenschaften['art'] != 'raumhoch'));
+
+  /// Offene Kante (Balkon-/Terrassenrand): begrenzt den Raum, ist aber keine Wand.
+  bool get istKante => eigenschaften['art'] == 'kante';
+
+  /// Geländer auf einer offenen Kante.
+  bool get gelaender => eigenschaften['gelaender'] == true;
 
   WandArt get art => WandArt.values.where((a) => a.name == eigenschaften['art']).firstOrNull ?? (hoehe != null ? WandArt.raumtrenner : WandArt.raumhoch);
   final int dicke;
@@ -251,7 +257,7 @@ Map<String, dynamic> _jsonOderLeer(Object? v) {
 }
 
 /// Art einer Wand: raumhoch oder teilhoch (bildet dann keine Raumgrenze).
-enum WandArt { raumhoch, raumtrenner, schamwand, vorwand, bruestung }
+enum WandArt { raumhoch, raumtrenner, schamwand, vorwand, bruestung, kante }
 
 extension WandArtText on WandArt {
   String get label => switch (this) {
@@ -260,6 +266,7 @@ extension WandArtText on WandArt {
         WandArt.schamwand => 'Schamwand (z. B. am WC)',
         WandArt.vorwand => 'Vorwand / Installationswand',
         WandArt.bruestung => 'Brüstung / Mäuerchen',
+        WandArt.kante => 'Offene Kante / Plattenrand (Balkon, Terrasse)',
       };
 
   /// übliche Höhe in mm
@@ -269,6 +276,7 @@ extension WandArtText on WandArt {
         WandArt.schamwand => 1200,
         WandArt.vorwand => 1200,
         WandArt.bruestung => 900,
+        WandArt.kante => 0,
       };
 }
 
