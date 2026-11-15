@@ -195,6 +195,12 @@ Map<String, dynamic> planstandErzeugen(ProjectStore store) {
     'geschosse': geschosse,
     'einkauf': _einkaufFuerApp(store, raumName, gewerkName, produkte),
     'aufmass': [for (final a in aufmassListe(store)) if (a['status'] == 'offen') a],
+    // am PC verworfene Maße: die App zeigt sie wieder als „neu messen“
+    'aufmass_verworfen': [
+      for (final a in aufmassListe(store))
+        if (a['status'] == 'verworfen' && (DateTime.tryParse('${a['zeit'] ?? ''}')?.isAfter(DateTime.now().subtract(const Duration(days: 60))) ?? false))
+          {for (final k in const ['id_ziel', 'feld', 'seite', 'bezug', 'zeit', 'wert']) if (a[k] != null) k: a[k]},
+    ],
     'verkleidungen': verkleidungenLesen?.call(store) ?? const [],
     'vorgaben': {'bohr_radius': store.einstellung<num>('bohr_radius') ?? 300},
     'aufgaben': [

@@ -210,7 +210,7 @@ class _InstallationPageState extends State<InstallationPage> {
     final verb = [for (final w in waende) w.verbinden ?? global];
     final nachbarn = [
       for (var i = 0; i < waende.length; i++)
-        if (verb[i]) achsen[i]
+        if (verb[i] && !waende[i].istKante) achsen[i]
     ];
     final raeume = g == null ? <Raum>[] : store.raeume(g);
     final gewerke = {for (final x in store.gewerke()) x.id: x};

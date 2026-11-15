@@ -147,3 +147,54 @@ Sparrenfeld sparrenfeldAnWand(Wand w, {required bool links, double? von, double?
     art: art,
   );
 }
+
+/// Sparrenlage über das ganze Geschoss: Sparren laufen in Richtung [richtung]
+/// (Einheitsvektor im Grundriss) über alle Wände hinweg, mit [ueberstand] an
+/// beiden Enden und an den Seiten. Bezugslinie quer dazu am Gebäuderand.
+Sparrenfeld sparrenlageGeschoss(List<Wand> waende, {required double rx, required double ry, double ueberstand = 500, double achsabstand = 750, String art = 'Dachsparren'}) {
+  final l = math.max(1e-9, math.sqrt(rx * rx + ry * ry));
+  final nx = rx / l, ny = ry / l; // Sparrenrichtung
+  final ux = -ny, uy = nx; // Bezugslinie
+  var uMin = double.infinity, uMax = -double.infinity, nMin = double.infinity, nMax = -double.infinity;
+  for (final w in waende) {
+    if (w.istKante && !w.gelaender) continue;
+    for (final (x, y) in [(w.x1, w.y1), (w.x2, w.y2)]) {
+      final u = x * ux + y * uy, n = x * nx + y * ny, h = w.dicke / 2;
+      uMin = math.min(uMin, u - h);
+      uMax = math.max(uMax, u + h);
+      nMin = math.min(nMin, n - h);
+      nMax = math.max(nMax, n + h);
+    }
+  }
+  if (!uMin.isFinite) {
+    uMin = 0;
+    uMax = 4000;
+    nMin = 0;
+    nMax = 4000;
+  }
+  final u0 = uMin - ueberstand, u1 = uMax + ueberstand, n0 = nMin - ueberstand;
+  final ax = ux * u0 + nx * n0, ay = uy * u0 + ny * n0;
+  final bx = ux * u1 + nx * n0, by = uy * u1 + ny * n0;
+  // Seite so, dass die Sparren in +n laufen: n = (uy·s, −ux·s)
+  final s = (uy * nx - ux * ny) >= 0 ? 1 : -1;
+  return Sparrenfeld(id: neueId(), ax: ax, ay: ay, bx: bx, by: by, seite: s, laenge: nMax - nMin + 2 * ueberstand, achsabstand: achsabstand, erster: ueberstand, art: art);
+}
+
+/// Nächstes Sparrenfeld zu einem Punkt (Abstand zu einem Sparren ≤ [toleranz]).
+String? sparrenfeldBei(List<Sparrenfeld> felder, double x, double y, double toleranz) {
+  String? best;
+  var bd = toleranz;
+  for (final f in felder) {
+    for (final (a, b) in f.strecken) {
+      final dx = b.$1 - a.$1, dy = b.$2 - a.$2;
+      final l2 = dx * dx + dy * dy;
+      final t = l2 == 0 ? 0.0 : (((x - a.$1) * dx + (y - a.$2) * dy) / l2).clamp(0.0, 1.0);
+      final d = math.sqrt(math.pow(x - (a.$1 + dx * t), 2) + math.pow(y - (a.$2 + dy * t), 2));
+      if (d < bd) {
+        bd = d;
+        best = f.id;
+      }
+    }
+  }
+  return best;
+}

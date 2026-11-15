@@ -771,13 +771,19 @@ class ProjectStore {
   /// Achse verlängert bzw. gekürzt – Winkel bleiben, es wird nur skaliert.
   void wandDickeVersetzen(String id, int alteDicke, int neueDicke, int festSeite) {
     if (festSeite == 0 || alteDicke == neueDicke) return;
+    wandQuerVersetzen(id, -festSeite * (neueDicke - alteDicke) / 2, protokoll: {'fest': festSeite, 'dicke': neueDicke});
+  }
+
+  /// Wand quer zu ihrer Richtung um [d] mm verschieben (positiv = nach links
+  /// der Zeichenrichtung); anstoßende Wände wachsen bzw. schrumpfen mit.
+  void wandQuerVersetzen(String id, double d, {Map<String, Object?>? protokoll}) {
+    if (d.abs() < 0.5) return;
     final alle = waende(_geschossDerWand(id) ?? '');
     final w = alle.where((x) => x.id == id).firstOrNull;
     if (w == null || w.gesperrt || w.laenge < 1) return;
     final l = w.laenge;
     final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
     final nlx = uy, nly = -ux;
-    final d = -festSeite * (neueDicke - alteDicke) / 2;
     final vx = nlx * d, vy = nly * d;
     // Schnitt der Geraden durch (px,py) Richtung (dx,dy) mit der neuen Wandachse
     (double, double)? schnitt(double px, double py, double dx, double dy) {
@@ -809,7 +815,7 @@ class ProjectStore {
     }
     db.execute('UPDATE wand SET x1 = ?, y1 = ?, x2 = ?, y2 = ? WHERE id = ?',
         [(w.x1 + vx).round(), (w.y1 + vy).round(), (w.x2 + vx).round(), (w.y2 + vy).round(), id]);
-    _protokoll('wand', id, 'versetzen', {'fest': festSeite, 'dicke': neueDicke});
+    _protokoll('wand', id, 'versetzen', protokoll ?? {'quer': d.round()});
     _nachWandAenderung(id);
   }
 

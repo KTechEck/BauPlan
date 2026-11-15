@@ -85,6 +85,15 @@ class _PlanSeiteState extends State<PlanSeite> {
           onSelectionChanged: (v) => setState(() => _modus = v.first),
         ),
       ),
+      if (k.verworfeneOffen > 0)
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: const Color(0xFFFFF4E6), borderRadius: BorderRadius.circular(8)),
+          child: Text('${k.verworfeneOffen} Maß(e) wurden am PC verworfen – sie zeigen wieder den Planwert (grau). Bitte neu messen.',
+              style: const TextStyle(color: Color(0xFFB45309), fontWeight: FontWeight.w600)),
+        ),
       Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
         child: Text(

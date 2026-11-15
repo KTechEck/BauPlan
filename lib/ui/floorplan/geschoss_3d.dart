@@ -67,7 +67,7 @@ _Daten? _lesen(AppState state, String geschossId) {
   final verb = [for (final w in waende) w.verbinden ?? global];
   final nachbarn = [
     for (var i = 0; i < waende.length; i++)
-      if (verb[i]) achsen[i]
+      if (verb[i] && !waende[i].istKante) achsen[i]
   ];
   var x0 = double.infinity, y0 = double.infinity, x1 = -double.infinity, y1 = -double.infinity;
   final w3 = <Wand3d>[];

@@ -13,21 +13,31 @@ import '../../state/app_state.dart';
 /// fürs ganze Geschoss), Achsabstand, Querschnitt, Länge mit Überstand,
 /// Neigung bearbeiten; Vorschau mit Wänden. In der App werden dieselben
 /// Felder auf der Baustelle aufgemessen.
-Future<void> sparrenDialogZeigen(BuildContext context, AppState s, String geschossId, {Wand? wand}) =>
-    showDialog<void>(context: context, builder: (_) => _SparrenDialog(state: s, geschossId: geschossId, wand: wand));
+Future<void> sparrenDialogZeigen(BuildContext context, AppState s, String geschossId, {Wand? wand, String? feldId}) =>
+    showDialog<void>(context: context, builder: (_) => _SparrenDialog(state: s, geschossId: geschossId, wand: wand, feldId: feldId));
 
 class _SparrenDialog extends StatefulWidget {
-  const _SparrenDialog({required this.state, required this.geschossId, this.wand});
+  const _SparrenDialog({required this.state, required this.geschossId, this.wand, this.feldId});
   final AppState state;
   final String geschossId;
   final Wand? wand;
+  final String? feldId;
 
   @override
   State<_SparrenDialog> createState() => _SparrenDialogState();
 }
 
 class _SparrenDialogState extends State<_SparrenDialog> {
-  String? _gewaehlt;
+  late String? _gewaehlt = widget.feldId;
+  final _ueberstand = TextEditingController(text: '500');
+
+  /// Sparrenlage über das ganze Geschoss in Richtung (rx, ry).
+  void _geschossLage(double rx, double ry) {
+    final store = widget.state.store!;
+    final f = sparrenlageGeschoss(store.waende(widget.geschossId), rx: rx, ry: ry, ueberstand: double.tryParse(_ueberstand.text) ?? 500);
+    _speichern([...sparrenfelder(store, widget.geschossId), f]);
+    _gewaehlt = f.id;
+  }
 
   void _speichern(List<Sparrenfeld> l) {
     sparrenfelderSetzen(widget.state.store!, widget.geschossId, l);
@@ -73,15 +83,29 @@ class _SparrenDialogState extends State<_SparrenDialog> {
           const SizedBox(width: 16),
           Expanded(
             child: ListView(children: [
-              if (widget.wand != null)
+              const Text('Neue Sparrenlage über das ganze Geschoss (über alle Wände, mit Überstand):', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                SizedBox(
+                  width: 130,
+                  child: TextField(controller: _ueberstand, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Überstand', suffixText: 'mm', isDense: true)),
+                ),
+                OutlinedButton(onPressed: () => _geschossLage(0, 1), child: const Text('Sparren oben ↕ unten')),
+                OutlinedButton(onPressed: () => _geschossLage(1, 0), child: const Text('Sparren links ↔ rechts')),
+                if (widget.wand case final w?)
+                  OutlinedButton(onPressed: () => _geschossLage(-(w.y2 - w.y1).toDouble(), (w.x2 - w.x1).toDouble()), child: const Text('quer zur gewählten Wand')),
+              ]),
+              if (widget.wand != null) ...[
+                const SizedBox(height: 8),
+                const Text('Oder an der gewählten Wand beginnend:', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   for (final links in [true, false]) ...[
-                    OutlinedButton(onPressed: () => _neu(ganzesGeschoss: true, links: links), child: Text('Ganzes Geschoss, Seite ${links ? 'A' : 'B'}')),
-                    OutlinedButton(onPressed: () => _neu(ganzesGeschoss: false, links: links), child: Text('Nur Raum, Seite ${links ? 'A' : 'B'}')),
+                    OutlinedButton(onPressed: () => _neu(ganzesGeschoss: true, links: links), child: Text('ab Wand, Seite ${links ? 'A' : 'B'}')),
+                    OutlinedButton(onPressed: () => _neu(ganzesGeschoss: false, links: links), child: Text('nur Raum, Seite ${links ? 'A' : 'B'}')),
                   ],
-                ])
-              else
-                const Text('Neues Feld: im Grundriss eine Wand wählen (Traufwand) und dort „Sparren …“ öffnen.', style: TextStyle(color: BsFarben.textLeise)),
+                ]),
+              ],
+              const Text('Tipp: Sparren werden im Grundriss gezeichnet – Klick auf einen Sparren öffnet seine Lage.', style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
               const SizedBox(height: 8),
               for (final x in felder)
                 ListTile(
@@ -109,13 +133,16 @@ class _SparrenDialogState extends State<_SparrenDialog> {
                     SizedBox(
                       width: 180,
                       child: TextFormField(
-                        key: ValueKey('${f.id}-${e.key}-${f.toJson()[e.key]}'),
+                        key: ValueKey('${f.id}-${e.key}'),
                         initialValue: '${f.toJson()[e.key]}',
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
                         decoration: InputDecoration(labelText: e.value, suffixText: e.key == 'neigung' ? '°' : 'mm', isDense: true),
-                        onFieldSubmitted: (v) {
+                        // gilt sofort beim Tippen
+                        onChanged: (v) {
                           final z = num.tryParse(v.replaceAll(',', '.'));
-                          if (z != null) _speichern([for (final y in felder) y.id == f.id ? y.mitWert(e.key, z) : y]);
+                          if (z == null) return;
+                          final akt = sparrenfelder(widget.state.store!, widget.geschossId);
+                          _speichern([for (final y in akt) y.id == f.id ? y.mitWert(e.key, z) : y]);
                         },
                       ),
                     ),

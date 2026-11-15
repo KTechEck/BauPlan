@@ -401,7 +401,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
     final verbinden = [for (final w in waende) _verbindet(w)];
     final nachbarn = [
       for (var i = 0; i < waende.length; i++)
-        if (verbinden[i]) achsen[i]
+        if (verbinden[i] && !waende[i].istKante) achsen[i]
     ];
     final plan = _Plan(
       waende: waende,
@@ -1202,6 +1202,17 @@ class _FloorplanPageState extends State<FloorplanPage> {
       });
       _s.raumWaehlen(null);
       return;
+    }
+    // Klick auf einen Sparren (ohne Wand darunter): seine Sparrenlage öffnen
+    if (_wandTreffer(welt, plan.waende) == null && _s.settings.darstellung['sparren_aus'] != true && _s.geschossId != null) {
+      final felder = sparrenfelder(_s.store!, _s.geschossId!);
+      final id = sparrenfeldBei(felder, welt.dx, welt.dy, 8 / _massstab);
+      if (id != null) {
+        sparrenDialogZeigen(context, _s, _s.geschossId!, feldId: id).then((_) {
+          if (mounted) setState(() {});
+        });
+        return;
+      }
     }
     // Einfacher Klick ohne Wand: Raum oder Fläche wählen, Auswahl leeren.
     if (_wandTreffer(welt, plan.waende) == null) {
@@ -2473,6 +2484,55 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return KeyEventResult.ignored;
   }
 
+  /// Parallele Nachbarwände in Verlängerung mit versetzter Achse (Absatz):
+  /// Knöpfe, um eine Seite oder die Achse bündig zu machen.
+  List<Widget> _fluchtFelder(Wand w) {
+    final store = _s.store!;
+    if (w.laenge < 1 || w.gesperrt) return const [];
+    final ux = (w.x2 - w.x1) / w.laenge, uy = (w.y2 - w.y1) / w.laenge;
+    final nlx = uy, nly = -ux;
+    final alle = store.waende(w.geschossId);
+    final raeume = store.raeume(w.geschossId);
+    final mm = wandMasse(alle, raeume, verbindenStandard: _eckenVerbinden)[w.id];
+    String seite(String? raumId, String sonst) => raeume.where((r) => r.id == raumId).firstOrNull?.name ?? sonst;
+    final aus = <Widget>[];
+    for (final o in alle) {
+      if (o.id == w.id || o.laenge < 1 || o.istKante || o.teilhoch) continue;
+      final ox = (o.x2 - o.x1) / o.laenge, oy = (o.y2 - o.y1) / o.laenge;
+      if ((ox * uy - oy * ux).abs() > 0.01) continue; // nicht parallel
+      final off = (o.x1 - w.x1) * nlx + (o.y1 - w.y1) * nly;
+      if (off.abs() < 1 || off.abs() > 400) continue;
+      // in Verlängerung: ein Ende der Nachbarwand nahe einem Ende dieser Wand (entlang der Achse)
+      double t(int x, int y) => (x - w.x1) * ux + (y - w.y1) * uy;
+      final ts = [t(o.x1, o.y1), t(o.x2, o.y2)];
+      if (!ts.any((v) => v.abs() < 400 || (v - w.laenge).abs() < 400)) continue;
+      final hw = w.dicke / 2, ho = o.dicke / 2;
+      final varianten = <(String, double)>[
+        ('Seite ${seite(mm?.raumLinks, 'außen')} bündig', off + ho - hw),
+        ('Seite ${seite(mm?.raumRechts, 'außen')} bündig', off - ho + hw),
+        ('Achse fluchten', off),
+      ];
+      aus.add(Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('Absatz zur Nachbarwand (${mmText(off.abs().round())} versetzt) – bündig machen:', style: const TextStyle(fontSize: 12, color: Color(0xFFB45309))),
+      ));
+      aus.add(Wrap(spacing: 6, runSpacing: 4, children: [
+        for (final (text, d) in varianten)
+          if (d.abs() >= 1)
+            OutlinedButton(
+              onPressed: () {
+                store.wandQuerVersetzen(w.id, d);
+                _rueckgaengig.add(() => store.wandQuerVersetzen(w.id, -d));
+                _s.geaendert();
+              },
+              child: Text(text),
+            ),
+      ]));
+      break;
+    }
+    return aus;
+  }
+
   /// Wände am Rand eines Balkons/einer Terrasse, hinter denen kein Innenraum
   /// liegt, zur offenen Kante machen (rückgängig machbar).
   void _raenderAlsKante(Raum r) {
@@ -3080,6 +3140,15 @@ class _FloorplanPageState extends State<FloorplanPage> {
                     }
                   });
                   _s.settings.speichern();
+                case 'sparren_neu':
+                  if (_s.geschossId != null) {
+                    sparrenDialogZeigen(context, _s, _s.geschossId!).then((_) {
+                      if (mounted) setState(() {});
+                    });
+                  }
+                case 'sparren_aus':
+                  setState(() => _s.settings.darstellung['sparren_aus'] = _s.settings.darstellung['sparren_aus'] != true);
+                  _s.settings.speichern();
                 case 'raster':
                   setState(() => _s.settings.darstellung['raster_aus'] = _s.settings.darstellung['raster_aus'] != true);
                   _s.settings.speichern();
@@ -3128,6 +3197,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
               CheckedPopupMenuItem(value: 'raster', checked: _s.settings.darstellung['raster_aus'] == true, child: const Text('Raster ausblenden')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'dach', child: ListTile(dense: true, leading: Icon(Icons.roofing), title: Text('Dachgeschoss: Dach, Sparren, Kniestock …'))),
+              const PopupMenuItem(value: 'sparren_neu', child: ListTile(dense: true, leading: Icon(Icons.view_week_outlined), title: Text('Sparrenlage über das Geschoss …'))),
+              CheckedPopupMenuItem(value: 'sparren_aus', checked: _s.settings.darstellung['sparren_aus'] != true, child: const Text('Sparren im Grundriss zeigen')),
               const PopupMenuDivider(),
               CheckedPopupMenuItem(value: 'unterlage', checked: _unterlage, child: const Text('Geschoss darunter einblenden (Wände, Verknüpfung)')),
               const PopupMenuItem(value: 'statiker', child: ListTile(dense: true, leading: Icon(Icons.picture_as_pdf_outlined), title: Text('Mappe für den Statiker (PDF) …'))),
@@ -3405,6 +3476,12 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   massDichte: (_s.settings.darstellung['mass_dichte'] as num?)?.toDouble() ?? 1,
                   massSchrift: (_s.settings.darstellung['mass_schrift'] as num?)?.toDouble() ?? 1,
                   raster: _s.settings.darstellung['raster_aus'] != true,
+                  sparren: _s.settings.darstellung['sparren_aus'] == true || _s.geschossId == null
+                      ? const []
+                      : [
+                          for (final f in sparrenfelder(_s.store!, _s.geschossId!))
+                            for (final (a, b) in f.strecken) (Offset(a.$1, a.$2), Offset(b.$1, b.$2), f.breite, false),
+                        ],
                   massAbPxJeM: (_s.settings.darstellung['mass_ab'] as num?)?.toDouble() ?? 25,
                   beideAbPxJeM: (_s.settings.darstellung['beide_ab'] as num?)?.toDouble() ?? 70,
                   waende: _versatz == Offset.zero ? plan.waende : _verschobeneVorschau(plan.waende),
@@ -4495,6 +4572,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           ),
         ],
         const SizedBox(height: 12),
+        ..._fluchtFelder(w),
         ..._statikFelder(w),
         const SizedBox(height: 12),
         Text('von (${mmText(w.x1)} | ${mmText(w.y1)})  nach (${mmText(w.x2)} | ${mmText(w.y2)})',

@@ -36,6 +36,8 @@ class EinbauDetail {
     this.laibungLambda = 0.035,
     this.innenLaibungDaemmung = 0,
     this.innenLaibungLambda = 0.06,
+    this.zusatz = 0,
+    this.zusatzLambda = 0.04,
     this.wandLaenge = 1000,
     this.glasLaenge = 190,
   });
@@ -58,7 +60,15 @@ class EinbauDetail {
   /// Dämmung auf der inneren Laibung (z. B. Kalziumsilikat), Dicke.
   final int innenLaibungDaemmung;
   final double innenLaibungLambda;
+
+  /// Zusatzschicht zwischen Wandausschnitt (Laibung) und Fuge, z. B.
+  /// Montagezarge oder Dämmkeil (Dicke, λ). 0 = keine.
+  final int zusatz;
+  final double zusatzLambda;
   final int wandLaenge, glasLaenge;
+
+  /// Abstand Laibung → Rahmen (Zusatzschicht + Fuge).
+  int get spalt => zusatz + fuge;
 
   int get wanddicke => schichten.fold(0, (s, x) => s + x.dicke);
 
@@ -82,6 +92,8 @@ class EinbauDetail {
         laibungLambda: laibungLambda ?? this.laibungLambda,
         innenLaibungDaemmung: innenLaibungDaemmung ?? this.innenLaibungDaemmung,
         innenLaibungLambda: innenLaibungLambda,
+        zusatz: zusatz,
+        zusatzLambda: zusatzLambda,
         wandLaenge: wandLaenge,
         glasLaenge: glasLaenge,
       );
@@ -131,7 +143,7 @@ class WbErgebnis {
 (List<WbZelle>, Float64List, int, int, double) _gitter(EinbauDetail d, double h) {
   final dicke = d.wanddicke.toDouble();
   final nx = (dicke / h).ceil();
-  final yMin = -(d.fuge + d.rahmenBreite + d.glasLaenge).toDouble();
+  final yMin = -(d.spalt + d.rahmenBreite + d.glasLaenge).toDouble();
   final yMax = d.wandLaenge.toDouble();
   final ny = ((yMax - yMin) / h).ceil();
   final art = List<WbZelle>.filled(nx * ny, WbZelle.aussenluft);
@@ -161,10 +173,13 @@ class WbErgebnis {
         continue;
       }
       final inRahmenX = x >= e && x <= e + b;
-      if (inRahmenX && y >= -d.fuge) {
+      if (inRahmenX && y >= -d.zusatz) {
+        art[k] = WbZelle.daemmung;
+        lam[k] = d.zusatzLambda;
+      } else if (inRahmenX && y >= -d.spalt) {
         art[k] = WbZelle.fuge;
         lam[k] = d.fugeLambda;
-      } else if (inRahmenX && y >= -(d.fuge + d.rahmenBreite)) {
+      } else if (inRahmenX && y >= -(d.spalt + d.rahmenBreite)) {
         art[k] = WbZelle.rahmen;
         lam[k] = d.lambdaRahmen;
       } else if (x >= glasX0 && x <= glasX1) {
@@ -284,7 +299,7 @@ WbErgebnis waermebrueckeBerechnen(EinbauDetail d, {double h = 5}) {
   final (art, lam, nx, ny, y0) = _gitter(d, h);
   final (_, q) = _loesen(art, lam, nx, ny, h, rsiWaerme);
   final l2d = q / (thetaI - thetaE);
-  final lWand = d.wandLaenge / 1000, lRahmen = (d.fuge + d.rahmenBreite) / 1000, lGlas = d.glasLaenge / 1000;
+  final lWand = d.wandLaenge / 1000, lRahmen = (d.spalt + d.rahmenBreite) / 1000, lGlas = d.glasLaenge / 1000;
   final psi = l2d - d.uWand * lWand - d.uf * lRahmen - d.ug * lGlas;
   final (tF, _) = _loesen(art, lam, nx, ny, h, rsiFeuchte);
   // minimale Oberflächentemperatur innen

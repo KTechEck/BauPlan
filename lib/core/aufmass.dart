@@ -79,7 +79,7 @@ Map<String, WandMasse> wandMasse(List<Wand> waende, List<Raum> raeume, {bool ver
   final achsen = [for (final w in waende) w.achse];
   final nachbarn = [
     for (var i = 0; i < waende.length; i++)
-      if (waende[i].verbinden ?? verbindenStandard) achsen[i]
+      if ((waende[i].verbinden ?? verbindenStandard) && !waende[i].istKante) achsen[i]
   ];
   final aus = <String, WandMasse>{};
   final gesehen = <String>{};
@@ -626,7 +626,9 @@ int festeSeite(ProjectStore store, Wand w) {
   final raeume = store.raeume(w.geschossId);
   final m = wandMasse(store.waende(w.geschossId), raeume, verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true)[w.id];
   if (m == null) return 0;
-  final l = m.raumLinks, r = m.raumRechts;
+  // Balkon/Terrasse/Loggia zählen als außen: die Innenraumseite bleibt fest
+  bool innen(String? id) => id != null && raeume.where((x) => x.id == id).firstOrNull?.art == RaumArt.raum;
+  final l = innen(m.raumLinks) ? m.raumLinks : null, r = innen(m.raumRechts) ? m.raumRechts : null;
   if (l != null && r == null) return 1;
   if (r != null && l == null) return -1;
   if (l == null || r == null) return 0;

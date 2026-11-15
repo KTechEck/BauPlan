@@ -759,3 +759,17 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   (Dämmmaterial) und Fenster mit Materialwahl.
 - Sparren: Eingabe neu – Sparrenlage über das ganze Geschoss (Richtung, Achsabstand, Breite, Startpunkt), als Ganzes auswählbar und änderbar,
   einzelne Sparren verschiebbar; Dachschrägen eingeben (Kniestock, Neigung, Traufseite) und in der Wandansicht als Schräge zeigen/zeichnen.
+
+## Build 34 (15.11.) – Tims Rückmeldungen zu Build 33
+- App-Aufmaß: Puffer der App überschrieb die Wand-ID (Fehler „Bauteil gibt es nicht mehr“) – behoben; ältere Maße findet der PC über Raum/Seite/Planlänge
+  (aufmassZielAufloesen, nur wenn eindeutig).
+- App: verworfene Aufmaße kommen im Planstand mit (`aufmass_verworfen`); die App zeigt dann wieder den Planwert und einen Hinweis „neu messen“.
+- Offene Kante: anstoßende Wände werden nicht mehr mit ihr verschnitten (alle Umriss-Berechnungen schließen Kanten aus).
+- Absatz zur Nachbarwand: Wand-Eigenschaften zeigen bei parallel versetzter Nachbarwand Knöpfe „Seite … bündig / Achse fluchten“ (wandQuerVersetzen,
+  anstoßende Wände wachsen mit); bei Dickenänderung zählen Balkon/Terrasse/Loggia als außen (Innenraumseite bleibt fest).
+- Einbaudetail: Abschnitte 1. Fuge (Stoff → Dicke → λ), 2. Zusatzschicht zwischen Wandausschnitt und Fuge (neu, `zusatz_an/zusatz/zusatz_lambda`, im
+  Rechengitter), 3. Laibungsdämmung außen, 4. innere Laibung; alle Zahlen gelten beim Tippen.
+- Sparren: „Sparrenlage über das Geschoss …“ (Grundriss-Optionen und Sparren-Dialog): oben↕unten, links↔rechts oder quer zur Wand, über alle Wände mit
+  Überstand; Sparren im Grundriss gezeichnet (abschaltbar), Klick auf einen Sparren öffnet seine Lage; Werte gelten beim Tippen.
+- Wandansicht: „Dachschräge …“ – Kniestock, Deckenhöhe, Tiefe oder Neigung für diese Wandseite (im Raum gespeichert wie das App-Aufmaß), Strg+Z.
+- Tests test/build34_test.dart; 304 Tests grün.

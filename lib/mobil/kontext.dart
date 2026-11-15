@@ -56,6 +56,12 @@ class MobilKontext {
     final offen = plan.aufmassOffen.where((a) =>
         a['id_ziel'] == ziel['id'] && a['feld'] == feld && (seite == null || a['seite'] == seite) && (bezug == null || a['bezug'] == bezug));
     if (offen.isNotEmpty) return (wert: (offen.last['wert'] as num).round(), uebernommen: false);
+    // am PC verworfen: dieses Maß gilt nicht mehr – neu messen
+    if (lokal != null && istVerworfen(ziel, feld, seite: seite, bezug: bezug)) {
+      final g = ziel['gemessen'];
+      final v = g is Map ? (g[bezug == null ? feld : '${feld}_$bezug'] ?? g[feld]) : null;
+      return v is num ? (wert: v.round(), uebernommen: true) : null;
+    }
     final g = ziel['gemessen'];
     if (g is Map) {
       final v = g[bezug == null ? feld : '${feld}_$bezug'] ?? g[feld];
@@ -69,6 +75,32 @@ class MobilKontext {
     }
     if (lokal != null) return (wert: (lokal['wert'] as num).round(), uebernommen: false);
     return null;
+  }
+
+  /// Wurde das zuletzt hier gemessene Maß für dieses Ziel am PC verworfen?
+  bool istVerworfen(Map<String, dynamic> ziel, String feld, {String? seite, String? bezug}) {
+    final lokal = einstellungen.aufmass[aufmassSchluessel('${ziel['id']}', feld, seite: seite, bezug: bezug)];
+    if (lokal == null) return false;
+    final t = DateTime.tryParse('${lokal['zeit']}');
+    if (t == null) return false;
+    return plan.aufmassVerworfen.any((a) {
+      if (a['id_ziel'] != ziel['id'] || a['feld'] != feld || (seite != null && a['seite'] != seite) || (bezug != null && a['bezug'] != bezug)) return false;
+      final v = DateTime.tryParse('${a['zeit']}');
+      // die verworfene Erfassung ist die lokale (oder eine spätere): lokal ist nicht neuer als sie
+      return v != null && !t.isAfter(v.add(const Duration(seconds: 5)));
+    });
+  }
+
+  /// Am PC verworfene, noch nicht neu gemessene Maße (für den Hinweis in der App).
+  int get verworfeneOffen {
+    var n = 0;
+    for (final a in plan.aufmassVerworfen) {
+      final k = aufmassSchluessel('${a['id_ziel']}', '${a['feld']}', seite: a['seite'] as String?, bezug: a['bezug'] as String?);
+      final lokal = einstellungen.aufmass[k];
+      final t = DateTime.tryParse('${lokal?['zeit']}'), v = DateTime.tryParse('${a['zeit']}');
+      if (lokal != null && t != null && v != null && !t.isAfter(v.add(const Duration(seconds: 5)))) n++;
+    }
+    return n;
   }
 
   /// Ein Maß aufnehmen: lokal merken und als Erfassung schicken.

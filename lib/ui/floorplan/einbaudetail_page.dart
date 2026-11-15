@@ -37,9 +37,13 @@ class _EinbaudetailPageState extends State<EinbaudetailPage> {
 
   Map<String, dynamic> get _einbau => Map<String, dynamic>.from(_oeffnung?.eigenschaften['einbau'] as Map? ?? const {});
 
-  void _einbauSetzen(Map<String, dynamic> neu) {
+  /// Zähler für die Eingabefelder: steigt, wenn Werte von außen kommen.
+  int _feldStand = 0;
+
+  void _einbauSetzen(Map<String, dynamic> neu, {bool vonFeld = false}) {
     final o = _oeffnung;
     if (o == null) return;
+    if (!vonFeld) _feldStand++;
     _s.store!.oeffnungAendern(o.id, {
       'eigenschaften': jsonEncode({...o.eigenschaften, 'einbau': {..._einbau, ...neu}}),
     });
@@ -100,6 +104,8 @@ class _EinbaudetailPageState extends State<EinbaudetailPage> {
       fugeLambda: (e['fuge_lambda'] as num?)?.toDouble() ?? 0.035,
       innenLaibungDaemmung: ganz('innenlaibung', 0),
       innenLaibungLambda: (e['innenlaibung_lambda'] as num?)?.toDouble() ?? 0.06,
+      zusatz: e['zusatz_an'] == true ? ganz('zusatz', 20) : 0,
+      zusatzLambda: (e['zusatz_lambda'] as num?)?.toDouble() ?? 0.04,
     );
   }
 
@@ -143,18 +149,53 @@ class _EinbaudetailPageState extends State<EinbaudetailPage> {
     final r = _ergebnis;
     final veraltet = r != null && _gerechnetFuer != null && jsonEncode(_kennung(_gerechnetFuer!)) != jsonEncode(_kennung(d));
 
+    // Werte gelten sofort beim Tippen (ohne Enter); Schlüssel ändert sich nur,
+    // wenn ein Wert von außen kommt (Dämmstoff gewählt), damit der Cursor bleibt.
     Widget zahl(String label, String schluessel, num wert, {String einheit = 'mm', String? hilfe, bool komma = false}) => SizedBox(
           width: 220,
           child: SpeicherFeld(
-            key: ValueKey('ein-$schluessel-$wert'),
+            key: ValueKey('ein-$schluessel-$_feldStand'),
             initialValue: komma ? '$wert'.replaceAll('.', ',') : '$wert',
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(komma ? r'[0-9,.]' : r'[0-9]'))],
             decoration: InputDecoration(labelText: label, suffixText: einheit, helperText: hilfe),
+            onChanged: (v) {
+              final n = num.tryParse(v.replaceAll(',', '.'));
+              if (n != null) _einbauSetzen({schluessel: n}, vonFeld: true);
+            },
             onFieldSubmitted: (v) {
               final n = num.tryParse(v.replaceAll(',', '.'));
-              if (n != null) _einbauSetzen({schluessel: n});
+              if (n != null) _einbauSetzen({schluessel: n}, vonFeld: true);
             },
           ),
+        );
+    final daemmstoffe = _s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff);
+    final fugenstoffe = [..._s.bibliothek.auswahl(store, BauelementKategorie.dichtstoff), ...daemmstoffe];
+    Widget materialWahl(String titel, String matKey, String dickeKey, String lambdaKey, List<Bauelement> liste, String leer, {double vorgabeLambda = 0.035}) =>
+        DropdownButtonFormField<String?>(
+          key: ValueKey('mat-$matKey-${e[matKey]}'),
+          isExpanded: true,
+          initialValue: liste.any((x) => x.id == e[matKey]) ? e[matKey] as String : null,
+          decoration: InputDecoration(labelText: titel),
+          items: [
+            DropdownMenuItem(value: null, child: Text(leer)),
+            for (final x in liste)
+              DropdownMenuItem(value: x.id, child: Text('${x.anzeige}${x.zahl('lambda') == null ? '' : ' · λ ${x.zahl('lambda').toString().replaceAll('.', ',')}'}', overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (id) {
+            final x = _s.bibliothek.fuerProjekt(store, id);
+            _einbauSetzen({
+              matKey: id,
+              lambdaKey: x?.zahl('lambda') ?? vorgabeLambda,
+              if (x?.zahl('dicke') != null) dickeKey: x!.zahl('dicke')!.toInt(),
+            });
+          },
+        );
+    Widget abschnitt(String titel, String? text) => Padding(
+          padding: const EdgeInsets.only(top: 14, bottom: 4),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(titel, style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (text != null) Text(text, style: const TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+          ]),
         );
 
     return Scaffold(
@@ -195,82 +236,44 @@ class _EinbaudetailPageState extends State<EinbaudetailPage> {
               const Divider(height: 24),
               Text('Einbau', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 6),
+              zahl('Einbaulage', 'einbaulage', d.einbaulage, hilfe: 'Außenkante Rahmen ab Wandaußenseite'),
+              abschnitt('1. Dämmung zwischen Fenster und Laibung (Fuge)', 'Erst den Stoff wählen, dann die Dicke'),
+              materialWahl('Stoff der Fuge', 'fuge_material', 'fuge', 'fuge_lambda', fugenstoffe, '– PU-Schaum (Vorgabe, λ 0,035) –'),
+              const SizedBox(height: 6),
               Wrap(spacing: 12, runSpacing: 10, children: [
-                zahl('Einbaulage', 'einbaulage', d.einbaulage, hilfe: 'Außenkante Rahmen ab Wandaußenseite'),
-                zahl('Fuge Rahmen–Laibung', 'fuge', d.fuge, hilfe: 'Kompriband, PU-Schaum oder Dämmstoff'),
-                zahl('Laibungsdämmung außen', 'laibung', d.laibungDaemmung, hilfe: 'Dicke auf der äußeren Laibung'),
-                zahl('λ Laibungsdämmung', 'laibung_lambda', d.laibungLambda, einheit: 'W/(mK)', komma: true),
-                zahl('Dämmung innere Laibung', 'innenlaibung', d.innenLaibungDaemmung, hilfe: 'z. B. Kalziumsilikat, λ 0,06'),
-                zahl('λ innere Laibung', 'innenlaibung_lambda', d.innenLaibungLambda, einheit: 'W/(mK)', komma: true),
+                zahl('Dicke Fuge', 'fuge', d.fuge, hilfe: 'Abstand Rahmen ↔ Laibung'),
+                zahl('λ Fuge', 'fuge_lambda', d.fugeLambda, einheit: 'W/(mK)', komma: true),
               ]),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String?>(
-                key: ValueKey('laib-mat-${e['laibung_material']}'),
-                isExpanded: true,
-                initialValue: _s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff).any((x) => x.id == e['laibung_material']) ? e['laibung_material'] as String : null,
-                decoration: const InputDecoration(labelText: 'Dämmstoff äußere Laibung (aus der Bibliothek)', helperText: 'übernimmt λ und Dicke – oder oben frei eingeben'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('– frei eingegeben –')),
-                  for (final x in _s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff))
-                    DropdownMenuItem(value: x.id, child: Text('${x.anzeige} · ${x.kurzdaten}', overflow: TextOverflow.ellipsis)),
-                ],
-                onChanged: (id) {
-                  final x = _s.bibliothek.fuerProjekt(store, id);
-                  _einbauSetzen({
-                    'laibung_material': id,
-                    if (x?.zahl('lambda') != null) 'laibung_lambda': x!.zahl('lambda'),
-                    if (x?.zahl('dicke') != null) 'laibung': x!.zahl('dicke')!.toInt(),
-                  });
-                },
+              abschnitt('2. Zusatzschicht zwischen Wandausschnitt und Fuge', 'z. B. Montagezarge, Dämmkeil oder Anputzschicht direkt auf der Laibung'),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('Zusatzschicht einbauen'),
+                value: e['zusatz_an'] == true,
+                onChanged: (v) => _einbauSetzen({'zusatz_an': v}),
               ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String?>(
-                key: ValueKey('ilaib-mat-${e['innenlaibung_material']}'),
-                isExpanded: true,
-                initialValue: _s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff).any((x) => x.id == e['innenlaibung_material']) ? e['innenlaibung_material'] as String : null,
-                decoration: const InputDecoration(labelText: 'Dämmstoff innere Laibung (aus der Bibliothek)', helperText: 'z. B. Kalziumsilikat- oder PIR-Laibungsplatte'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('– frei eingegeben –')),
-                  for (final x in _s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff))
-                    DropdownMenuItem(value: x.id, child: Text('${x.anzeige} · ${x.kurzdaten}', overflow: TextOverflow.ellipsis)),
-                ],
-                onChanged: (id) {
-                  final x = _s.bibliothek.fuerProjekt(store, id);
-                  _einbauSetzen({
-                    'innenlaibung_material': id,
-                    if (x?.zahl('lambda') != null) 'innenlaibung_lambda': x!.zahl('lambda'),
-                    if (x?.zahl('dicke') != null) 'innenlaibung': x!.zahl('dicke')!.toInt(),
-                  });
-                },
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String?>(
-                key: ValueKey('fuge-mat-${e['fuge_material']}'),
-                isExpanded: true,
-                initialValue: [
-                  ..._s.bibliothek.auswahl(store, BauelementKategorie.dichtstoff),
-                  ..._s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff),
-                ].any((x) => x.id == e['fuge_material'])
-                    ? e['fuge_material'] as String
-                    : null,
-                decoration: InputDecoration(
-                  labelText: 'Zwischen Rahmen und Laibung (Fuge / Dämmung)',
-                  helperText: 'λ ${d.fugeLambda.toStringAsFixed(3).replaceAll('.', ',')} – PU-Schaum dämmt besser (≈ 0,035) als Kompriband (≈ 0,048), '
-                      'Kompriband dichtet dafür dauerhaft gegen Schlagregen',
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('– PU-Schaum (Vorgabe, λ 0,035) –')),
-                  for (final x in [
-                    ..._s.bibliothek.auswahl(store, BauelementKategorie.dichtstoff),
-                    ..._s.bibliothek.auswahl(store, BauelementKategorie.daemmstoff),
-                  ])
-                    if (x.zahl('lambda') != null) DropdownMenuItem(value: x.id, child: Text('${x.anzeige} · λ ${x.zahl('lambda').toString().replaceAll('.', ',')}', overflow: TextOverflow.ellipsis)),
-                ],
-                onChanged: (id) {
-                  final x = _s.bibliothek.fuerProjekt(store, id);
-                  _einbauSetzen({'fuge_material': id, 'fuge_lambda': x?.zahl('lambda') ?? 0.035});
-                },
-              ),
+              if (e['zusatz_an'] == true) ...[
+                materialWahl('Stoff der Zusatzschicht', 'zusatz_material', 'zusatz', 'zusatz_lambda', [...daemmstoffe, ..._s.bibliothek.auswahl(store, BauelementKategorie.baustoff)], '– frei (λ unten) –', vorgabeLambda: 0.04),
+                const SizedBox(height: 6),
+                Wrap(spacing: 12, runSpacing: 10, children: [
+                  zahl('Dicke Zusatzschicht', 'zusatz', d.zusatz),
+                  zahl('λ Zusatzschicht', 'zusatz_lambda', d.zusatzLambda, einheit: 'W/(mK)', komma: true),
+                ]),
+              ],
+              abschnitt('3. Laibungsdämmung außen', 'überdeckt den Rahmen von außen (Überdämmung)'),
+              materialWahl('Dämmstoff äußere Laibung', 'laibung_material', 'laibung', 'laibung_lambda', daemmstoffe, '– frei eingegeben –'),
+              const SizedBox(height: 6),
+              Wrap(spacing: 12, runSpacing: 10, children: [
+                zahl('Dicke', 'laibung', d.laibungDaemmung),
+                zahl('λ', 'laibung_lambda', d.laibungLambda, einheit: 'W/(mK)', komma: true),
+              ]),
+              abschnitt('4. Dämmung innere Laibung', 'z. B. Kalziumsilikat- oder PIR-Laibungsplatte'),
+              materialWahl('Dämmstoff innere Laibung', 'innenlaibung_material', 'innenlaibung', 'innenlaibung_lambda', daemmstoffe, '– frei eingegeben –', vorgabeLambda: 0.06),
+              const SizedBox(height: 6),
+              Wrap(spacing: 12, runSpacing: 10, children: [
+                zahl('Dicke', 'innenlaibung', d.innenLaibungDaemmung),
+                zahl('λ', 'innenlaibung_lambda', d.innenLaibungLambda, einheit: 'W/(mK)', komma: true),
+              ]),
               const Divider(height: 24),
               Text('Sonnen- und Insektenschutz', style: Theme.of(context).textTheme.titleSmall),
               if (rollladen == null)
@@ -425,7 +428,7 @@ class _EinbaudetailPageState extends State<EinbaudetailPage> {
     );
   }
 
-  List<num> _kennung(EinbauDetail d) => [d.einbaulage, d.fuge, d.fugeLambda, d.laibungDaemmung, d.laibungLambda, d.innenLaibungDaemmung, d.innenLaibungLambda, d.rahmenBautiefe, d.uf, d.ug, ...d.schichten.map((s) => s.dicke)];
+  List<num> _kennung(EinbauDetail d) => [d.einbaulage, d.fuge, d.fugeLambda, d.zusatz, d.zusatzLambda, d.laibungDaemmung, d.laibungLambda, d.innenLaibungDaemmung, d.innenLaibungLambda, d.rahmenBautiefe, d.uf, d.ug, ...d.schichten.map((s) => s.dicke)];
 
   Widget _wert(String label, String wert, {Color? farbe}) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
@@ -462,7 +465,7 @@ class _Zubehoer {
 
 void _zubehoerZeichnen(Canvas canvas, Offset Function(double x, double y) p, EinbauDetail d, _Zubehoer z, double yMin) {
   final e = d.einbaulage.toDouble();
-  final rahmenAussen = -(d.fuge + d.rahmenBreite).toDouble();
+  final rahmenAussen = -(d.spalt + d.rahmenBreite).toDouble();
   final alu = Paint()..color = const Color(0xFF868E96);
   final linie = Paint()
     ..style = PaintingStyle.stroke
@@ -534,7 +537,7 @@ class _SkizzePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final yMin = -(d.fuge + d.rahmenBreite + d.glasLaenge).toDouble();
+    final yMin = -(d.spalt + d.rahmenBreite + d.glasLaenge).toDouble();
     const yMax = 500.0;
     final m = math.min(size.width / d.wanddicke, size.height / (yMax - yMin)) * 0.9;
     final ox = (size.width - d.wanddicke * m) / 2;
@@ -556,10 +559,11 @@ class _SkizzePainter extends CustomPainter {
       canvas.drawRect(r, stift);
     }
 
-    rect(e, -d.fuge.toDouble(), e + b, 0, WbZelle.fuge);
-    rect(e, -(d.fuge + d.rahmenBreite).toDouble(), e + b, -d.fuge.toDouble(), WbZelle.rahmen);
+    if (d.zusatz > 0) rect(e, -d.zusatz.toDouble(), e + b, 0, WbZelle.daemmung);
+    rect(e, -d.spalt.toDouble(), e + b, -d.zusatz.toDouble(), WbZelle.fuge);
+    rect(e, -(d.spalt + d.rahmenBreite).toDouble(), e + b, -d.spalt.toDouble(), WbZelle.rahmen);
     final gx = e + b / 2 - d.glasdicke / 2;
-    rect(gx, yMin, gx + d.glasdicke, -(d.fuge + d.rahmenBreite).toDouble(), WbZelle.glas);
+    rect(gx, yMin, gx + d.glasdicke, -(d.spalt + d.rahmenBreite).toDouble(), WbZelle.glas);
     if (d.laibungDaemmung > 0) rect(0, -d.laibungDaemmung.toDouble(), e, 0, WbZelle.daemmung);
     if (d.innenLaibungDaemmung > 0) rect(e + b, -d.innenLaibungDaemmung.toDouble(), d.wanddicke.toDouble(), 0, WbZelle.daemmung);
     _zubehoerZeichnen(canvas, p, d, z, yMin);

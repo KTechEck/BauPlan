@@ -83,6 +83,7 @@ List<(Map<String, dynamic>, double)> bohrCheck(Map<String, dynamic> geschoss, Of
 extension PlanstandMehr on Planstand {
   List<Map<String, dynamic>> get aufgaben => Planstand.liste(daten['aufgaben']);
   List<Map<String, dynamic>> get aufmassOffen => Planstand.liste(daten['aufmass']);
+  List<Map<String, dynamic>> get aufmassVerworfen => Planstand.liste(daten['aufmass_verworfen']);
 
   /// Raum in irgendeinem Geschoss (mit Geschoss).
   (Map<String, dynamic> raum, Map<String, dynamic> geschoss)? raum(String? id) {

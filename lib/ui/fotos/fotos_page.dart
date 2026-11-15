@@ -77,7 +77,7 @@ class _FotosPageState extends State<FotosPage> {
     final verb = [for (final w in _waende) w.verbinden ?? global];
     final nachbarn = [
       for (var i = 0; i < _waende.length; i++)
-        if (verb[i]) achsen[i]
+        if (verb[i] && !_waende[i].istKante) achsen[i]
     ];
     _umrisse = {
       for (var i = 0; i < _waende.length; i++)

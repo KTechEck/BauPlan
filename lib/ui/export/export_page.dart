@@ -536,7 +536,7 @@ class PlanExport {
     final verb = [for (final w in waende) w.verbinden ?? global];
     final nachbarn = [
       for (var i = 0; i < waende.length; i++)
-        if (verb[i]) achsen[i]
+        if (verb[i] && !waende[i].istKante) achsen[i]
     ];
     final raeume = store.raeume(gid);
     final mv = store.einstellung<String>('mass_anzeige');

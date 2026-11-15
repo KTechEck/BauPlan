@@ -709,6 +709,70 @@ class _WandansichtPageState extends State<WandansichtPage> {
     return KeyEventResult.handled;
   }
 
+  /// Dachschräge vor dieser Wandseite eingeben: Kniestock, Tiefe bis zur
+  /// waagrechten Decke, Höhe der Decke (im Raum gespeichert, wie das Aufmaß der App).
+  Future<void> _schraegeBearbeiten() async {
+    final store = _s.store!;
+    final raum = _seite.raum;
+    if (raum == null) {
+      zeigeHinweis(context, 'Vor dieser Wandseite liegt kein Raum – Dachschrägen gehören zu einem Raum (sonst: Grundriss › Optionen › Dachgeschoss).');
+      return;
+    }
+    final key = '${_seite.wand.id}|${_seite.links ? 'l' : 'r'}';
+    final alt = raumSchraegen(raum)[key] ?? const {};
+    final c = {
+      for (final k in const ['kniestock', 'tiefe', 'decke']) k: TextEditingController(text: alt[k] == null ? '' : '${(alt[k] as num).round()}'),
+    };
+    final neigung = TextEditingController();
+    void ausNeigung() {
+      final n = double.tryParse(neigung.text.replaceAll(',', '.'));
+      final k = double.tryParse(c['kniestock']!.text), dd = double.tryParse(c['decke']!.text);
+      if (n == null || k == null || dd == null || n <= 0 || n >= 89) return;
+      c['tiefe']!.text = '${((dd - k) / math.tan(n * math.pi / 180)).round()}';
+    }
+
+    final ok = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('Dachschräge vor der Wand (${raum.name})'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Die Schräge steigt von dieser Wand in den Raum hinein: unten der Kniestock, nach der Tiefe beginnt die waagrechte Decke.',
+                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+            TextField(controller: c['kniestock'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Kniestock (Höhe an der Wand über FFB)', suffixText: 'mm')),
+            TextField(controller: c['decke'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Höhe der waagrechten Decke über FFB', suffixText: 'mm')),
+            TextField(controller: c['tiefe'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Tiefe der Schräge bis zur Decke (waagrecht)', suffixText: 'mm')),
+            TextField(
+              controller: neigung,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'oder Dachneigung (rechnet die Tiefe)', suffixText: '°'),
+              onChanged: (_) => ausNeigung(),
+            ),
+          ]),
+        ),
+        actions: [
+          if (alt.isNotEmpty) TextButton(onPressed: () => Navigator.pop(d, 'weg'), child: const Text('Schräge entfernen')),
+          TextButton(onPressed: () => Navigator.pop(d), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(d, 'ok'), child: const Text('Übernehmen')),
+        ],
+      ),
+    );
+    if (ok == null) return;
+    final m = raumSchraegen(raum);
+    if (ok == 'weg') {
+      m.remove(key);
+    } else {
+      m[key] = {
+        for (final e in c.entries)
+          if (int.tryParse(e.value.text.trim()) != null) e.key: int.parse(e.value.text.trim()),
+      };
+    }
+    final altEig = store.raumEigenschaftenSetzen(raum.id, {...raum.eigenschaften, 'schraegen': m});
+    _rueckgaengig.add(() => store.raumEigenschaftenSetzen(raum.id, altEig));
+    _s.geaendert();
+  }
+
   /// Dachschräge an der Wandoberfläche (Dachgeschoss), Höhe über FFB je Ansichts-x.
   double? Function(double x)? _dachHoehe() {
     final store = _s.store;
@@ -771,6 +835,11 @@ class _WandansichtPageState extends State<WandansichtPage> {
             title: Text(titel),
             backgroundColor: Colors.white,
             actions: [
+              TextButton.icon(
+                onPressed: _schraegeBearbeiten,
+                icon: const Icon(Icons.roofing, size: 18),
+                label: const Text('Dachschräge …'),
+              ),
               IconButton(
                 tooltip: 'Nachbarwand links (Leitung um die Ecke weiterführen)',
                 onPressed: () => _nachbarOeffnen(false),

@@ -77,12 +77,16 @@ class FloorplanPainter extends CustomPainter {
     this.massDichte = 1,
     this.massSchrift = 1,
     this.raster = true,
+    this.sparren = const [],
     this.massAbPxJeM = 25,
     this.beideAbPxJeM = 70,
   });
 
   /// Raster zeigen (Option „Raster ausblenden“).
   final bool raster;
+
+  /// Sparren im Grundriss: Anfang, Ende (Welt), Breite (mm), gewählt.
+  final List<(Offset, Offset, double, bool)> sparren;
 
   /// Zoomschwellen in Pixel je Meter: darunter keine Wandmaße; unter
   /// [beideAbPxJeM] nur ein Maß je Wand (innen) statt innen und außen.
@@ -158,6 +162,11 @@ class FloorplanPainter extends CustomPainter {
     _vorlageZeichnen(canvas);
     for (final r in raeume) {
       _raumFlaeche(canvas, r);
+    }
+    for (final (a, b, breite, gewaehlt) in sparren) {
+      canvas.drawLine(_s(a), _s(b), Paint()
+        ..color = (gewaehlt ? BsFarben.akzent : const Color(0xFF8D6E63)).withValues(alpha: gewaehlt ? 0.7 : 0.45)
+        ..strokeWidth = math.max(1.2, breite * massstab));
     }
     for (final w in waende) {
       if (w.istKante) {
@@ -1025,6 +1034,7 @@ class FloorplanPainter extends CustomPainter {
       old.massDichte != massDichte ||
       old.massSchrift != massSchrift ||
       old.raster != raster ||
+      old.sparren.length != sparren.length ||
       old.massAbPxJeM != massAbPxJeM ||
       old.beideAbPxJeM != beideAbPxJeM ||
       old.raumStuecke != raumStuecke ||
