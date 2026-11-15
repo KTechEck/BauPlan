@@ -757,3 +757,5 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Wärmebrücken Einbaudetail/Fenster: Dämmstoff für die Leitungs-/Fugendämmung wählbar, danach Dicke; Werte ohne Enter übernehmen (sofort beim Tippen);
   Zwischenrahmen und Laibung richtig: eigener Punkt für Dämmung zwischen Fenster und Laibung; Option zusätzliche Schicht zwischen Wandausschnitt/Fuge
   (Dämmmaterial) und Fenster mit Materialwahl.
+- Sparren: Eingabe neu – Sparrenlage über das ganze Geschoss (Richtung, Achsabstand, Breite, Startpunkt), als Ganzes auswählbar und änderbar,
+  einzelne Sparren verschiebbar; Dachschrägen eingeben (Kniestock, Neigung, Traufseite) und in der Wandansicht als Schräge zeigen/zeichnen.
