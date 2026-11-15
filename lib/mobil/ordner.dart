@@ -275,7 +275,8 @@ class Puffer {
     final zeit = DateTime.now().toUtc();
     final stempel = zeit.toIso8601String().replaceAll(RegExp(r'[^0-9]'), '').substring(0, 14);
     final id = '${stempel}_${zeit.microsecondsSinceEpoch.toRadixString(36)}';
-    final e = {...eintrag, 'id': id, 'zeit': zeit.toIso8601String()};
+    // Kennung der Erfassung als „eintrag“; eine mitgegebene „id“ (z. B. Wand beim Aufmaß) bleibt erhalten
+    final e = {...eintrag, 'eintrag': id, if (!eintrag.containsKey('id')) 'id': id, 'zeit': zeit.toIso8601String()};
     if (foto != null) {
       File(p.join(ordner.path, '$id.jpg')).writeAsBytesSync(foto);
       e['datei'] = '$id.jpg';

@@ -162,11 +162,11 @@ int aufmassOffen(ProjectStore store) => aufmassListe(store).where((a) => a['stat
 /// Neues Aufmaß aus dem Eingang ablegen (älteres offenes Maß für dasselbe Ziel wird ersetzt).
 void aufmassAblegen(ProjectStore store, Map<String, dynamic> e) {
   final liste = aufmassListe(store)
-    ..removeWhere((a) => a['status'] == 'offen' && a['ziel'] == e['ziel'] && a['id_ziel'] == e['id'] && a['feld'] == e['feld'] && a['seite'] == e['seite'] && a['bezug'] == e['bezug']);
+    ..removeWhere((a) => a['status'] == 'offen' && a['ziel'] == e['ziel'] && a['id_ziel'] == (e['ziel_id'] ?? e['id']) && a['feld'] == e['feld'] && a['seite'] == e['seite'] && a['bezug'] == e['bezug']);
   liste.add({
     'nr': neueId(),
     'ziel': e['ziel'],
-    'id_ziel': e['id'],
+    'id_ziel': e['ziel_id'] ?? e['id'],
     'feld': e['feld'],
     'wert': (e['wert'] as num?)?.round(),
     if (e['bezug'] != null) 'bezug': e['bezug'],
@@ -207,8 +207,39 @@ void _gemessenMerken(ProjectStore store, String id, String feld, int wert) {
   store.einstellungSetzen('aufmass_gemessen', m);
 }
 
+/// Ältere App-Versionen haben bei Wandmaßen statt der Wand-ID die Kennung
+/// der Erfassung geschickt. Dann die Wand über Raum, Seite und Planlänge
+/// wiederfinden (eindeutig, ±3 mm). Sonst bleibt das Aufmaß unverändert.
+Map<String, dynamic> aufmassZielAufloesen(ProjectStore store, Map<String, dynamic> a) {
+  if (a['ziel'] != 'wand') return a;
+  final gid = a['geschoss'] as String?;
+  final id = a['id_ziel'] as String?;
+  if (gid == null || id == null) return a;
+  final waende = store.waende(gid);
+  if (waende.any((w) => w.id == id)) return a;
+  final plan = (a['plan'] as num?)?.toDouble();
+  final raum = a['raum'] as String?;
+  if (plan == null) return a;
+  if (a['feld'] == 'dicke') {
+    final k = [for (final w in waende) if ((w.dicke - plan).abs() < 1) w];
+    return k.length == 1 ? {...a, 'id_ziel': k.single.id} : a;
+  }
+  final m = wandMasse(waende, store.raeume(gid), verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true);
+  final treffer = <String>[];
+  for (final e in m.entries) {
+    final x = e.value;
+    final links = a['seite'] == 'l';
+    final r = links ? x.raumLinks : x.raumRechts;
+    if (raum != null && r != raum) continue;
+    final l = switch (a['bezug']) { 'achse' => x.achse, 'aussen' => math.max(x.links, x.rechts), _ => links ? x.links : x.rechts };
+    if ((l - plan).abs() <= 3) treffer.add(e.key);
+  }
+  return treffer.length == 1 ? {...a, 'id_ziel': treffer.single} : a;
+}
+
 /// Aktueller Planwert für ein Aufmaß (zum Vergleich), null wenn das Ziel fehlt.
 double? aufmassPlanwert(ProjectStore store, Map<String, dynamic> a) {
+  a = aufmassZielAufloesen(store, a);
   final id = a['id_ziel'] as String?;
   final feld = a['feld'] as String?;
   final gid = a['geschoss'] as String?;
@@ -395,6 +426,7 @@ String? _geschossVonWand(ProjectStore store, String id) {
 
 /// Übernimmt ein Aufmaß in den Plan. Liefert eine Fehlermeldung oder null.
 String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
+  a = aufmassZielAufloesen(store, a);
   final id = a['id_ziel'] as String?;
   final feld = a['feld'] as String? ?? '';
   final wert = (a['wert'] as num?)?.round();

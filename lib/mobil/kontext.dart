@@ -93,6 +93,7 @@ class MobilKontext {
       'art': 'aufmass',
       'ziel': ziel,
       'id': objekt['id'],
+      'ziel_id': objekt['id'],
       'feld': feld,
       'wert': wert,
       'plan': plan.round(),

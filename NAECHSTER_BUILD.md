@@ -745,3 +745,15 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - iPhone Raum-Aufmaß mit Reitern Wände/Öffnungen/Installationen/Höhe·Diagonalen; Installationen: ab Wandecke und Höhe messen; „Installation
   aufnehmen“ für Fehlendes → Aufmaß `objekt_neu` legt am PC das Objekt an.
 - Tests test/build33_test.dart, test/live_sync_test.dart; 300 Tests grün.
+
+## Vorgemerkt für Build 34 (Tims Test von Build 33, sammelt noch – erst bauen, wenn er fertig ist)
+- SCHON IM CODE (nach Build 33): App-Aufmaß „Das Bauteil gibt es im Plan nicht mehr“ – Ursache: der Puffer der App (Puffer.ablegen) überschrieb die
+  Wand-ID mit der Kennung der Erfassung. Behoben (App behält `id`, schickt zusätzlich `ziel_id`; PC nimmt `ziel_id`). Für bereits gesendete Maße findet
+  der PC die Wand über Raum, Seite und Planlänge wieder (aufmassZielAufloesen) – an Tims offenem Flur-Maß geprüft. Braucht neuen PC-Build + neue IPA.
+- App: Rückmeldung, ob ein Aufmaß am PC übernommen oder verworfen wurde; verworfene Maße in der App wieder als „neu messen“ zeigen.
+- Offene Kante: anstoßende Wand wird abgeschnitten bzw. bekommt 45°-Gehrung – an offenen Kanten nicht verschneiden (automatisch), notfalls manuell
+  Ecke wählbar.
+- Wand Schlafzimmer → Balkon (5560 mm) zeichnet einen Absatz, auch mit anderem Wandtyp falsch dargestellt – prüfen.
+- Wärmebrücken Einbaudetail/Fenster: Dämmstoff für die Leitungs-/Fugendämmung wählbar, danach Dicke; Werte ohne Enter übernehmen (sofort beim Tippen);
+  Zwischenrahmen und Laibung richtig: eigener Punkt für Dämmung zwischen Fenster und Laibung; Option zusätzliche Schicht zwischen Wandausschnitt/Fuge
+  (Dämmmaterial) und Fenster mit Materialwahl.
