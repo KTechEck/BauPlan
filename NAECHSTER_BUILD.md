@@ -723,3 +723,6 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Aus SCC-CAD für Build 33 (Tims Wahl): automatische Legende im Plan (Symbole + Montagehöhen, je Gewerk/Blatt); Kabelwege über mehrere Geschosse mit
   Kabelzugliste; Gerätebibliothek nach SCC-Vorbild auf Basis der bestehenden Bibliothek/Inhaltspakete: DIN-Symbole mit Suche, Favoriten, Schnellleiste,
   echte Produktdaten (Hersteller, Modell, Leistung, Maße), Bereiche Elektro, Sicherheit, Netzwerk, Smart Home.
+- KERNPUNKT Build 33: Echtzeit-Synchronisation PC ↔ iPad statt Ausleihe mit PC-Sperre. PC bleibt einziger Datenbank-Schreiber; iPad arbeitet live gegen den
+  PC-Dienst (jede Änderung als Aktion an den PC, Änderungen per Push/Abo sofort auf beiden Geräten), offline auf dem iPad mit Warteschlange und Abgleich je
+  Objekt nach Wiederverbindung, Konflikte sichtbar (beide Stände zeigen, wählen) statt verlorener Daten. Ausleihe bleibt nur als Notlösung ohne Netz.
