@@ -5,6 +5,8 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'sync.dart';
+
 import '../core/exif.dart';
 import '../core/fbh.dart';
 import '../core/height.dart';
@@ -97,6 +99,7 @@ class ProjectStore {
     final db = sqlite3.open(p.join(ordner, datenbankDatei));
     final store = ProjectStore._(ordner, db);
     store._migrieren();
+    syncVorbereiten(db);
     store._startdaten(projektName.trim());
     store._sperreSetzen();
     return store;
@@ -114,6 +117,7 @@ class ProjectStore {
     final db = sqlite3.open(p.join(ordner, datenbankDatei));
     final store = ProjectStore._(ordner, db);
     store._migrieren();
+    syncVorbereiten(db);
     store._sperreSetzen();
     // bestehende Wände einmal richtig herum legen (nur falsch liegende)
     try {
@@ -1229,6 +1233,13 @@ class ProjectStore {
     final m = _einstellungen..[schluessel] = wert;
     db.execute('UPDATE projekt SET einstellungen = ?', [jsonEncode(m)]);
     _protokoll('projekt', 'einstellungen', 'aendern', {schluessel: wert});
+    syncEinstellungVermerken(db, schluessel);
+  }
+
+  /// Einstellung aus dem Abgleich mit einem anderen Gerät übernehmen (ohne Protokoll).
+  void einstellungUebernehmen(String schluessel, Object? wert) {
+    final m = _einstellungen..[schluessel] = wert;
+    db.execute('UPDATE projekt SET einstellungen = ?', [jsonEncode(m)]);
   }
 
   // ------------------------------------------- Sperren und Verbinden

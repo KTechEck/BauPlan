@@ -150,6 +150,7 @@ String aufmassFeldText(String ziel, String feld) => switch ((ziel, feld)) {
       ('verkleidung_seite', _) => 'Wandverkleidung dieser Wandseite',
       ('objekt', 'h') => 'Höhe Gerät über FFB',
       ('objekt', 'x') => 'Gerät ab Wandecke',
+      ('objekt_neu', _) => 'Neue Installation (vor Ort aufgenommen)',
       _ => feld,
     };
 
@@ -254,6 +255,8 @@ double? aufmassPlanwert(ProjectStore store, Map<String, dynamic> a) {
       return st == null ? null : st.$3 - st.$2;
     case 'objekt':
       return _objektMass(store, a)?.wert;
+    case 'objekt_neu':
+      return 0;
     case 'diagonale':
       final d = _diagonale(store, a);
       return d == null ? null : (d.p[d.i] - d.p[d.j]).laenge;
@@ -522,6 +525,8 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
         store.winkelmassLoeschen(m);
         return 'Winkel ließ sich nicht setzen (Wände gesperrt?).';
       }
+    case 'objekt_neu':
+      return _objektNeu(store, a, wert);
     case 'objekt':
       final om = _objektMass(store, a);
       if (om == null) return 'Gerät oder Wand nicht gefunden.';
@@ -538,6 +543,39 @@ String? aufmassAnwenden(ProjectStore store, Map<String, dynamic> a) {
   }
   _gemessenMerken(store, id, '$feld${a['bezug'] == null ? '' : '_${a['bezug']}'}', wert);
   aufmassStatusSetzen(store, a['nr'] as String, 'uebernommen');
+  return null;
+}
+
+/// Vor Ort aufgenommene Installation anlegen: Typ (Kürzel) und Höhe in
+/// `feld_json`, Wand/Seite wie beim Gerät, [x] = Abstand ab Wandecke der Seite.
+String? _objektNeu(ProjectStore store, Map<String, dynamic> a, int x) {
+  final info = a['feld_json'] is Map ? Map<String, dynamic>.from(a['feld_json'] as Map) : <String, dynamic>{};
+  final gid = a['geschoss'] as String?;
+  if (gid == null) return 'Geschoss fehlt.';
+  final w = store.waende(gid).where((x) => x.id == a['wand']).firstOrNull;
+  if (w == null) return 'Wand nicht gefunden.';
+  final typ = store.objekttypen().where((t) => t.kuerzel == info['typ'] && t.geometrie == Geometrieart.punkt).firstOrNull;
+  if (typ == null) return 'Objekttyp ${info['typ']} gibt es nicht.';
+  final m = wandMasse(store.waende(gid), const [], verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true)[w.id]!;
+  final l = math.max(1.0, w.laenge);
+  final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+  final links = a['seite'] == 'l';
+  final t = links ? m.grenzen.linksB - x : x + m.grenzen.rechtsA;
+  final s = links ? 1.0 : -1.0; // links der Zeichenrichtung
+  final px = w.x1 + ux * t + uy * s * w.dicke / 2, py = w.y1 + uy * t - ux * s * w.dicke / 2;
+  final h = (info['h'] as num?)?.round();
+  final id = store.objektAnlegen(
+    geschossId: gid,
+    typ: typ,
+    punkte: [Punkt(px.roundToDouble(), py.roundToDouble())],
+    raumId: a['raum'] as String?,
+    z: h,
+    zBezug: h == null ? null : Hoehenbezug.ffb,
+    lage: 'in Wand',
+  );
+  if ('${info['notiz'] ?? ''}'.isNotEmpty) {
+    store.objektAendern(id, {'eigenschaften': jsonEncode({'bezeichnung': info['notiz']})});
+  }
   return null;
 }
 

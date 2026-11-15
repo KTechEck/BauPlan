@@ -395,3 +395,150 @@ class Orbit {
         ziel: ziel ?? this.ziel,
       );
 }
+
+/// Gerät/Installationsobjekt für die 3D-Ansicht (Grundrisskoordinaten).
+typedef Geraet3d = ({String id, String kuerzel, Punkt p, double? z, List<double>? masse, int farbe, int drehung});
+
+const _weiss = 0xFFF3F3F0, _dunkel = 0xFF3A3D40, _grau = 0xFFB9BCBF;
+
+/// An die Decke gehören diese Kürzel (Unterseite der Decke), sonst an die Wand.
+const _decke = {'LE', 'RW', 'WR', 'CM', 'PM', 'BM', 'AP', 'LV'};
+const _wandplatte = {'SD', 'TA', 'ND', 'DO', 'FA', 'TO', 'KX', 'ES', 'AS', 'MP'};
+
+/// Übliche Montagehöhe über FFB (mm), wenn das Objekt keine eigene hat.
+double standardHoehe(String k) => switch (k) {
+      'SD' || 'ND' || 'AS' => 300,
+      'TA' || 'TO' || 'KX' || 'ES' => 1050,
+      'DO' => 2200,
+      'FA' => 600,
+      'VT' => 1100,
+      'HV' => 400,
+      'EN' => 850,
+      'FL' => 800,
+      _ => 300,
+    };
+
+/// Geräte als erkennbare Körper: Steckdosen/Schalter/Datendosen als Platte mit
+/// Einsatz bündig auf der nächsten Wand, Melder/Leuchten als flache Scheibe an
+/// der Decke, Verteiler/Geräte als Kasten (mit echten Maßen, wenn vorhanden).
+List<Flaeche3d> geraeteFlaechen(List<Geraet3d> geraete, List<Wand3d> waende, double raumhoehe) {
+  final aus = <Flaeche3d>[];
+  for (final g in geraete) {
+    // nächste Wandoberfläche
+    Punkt? fuss;
+    var u = const Punkt(1, 0), n = const Punkt(0, 1);
+    var best = 450.0;
+    for (final w in waende) {
+      final d = w.b - w.a;
+      final l = d.laenge;
+      if (l < 1) continue;
+      final ux = d * (1 / l);
+      final t = (g.p - w.a).skalar(ux).clamp(0.0, l);
+      final q = w.a + ux * t;
+      final ab = (g.p - q).laenge;
+      if (ab - w.dicke / 2 < best) {
+        best = ab - w.dicke / 2;
+        var nn = Punkt(ux.y, -ux.x);
+        if ((g.p - q).skalar(nn) < 0) nn = nn * -1;
+        u = ux;
+        n = nn;
+        fuss = q + nn * (w.dicke / 2);
+      }
+    }
+    final k = g.kuerzel;
+    final m = g.masse;
+    if (_decke.contains(k) && g.z == null) {
+      final (r, h, farbe) = switch (k) {
+        'LE' => (110.0, 60.0, _weiss),
+        'AP' => (100.0, 35.0, _weiss),
+        'LV' => (65.0, 25.0, _grau),
+        _ => (55.0, 45.0, _weiss),
+      };
+      aus.addAll(_scheibe(g.id, g.p, raumhoehe - h, h, r, farbe));
+      if (k == 'LE') aus.addAll(_scheibe(g.id, g.p, raumhoehe - h - 2, 2, r * 0.7, 0xFFFFF4C2)); // Lichtfläche
+      continue;
+    }
+    final z = g.z ?? standardHoehe(k);
+    if (_wandplatte.contains(k) && fuss != null) {
+      final (b, h) = m != null && m.length >= 3 ? (m[0], m[2]) : (k == 'FA' || k == 'DO' ? (90.0, 90.0) : (80.0, 80.0));
+      final mitte = fuss + n * 5;
+      aus.addAll(_kasten(g.id, mitte, u, n, z - h / 2, b, 10, h, k == 'MP' ? 0xFFE03131 : _weiss));
+      // Einsatz vorne
+      final vorne = fuss + n * 10.5;
+      switch (k) {
+        case 'SD' || 'AS':
+          aus.addAll(_kasten(g.id, vorne, u, n, z - 25, 50, 1, 50, 0xFFE6E6E2));
+          for (final s in [-1.0, 1.0]) {
+            aus.addAll(_kasten(g.id, vorne + u * (s * 10) + n * 1, u, n, z - 4, 8, 1, 8, _dunkel));
+          }
+        case 'TA':
+          aus.addAll(_kasten(g.id, vorne, u, n, z - 28, 56, 2, 56, 0xFFE9E9E5));
+          aus.addAll(_kasten(g.id, vorne + n * 2, u, n, z - 2, 40, 1, 2, _grau));
+        case 'ND':
+          for (final s in [-1.0, 1.0]) {
+            aus.addAll(_kasten(g.id, vorne + u * (s * 14), u, n, z - 7, 16, 1, 14, _dunkel));
+          }
+        default:
+          aus.addAll(_kasten(g.id, vorne, u, n, z - 10, 20, 1, 20, g.farbe));
+      }
+      continue;
+    }
+    // Kästen: Verteiler, Heizkreisverteiler, Geräte mit Maßen
+    final (b, t, h, farbe) = m != null && m.length >= 3
+        ? (m[0], m[1], m[2], _hell(g.farbe))
+        : switch (k) {
+            'VT' => (550.0, 160.0, 1100.0, 0xFFE9EAEC),
+            'HV' => (500.0, 110.0, 700.0, 0xFFF1F1EE),
+            'EN' => (60.0, 60.0, 200.0, 0xFFC9CED3),
+            'FL' => (160.0, 160.0, 550.0, 0xFFD62828),
+            'SR' => (120.0, 120.0, raumhoehe, _grau),
+            _ => (90.0, 70.0, 90.0, _hell(g.farbe)),
+          };
+    if (fuss != null && best < 200 && k != 'SR') {
+      aus.addAll(_kasten(g.id, fuss + n * (t / 2), u, n, k == 'VT' || k == 'HV' ? z - h / 2 : z, b, t, h, farbe));
+    } else {
+      final w = g.drehung * math.pi / 180;
+      aus.addAll(_kasten(g.id, g.p, Punkt(math.cos(w), math.sin(w)), Punkt(-math.sin(w), math.cos(w)), k == 'SR' ? 0 : z, b, t, h, farbe));
+    }
+  }
+  return aus;
+}
+
+int _hell(int argb) {
+  final r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
+  int h(int c) => (c + (255 - c) * 0.35).round();
+  return 0xFF000000 | (h(r) << 16) | (h(g) << 8) | h(b);
+}
+
+/// Quader: Mitte der Rückseite… vereinfacht: Mitte der Grundfläche [m], Breite
+/// entlang [u], Tiefe entlang [n], Unterkante [z0].
+List<Flaeche3d> _kasten(String id, Punkt m, Punkt u, Punkt n, double z0, double b, double t, double h, int farbe) {
+  Punkt q(double a, double c) => m + u * a + n * c;
+  final ecken = [q(-b / 2, -t / 2), q(b / 2, -t / 2), q(b / 2, t / 2), q(-b / 2, t / 2)];
+  final z1 = z0 + h;
+  final f = <Flaeche3d>[];
+  void fl(List<V3> e, V3 nn) => f.add(Flaeche3d(e, const [(0, 0), (1, 0), (1, 1), (0, 1)], 'geraet', normale: nn, art: 'geraet', farbe: farbe, id: id));
+  fl([for (final e in ecken) _w(e, z1)], const V3(0, 0, 1));
+  fl([for (final e in ecken.reversed) _w(e, z0)], const V3(0, 0, -1));
+  for (var i = 0; i < 4; i++) {
+    final a = ecken[i], c = ecken[(i + 1) % 4];
+    final mid = (a + c) * 0.5 - m;
+    final nn = normiert(V3(mid.x, -mid.y, 0));
+    fl([_w(a, z0), _w(c, z0), _w(c, z1), _w(a, z1)], nn);
+  }
+  return f;
+}
+
+/// Flache runde Scheibe (Achteck) mit Unterkante [z0].
+List<Flaeche3d> _scheibe(String id, Punkt m, double z0, double h, double r, int farbe) {
+  final f = <Flaeche3d>[];
+  final pts = [for (var i = 0; i < 12; i++) m + Punkt(math.cos(i * math.pi / 6), math.sin(i * math.pi / 6)) * r];
+  for (var i = 0; i < 12; i++) {
+    final a = pts[i], c = pts[(i + 1) % 12];
+    f.add(Flaeche3d([_w(m, z0), _w(c, z0), _w(a, z0)], const [(0, 0), (1, 0), (0, 1)], 'geraet', normale: const V3(0, 0, -1), art: 'geraet', farbe: farbe, id: id));
+    final mid = (a + c) * 0.5 - m;
+    f.add(Flaeche3d([_w(a, z0), _w(c, z0), _w(c, z0 + h), _w(a, z0 + h)], const [(0, 0), (1, 0), (1, 1), (0, 1)], 'geraet',
+        normale: normiert(V3(mid.x, -mid.y, 0)), art: 'geraet', farbe: farbe, id: id));
+  }
+  return f;
+}

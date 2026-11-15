@@ -54,6 +54,10 @@ import '../../core/gebaeude.dart' show treppeAuslegen, gelaenderHinweise;
 import '../floorplan/geschoss_3d.dart';
 import '../symbole_plan.dart';
 import '../widgets.dart';
+import 'kabel_suche.dart';
+import 'legende.dart';
+import 'geraete_bibliothek.dart';
+import 'kabelzugliste_dialog.dart';
 
 /// Modul Installation: Leitungswege und Geräte aller Gewerke auf dem
 /// Grundriss. Jedes Gewerk ist eine Ebene, die sich ein- und ausblenden lässt.
@@ -137,6 +141,8 @@ class _InstallationPageState extends State<InstallationPage> {
   String? _ebeneNeu; // Verlegeebene für neue Objekte (null = Vorgabe des Typs)
   Offset _klickGlobal = Offset.zero;
   String? _typId;
+  String? _produktNeu; // Bauelement für neue Objekte (Gerätebibliothek)
+  String? _geraetSchluessel;
   String? _gewerkId; // beim Setzen zuerst das Gewerk, dann das Gerät
   ObjektStatus _status = ObjektStatus.geplant;
   final List<Offset> _entwurf = [];
@@ -670,7 +676,9 @@ class _InstallationPageState extends State<InstallationPage> {
       lage: lage,
       status: _status,
     );
-    if (bezuege.isNotEmpty) store.objektAendern(id, {'eigenschaften': jsonEncode(bezuege)});
+    final produkt = _produktNeu == null ? null : _s.bibliothek.fuerProjekt(store, _produktNeu!);
+    final pe = produkt == null || t.geometrie != Geometrieart.punkt ? const <String, dynamic>{} : produktEigenschaften(produkt);
+    if (bezuege.isNotEmpty || pe.isNotEmpty) store.objektAendern(id, {'eigenschaften': jsonEncode({...bezuege, ...pe})});
     if (rahmenMit != null) {
       final neu = store.objekte(_s.geschossId!).where((o) => o.id == id).firstOrNull;
       if (neu != null) _rahmenVerbinden([...rahmenMit, neu], d);
@@ -998,6 +1006,40 @@ class _InstallationPageState extends State<InstallationPage> {
     return KeyEventResult.ignored;
   }
 
+  /// Gerät aus Bibliothek/Schnellleiste zum Setzen wählen (mit Produktdaten).
+  void _geraetWaehlen(GeraetEintrag e) {
+    setState(() {
+      _typId = e.typ.id;
+      _gewerkId = e.typ.gewerkId;
+      _produktNeu = e.produkt?.id;
+      _geraetSchluessel = e.schluessel;
+      _setzen = true;
+      _amOrtWaehlen = false;
+      _entwurf.clear();
+    });
+  }
+
+  /// Zur Fundstelle der Kabelsuche: Geschoss wechseln, auf das Objekt zoomen.
+  void _zuTreffer(KabelTreffer t) {
+    if (_s.geschossId != t.geschossId) {
+      // Geschosswechsel ohne Einpassen (sonst springt die Ansicht zurück)
+      _geschossBeiLetztemBuild = t.geschossId;
+      _entwurf.clear();
+      _rueckgaengig.clear();
+      _eingepasst = true;
+      _s.geschossWaehlen(t.geschossId);
+    }
+    final pts = [for (final p in t.objekt.punkte) Offset(p.x, p.y)];
+    if (pts.isEmpty || _flaeche.isEmpty) return;
+    final r = pts.skip(1).fold(Rect.fromPoints(pts.first, pts.first), (Rect a, p) => a.expandToInclude(Rect.fromPoints(p, p))).inflate(1500);
+    final m = math.min(_flaeche.width / r.width, _flaeche.height / r.height).clamp(0.005, 2.0).toDouble();
+    setState(() {
+      _massstab = m;
+      _verschiebung = Offset(_flaeche.width / 2 - r.center.dx * m, _flaeche.height / 2 - r.center.dy * m);
+      _auswahl = t.objekt.id;
+    });
+  }
+
   void _einpassen(_Daten d) {
     final pts = [
       for (final w in d.waende) ...[Offset(w.x1.toDouble(), w.y1.toDouble()), Offset(w.x2.toDouble(), w.y2.toDouble())],
@@ -1094,6 +1136,14 @@ class _InstallationPageState extends State<InstallationPage> {
       child: Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
         const Text('Gewerke:', style: TextStyle(fontSize: 12, color: BsFarben.textLeise, fontWeight: FontWeight.w600)),
         chip(Icons.electrical_services, 'Elektro', 'Kabel- und Rohrauslegung: Querschnitt, Absicherung, Spannungsfall, Leitungsliste', () => AuslegungPage.oeffnen(context, _s)),
+        chip(Icons.cable, 'Kabelzugliste', 'Alle Kabel mit von/nach, Geschossen und Länge – auch über Steigleitungen in andere Geschosse; Klick zeigt den Weg im Plan',
+            () => kabelzuglisteZeigen(context, _s, zeigen: (k) {
+                  _s.markiert = k.leitungen.toSet();
+                  final o = _laden().objekte.where((x) => k.leitungen.contains(x.id)).firstOrNull ??
+                      _s.store!.alleObjekte().where((x) => k.leitungen.contains(x.id)).firstOrNull;
+                  if (o != null) _zuTreffer((objekt: o, geschossId: o.geschossId, geschoss: '', titel: '', zeile: '', laengeM: 0));
+                  setState(() {});
+                })),
         chip(Icons.bathtub_outlined, 'Bad', 'Bad und Abdichtung: Nassräume, Abdichtungsflächen (DIN 18534), Dichtband, Manschetten, Abstände', () => badDialogZeigen(context, _s)),
         chip(Icons.water_drop_outlined, 'Wasser', 'Wasser: Abwasser (DN, Gefälle), Trinkwasser-Hausanschluss, Wassermelder mit Absperrventil', () => wasserDialogZeigen(context, _s)),
         chip(Icons.wifi, 'WLAN', 'WLAN-Abdeckung der Access Points als Farbfläche (grün gut … rot kein Empfang)', () => setState(() {
@@ -1149,6 +1199,16 @@ class _InstallationPageState extends State<InstallationPage> {
             }),
           ),
         ),
+        GeraeteSchnellleiste(state: _s, aktiv: _geraetSchluessel, waehlen: _geraetWaehlen),
+        TextButton.icon(
+          onPressed: () async {
+            final e = await geraeteBibliothekZeigen(context, _s);
+            if (e != null) _geraetWaehlen(e);
+            if (mounted) setState(() {});
+          },
+          icon: const Icon(Icons.widgets_outlined, size: 18),
+          label: const Text('Gerätebibliothek'),
+        ),
         if (!_amOrtWaehlen)
         GruppenAuswahl<String>(
           hinweis: 'Gerät / Objekt wählen',
@@ -1159,6 +1219,8 @@ class _InstallationPageState extends State<InstallationPage> {
               (g.name, [for (final t in d.typen.values) if (t.gewerkId == g.id) (t.id, '${t.name} (${t.kuerzel})', Color(g.farbe))]),
           ],
           onChanged: (v) => setState(() {
+            _produktNeu = null;
+            _geraetSchluessel = null;
             _typId = v;
             _gewerkId = d.typen[v]?.gewerkId ?? _gewerkId;
             _setzen = true;
@@ -1229,6 +1291,16 @@ class _InstallationPageState extends State<InstallationPage> {
               if (r.umriss != null) PopupMenuItem(value: r.id, child: Text(r.name)),
           ],
           child: const Padding(padding: EdgeInsets.all(8), child: Icon(Sym.decke)),
+        ),
+        KabelSuchfeld(state: _s, springen: _zuTreffer),
+        IconButton(
+          tooltip: 'Legende im Plan ein/aus (verwendete Symbole, Anzahl, Montagehöhen)',
+          isSelected: _s.settings.darstellung['legende'] != false,
+          onPressed: () {
+            setState(() => _s.settings.darstellung['legende'] = _s.settings.darstellung['legende'] == false);
+            _s.settings.speichern();
+          },
+          icon: const Icon(Icons.list_alt),
         ),
         IconButton(tooltip: 'Alles zeigen', onPressed: () => _einpassen(d), icon: const Icon(Sym.allesZeigen)),
         IconButton(tooltip: '3D-Ansicht des Geschosses', onPressed: () => geschoss3dZeigen(context, _s), icon: const Icon(Icons.view_in_ar)),
@@ -1402,6 +1474,16 @@ class _InstallationPageState extends State<InstallationPage> {
                     ),
                   ),
                 ),
+                if (_s.settings.darstellung['legende'] != false)
+                  Positioned(
+                    right: 12,
+                    bottom: 12,
+                    width: 360,
+                    height: 520,
+                    child: IgnorePointer(
+                      child: CustomPaint(painter: LegendenPainter(legendeBauen([for (final o in d.objekte) if (_istSichtbar(o, d)) o], d.typen, d.gewerke))),
+                    ),
+                  ),
                 if (_live case final live?)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -3272,8 +3354,18 @@ class ObjektPainter extends CustomPainter {
         }
       }
       if (markiert.contains(o.id)) {
-        for (final q in pts) {
-          canvas.drawCircle(q, 14, Paint()..color = BsFarben.akzent.withValues(alpha: 0.35));
+        if (pts.length >= 2 && typ?.geometrie == Geometrieart.linie) {
+          // gefundene Leitung: breit leuchtend nachzeichnen
+          canvas.drawPath(Path()..addPolygon(pts, false), Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 12
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..color = const Color(0xFFFFD43B).withValues(alpha: 0.75));
+        } else {
+          for (final q in pts) {
+            canvas.drawCircle(q, 14, Paint()..color = BsFarben.akzent.withValues(alpha: 0.35));
+          }
         }
       }
       switch (typ?.geometrie) {

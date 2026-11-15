@@ -277,6 +277,57 @@ class PcSpeicher implements Speicher {
     }
   }
 
+  Future<HttpClientResponse> _projektAnfrage(String methode, String teil, String geraet, {List<int>? daten, Duration zeit = const Duration(seconds: 20)}) async {
+    final c = _client(zeit: const Duration(seconds: 3));
+    try {
+      final a = await c.openUrl(methode, _uri(teil));
+      a.headers
+        ..set('x-bauspur-code', code)
+        ..set('x-bauspur-geraet', geraet)
+        ..set('x-bauspur-geraetname', Uri.encodeComponent('iPad'));
+      if (daten != null) {
+        a.contentLength = daten.length;
+        a.add(daten);
+      }
+      final r = await a.close().timeout(zeit);
+      if (r.statusCode == 401) {
+        await r.drain<void>();
+        throw CodeFalsch();
+      }
+      return r;
+    } finally {
+      c.close();
+    }
+  }
+
+  /// Echtzeit-Abgleich: ganzes Projekt holen, ohne den PC zu sperren. Liefert ZIP und Stand.
+  Future<(Uint8List, int, DateTime?)> projektLive(String geraet) async {
+    final r = await _projektAnfrage('GET', 'projekt/live', geraet, zeit: const Duration(minutes: 5));
+    final b = await _rumpf(r);
+    if (r.statusCode != 200) throw StateError(_fehlerText(b, r.statusCode));
+    return (b, int.tryParse(r.headers.value('x-bauspur-stand') ?? '') ?? 0, DateTime.tryParse(r.headers.value('x-bauspur-zeit') ?? ''));
+  }
+
+  /// Echtzeit-Abgleich: eigene Änderungen schicken, die des PCs bekommen.
+  Future<Map<String, dynamic>> projektSync(String geraet, Map<String, dynamic> body) async {
+    final r = await _projektAnfrage('POST', 'projekt/sync', geraet, daten: utf8.encode(jsonEncode(body)));
+    final b = await _rumpf(r);
+    if (r.statusCode != 200) throw StateError(_fehlerText(b, r.statusCode));
+    return Map<String, dynamic>.from(jsonDecode(utf8.decode(b)) as Map);
+  }
+
+  Future<void> projektDateiHoch(String geraet, String rel, List<int> daten) async {
+    final r = await _projektAnfrage('PUT', 'projekt/datei/$rel', geraet, daten: daten, zeit: const Duration(minutes: 2));
+    final b = await _rumpf(r);
+    if (r.statusCode != 200) throw StateError(_fehlerText(b, r.statusCode));
+  }
+
+  Future<Uint8List?> projektDateiRunter(String geraet, String rel) async {
+    final r = await _projektAnfrage('GET', 'projekt/datei/$rel', geraet, zeit: const Duration(minutes: 2));
+    final b = await _rumpf(r);
+    return r.statusCode == 200 ? b : null;
+  }
+
   /// Volle BauSpur auf dem iPad: Projekt zurückgeben (Datenbank und neue Dateien als ZIP).
   Future<void> projektZurueckgeben(String geraet, List<int> zip) async {
     final c = _client(zeit: const Duration(seconds: 5));
@@ -329,11 +380,23 @@ class PcDienst {
   /// Volle BauSpur auf dem iPad: Rückgabe (ZIP mit Datenbank und neuen Dateien) übernehmen; null = gut, sonst Fehler.
   Future<String?> Function(List<int> zip, String geraet)? projektRueckgabe;
 
+  /// Echtzeit-Abgleich: ganzes Projekt ohne Sperre (ZIP, Stand der Änderungsliste).
+  Future<(List<int>?, int, String?)> Function()? projektLive;
+
+  /// Echtzeit-Abgleich: Änderungen eines iPads übernehmen, eigene zurückgeben.
+  Future<Map<String, dynamic>> Function(String geraet, String name, Map<String, dynamic> body)? projektSync;
+
+  /// Projektordner am PC (für Fotos/Dokumente im Echtzeit-Abgleich).
+  String? Function()? projektOrdner;
+
   /// Austauschordner des offenen Projekts (null: kein Projekt offen).
   final String? Function() ordner;
   final String Function() code;
   final Map<String, dynamic> Function() auskunft;
   final void Function()? beiEingang;
+
+  /// Dateien, die gerade von einem iPad kamen (nicht gleich zurückschicken).
+  final zuletztHochgeladen = <String>{};
 
   HttpServer? _server;
   String? fehler;
@@ -393,6 +456,50 @@ class PcDienst {
     if (kopf == 'projekt') {
       final geraet = a.headers.value('x-bauspur-geraet') ?? '';
       if (geraet.isEmpty) return _antwort(a, 400, {'fehler': 'Geräte-Kennung fehlt.'});
+      if (rel == 'live' && a.method == 'GET' && projektLive != null) {
+        final (z, stand, fehler) = await projektLive!();
+        if (z == null) return _antwort(a, 500, {'fehler': fehler ?? 'Packen nicht möglich.'});
+        a.response.headers
+          ..contentType = ContentType.binary
+          ..set('x-bauspur-stand', '$stand')
+          ..set('x-bauspur-zeit', DateTime.now().toIso8601String());
+        a.response.add(z);
+        return a.response.close();
+      }
+      if (rel == 'sync' && a.method == 'POST' && projektSync != null) {
+        final b = BytesBuilder(copy: false);
+        await for (final t in a) {
+          b.add(t);
+        }
+        try {
+          final body = Map<String, dynamic>.from(jsonDecode(utf8.decode(b.takeBytes())) as Map);
+          return await _antwort(a, 200, await projektSync!(geraet, Uri.decodeComponent(a.headers.value('x-bauspur-geraetname') ?? 'iPad'), body));
+        } catch (e) {
+          return _antwort(a, 500, {'fehler': '$e'});
+        }
+      }
+      if (rel.startsWith('datei/') && projektOrdner != null) {
+        final pfad = rel.substring(6);
+        final po = projektOrdner!();
+        if (po == null || !_pfadErlaubt(pfad) || pfad.startsWith('projekt.bauspur') || pfad == 'projekt.lock' || pfad.startsWith('backup/')) return _antwort(a, 403);
+        final f = File('$po/$pfad');
+        if (a.method == 'GET') {
+          if (!f.existsSync()) return _antwort(a, 404);
+          a.response.headers.contentType = ContentType.binary;
+          a.response.add(await f.readAsBytes());
+          return a.response.close();
+        }
+        if (a.method == 'PUT') {
+          final b = BytesBuilder(copy: false);
+          await for (final t in a) {
+            b.add(t);
+          }
+          await f.parent.create(recursive: true);
+          await f.writeAsBytes(b.takeBytes());
+          zuletztHochgeladen.add(pfad);
+          return _antwort(a, 200);
+        }
+      }
       if (rel == 'zip' && a.method == 'GET' && projektAusleihen != null) {
         final (status, z, fehler) = await projektAusleihen!(geraet, Uri.decodeComponent(a.headers.value('x-bauspur-geraetname') ?? 'iPad'));
         if (z == null) return _antwort(a, status, {'fehler': fehler ?? 'Ausleihen nicht möglich.'});

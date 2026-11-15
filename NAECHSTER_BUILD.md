@@ -726,3 +726,22 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - KERNPUNKT Build 33: Echtzeit-Synchronisation PC ↔ iPad statt Ausleihe mit PC-Sperre. PC bleibt einziger Datenbank-Schreiber; iPad arbeitet live gegen den
   PC-Dienst (jede Änderung als Aktion an den PC, Änderungen per Push/Abo sofort auf beiden Geräten), offline auf dem iPad mit Warteschlange und Abgleich je
   Objekt nach Wiederverbindung, Konflikte sichtbar (beide Stände zeigen, wählen) statt verlorener Daten. Ausleihe bleibt nur als Notlösung ohne Netz.
+
+## Build 33 (15.11.) – Echtzeit-Sync, Kabelwege, Gerätebibliothek, Legende, iPhone-Installationsaufmaß
+- Echtzeit-Abgleich PC ↔ iPad (lib/data/sync.dart, lib/state/live_sync.dart, Migration 28 `sync_log`): temporäre Trigger protokollieren jede Zeile,
+  Einstellungen je Schlüssel; iPad „Projekt vom PC“ › „Live mitarbeiten“ (PC bleibt frei, Endpunkte projekt/live, projekt/sync, projekt/datei/…),
+  Abgleich alle 3 s und 0,4 s nach jeder Änderung, Fotos/Dokumente mit, offline mit Warteschlange, Konflikt = jüngere Änderung gilt, andere unter
+  `sync_konflikte` (PC-Statusleiste „n Konflikte“ › wiederherstellen). iPad-Kopfleiste „Live mit PC / Offline · n warten“. Ausleihe bleibt als Notlösung.
+- iPad „Projekt holen“: PC packt selbst (ZipSchreiber, WAL-Checkpoint) statt Windows-tar.
+- Hilfe-Panel: nur Erklärung zum gewählten Feld (auch Auswahllisten), darunter Nachschlagen.
+- 3D: Geräte als Körper (geraeteFlaechen): Steckdose/Schalter/Datendose als Platte mit Einsatz bündig auf der nächsten Wand (Standardhöhen), Leuchten/
+  Melder/AP/Luftventil als Scheibe an der Decke, Verteiler/HKV/Geräte als Kasten (echte Maße aus `masse`).
+- Kabelsuche (lib/ui/installation/kabel_suche.dart): Feld in der Installation, Treffer gelb nachgezeichnet, Sprung über Geschosse; auch in Strg+F.
+- Automatische Legende (lib/ui/installation/legende.dart): Overlay im Installationsplan (Knopf, `legende`), im PDF-Export unten rechts.
+- Kabelwege über Geschosse + Kabelzugliste (lib/core/kabelwege.dart, kabelzugliste_dialog.dart): Leitungen über Fortsetzungen und gemeinsame
+  Steigleitung SR verbunden, Senkrechte aus Geschosshöhen, +1 m Reserve, Stromkreise ohne Leitung geschätzt; CSV; Klick zeigt den Weg.
+- Gerätebibliothek (lib/ui/installation/geraete_bibliothek.dart): Bereiche (Elektro, Licht, Netzwerk, Sicherheit, Smart Home, Sanitär, Heizung, Lüftung,
+  Außen), Suche, Favoriten (`geraete_favoriten`, je PC) als Schnellleiste, Produkte aus der Bibliothek → neues Objekt übernimmt bauelement, masse, leistung_w.
+- iPhone Raum-Aufmaß mit Reitern Wände/Öffnungen/Installationen/Höhe·Diagonalen; Installationen: ab Wandecke und Höhe messen; „Installation
+  aufnehmen“ für Fehlendes → Aufmaß `objekt_neu` legt am PC das Objekt an.
+- Tests test/build33_test.dart, test/live_sync_test.dart; 300 Tests grün.

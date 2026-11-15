@@ -10,6 +10,8 @@ import '../app/version.dart';
 import '../core/bauelemente.dart';
 import '../core/speicher.dart';
 import '../core/zip_schreiben.dart';
+import '../data/sync.dart';
+import 'live_sync.dart';
 import '../core/ipad_austausch.dart';
 import '../data/app_settings.dart';
 import '../data/austausch.dart';
@@ -117,7 +119,69 @@ class AppState extends ChangeNotifier {
     planFiltern: (b, nutzer) => utf8.encode(jsonEncode(planstandFuerBenutzer(Map<String, dynamic>.from(jsonDecode(utf8.decode(b)) as Map), nutzer))),
   )
     ..projektAusleihen = _projektAusleihen
-    ..projektRueckgabe = _projektRueckgabe;
+    ..projektRueckgabe = _projektRueckgabe
+    ..projektLive = _projektLive
+    ..projektSync = _projektSync
+    ..projektOrdner = (() => store?.ordner);
+
+  /// Projektordner als ZIP (ohne Sperre, Sicherungen, Austausch). Fehlertext oder ZIP.
+  (List<int>?, String?) _projektZip(ProjectStore st) {
+    try {
+      st.db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (_) {}
+    // Selbst packen statt Windows-tar: tar scheiterte an gesperrten bzw.
+    // OneDrive-Dateien („tar: null“). Nicht lesbare Nebendateien werden übersprungen.
+    final z = ZipSchreiber();
+    final basis = Directory(st.ordner);
+    final fehlt = <String>[];
+    for (final f in basis.listSync(recursive: true, followLinks: false).whereType<File>()) {
+      final rel = p.relative(f.path, from: st.ordner).replaceAll(r'\', '/');
+      if (rel == 'projekt.lock' || rel == ausleiheDatei || rel.startsWith('backup/') || rel.startsWith('austausch/') || rel.endsWith('.tmp') || rel.endsWith('-shm') || rel == SyncStand.datei) continue;
+      try {
+        z.hinzu(rel, f.readAsBytesSync());
+      } catch (e) {
+        if (rel == datenbankDatei) return (null, 'Projektdatei lässt sich nicht lesen: $e');
+        fehlt.add(rel);
+      }
+    }
+    if (fehlt.isNotEmpty) debugPrint('Packen: übersprungen ${fehlt.join(', ')}');
+    return (z.fertig(), null);
+  }
+
+  /// Echtzeit-Abgleich: Projekt für ein iPad, ohne den PC zu sperren.
+  Future<(List<int>?, int, String?)> _projektLive() async {
+    final st = store;
+    if (st == null) return (null, 0, 'Am PC ist kein Projekt geöffnet.');
+    final stand = syncStand(st.db);
+    final (z, fehler) = _projektZip(st);
+    return (z, stand, fehler);
+  }
+
+  /// Echtzeit-Abgleich: Änderungen eines iPads übernehmen, eigene zurückgeben.
+  Future<Map<String, dynamic>> _projektSync(String geraet, String name, Map<String, dynamic> body) async {
+    final st = store;
+    if (st == null) throw StateError('Am PC ist kein Projekt geöffnet.');
+    if (st.nurLesen) throw StateError('Das Projekt ist am PC schreibgeschützt (ausgeliehen?).');
+    final zeit = DateTime.now();
+    final neu = liveGeraete[geraet] == null || zeit.difference(liveGeraete[geraet]!.zeit).inSeconds > 20;
+    final antwort = syncAmPc(st, body, geraet, geraetName: name);
+    final dateien = [
+      for (final f in geaenderteDateien(st.ordner, DateTime.tryParse('${body['dateien_seit'] ?? ''}')))
+        if (!dienst.zuletztHochgeladen.contains(f)) f
+    ];
+    dienst.zuletztHochgeladen.clear();
+    if ((antwort['angewendet'] as int? ?? 0) > 0) {
+      liveGeraete[geraet] = (name: name, zeit: zeit, aenderungen: (liveGeraete[geraet]?.aenderungen ?? 0) + (antwort['angewendet'] as int));
+      geaendert();
+    } else {
+      liveGeraete[geraet] = (name: name, zeit: zeit, aenderungen: liveGeraete[geraet]?.aenderungen ?? 0);
+      if (neu || (antwort['konflikte'] as int? ?? 0) > 0) notifyListeners();
+    }
+    return {...antwort, 'zeit': zeit.toIso8601String(), 'dateien': dateien};
+  }
+
+  /// iPads, die gerade live mitarbeiten (Name, letzter Abgleich, übernommene Änderungen).
+  final liveGeraete = <String, ({String name, DateTime zeit, int aenderungen})>{};
 
   /// Projekt an ein iPad ausleihen: Ausleihe vermerken, PC-Kopie nur lesbar, ganzen Ordner als ZIP liefern.
   Future<(int, List<int>?, String?)> _projektAusleihen(String geraet, String name) async {
@@ -130,23 +194,9 @@ class AppState extends ChangeNotifier {
       if (a == null) Ausleihe(geraet: geraet, name: name, seit: DateTime.now(), amPc: true).schreiben(st.ordner);
       if (!st.nurLesen) st.nurLesenSetzen(true);
       notifyListeners();
-      // Selbst packen statt Windows-tar: tar scheiterte an gesperrten bzw.
-      // OneDrive-Dateien („tar: null“). Nicht lesbare Nebendateien werden übersprungen.
-      final z = ZipSchreiber();
-      final basis = Directory(st.ordner);
-      final fehlt = <String>[];
-      for (final f in basis.listSync(recursive: true, followLinks: false).whereType<File>()) {
-        final rel = p.relative(f.path, from: st.ordner).replaceAll(r'\', '/');
-        if (rel == 'projekt.lock' || rel == ausleiheDatei || rel.startsWith('backup/') || rel.startsWith('austausch/') || rel.endsWith('.tmp')) continue;
-        try {
-          z.hinzu(rel, f.readAsBytesSync());
-        } catch (e) {
-          if (rel == 'projekt.db') return (500, null, 'Projektdatei lässt sich nicht lesen: $e');
-          fehlt.add(rel);
-        }
-      }
-      if (fehlt.isNotEmpty) debugPrint('Ausleihe: übersprungen ${fehlt.join(', ')}');
-      return (200, z.fertig(), null);
+      final (z, fehler) = _projektZip(st);
+      if (z == null) return (500, null, fehler);
+      return (200, z, null);
     } catch (e) {
       return (500, null, '$e');
     }
@@ -288,8 +338,14 @@ class AppState extends ChangeNotifier {
   }
 
   void projektOeffnen(ProjectStore s) {
+    live?.stoppen();
+    live = null;
     store?.schliessen();
     store = s;
+    final ls = touch ? SyncStand.lesen(s.ordner) : null;
+    if (ls != null && ls.adresse != null && !_imTest) {
+      live = LiveSync(this, ls)..starten();
+    }
     if (Ausleihe.lesen(s.ordner)?.sperrt ?? false) s.nurLesenSetzen(true);
     _eingangTimer?.cancel();
     if (!_imTest && !touch) {
@@ -312,6 +368,8 @@ class AppState extends ChangeNotifier {
   }
 
   void projektSchliessen() {
+    live?.stoppen();
+    live = null;
     _eingangTimer?.cancel();
     _planstandTimer?.cancel();
     final st = store;
@@ -345,10 +403,17 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Nur neu zeichnen (Markierung, Ansicht), ohne Projektdaten zu ändern.
+  void geaendertOhneSpeichern() => notifyListeners();
+
   /// Nach jeder Änderung an Projektdaten aufrufen.
-  void geaendert() {
+  void geaendert({bool vonAbgleich = false}) {
     revision++;
     _planstandVormerken();
+    if (!vonAbgleich) live?.bald();
     notifyListeners();
   }
+
+  /// Echtzeit-Abgleich mit dem PC (nur auf dem iPad, wenn live verbunden).
+  LiveSync? live;
 }

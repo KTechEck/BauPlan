@@ -292,11 +292,22 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
     final gemessen = seiten.where((r) => raumSeiteGemessen(k, r, '$id')).length;
     final hoehe = raumHoehe(g, id as String?);
     final hm = massAnzeige(k, r, 'hoehe', hoehe);
-    return Scaffold(
-      appBar: AppBar(title: Text('Aufmaß ${r['name']}')),
+    final installationen = _installationen(g, '$id', seiten);
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+      appBar: AppBar(
+        title: Text('Aufmaß ${r['name']}'),
+        bottom: TabBar(isScrollable: true, tabs: [
+          Tab(text: 'Wände ($gemessen/${seiten.length})'),
+          Tab(text: 'Öffnungen (${oeffnungen.length})'),
+          Tab(text: 'Installationen (${installationen.length})'),
+          const Tab(text: 'Höhe · Diagonalen'),
+        ]),
+      ),
       body: Column(children: [
         SizedBox(
-          height: 220,
+          height: 200,
           child: GrundrissAnsicht(
             plan: k.plan,
             geschoss: g,
@@ -320,35 +331,8 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
               style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
         ),
         Expanded(
-          child: ListView(padding: const EdgeInsets.all(8), children: [
-            ListTile(
-              leading: const Icon(Icons.height),
-              title: const Text('Lichte Raumhöhe'),
-              subtitle: Text('Plan ${mmCm(hoehe)}'),
-              trailing: Text(hm.text, style: TextStyle(fontWeight: FontWeight.w700, color: hm.farbe)),
-              onTap: () async {
-                await raumHoeheMessen(context, k, r, g);
-                setState(() {});
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.layers_outlined),
-              title: const Text('Wandverkleidung'),
-              subtitle: Text('${k.verkleidung('$id') == 0 ? 'keine (Vorgabe für alle Wände)' : '${(k.plan.raum('$id')?.$1['verkleidung'] as Map?)?['art'] ?? ''} ${k.verkleidung('$id')} mm je Wandseite'} · '
-                  'Anzeige ${k.einstellungen.massart == 'fertig' ? 'fertig' : 'Rohbau'} · einzelne Wände: Wand antippen'),
-              trailing: Switch(
-                value: k.einstellungen.massart == 'fertig',
-                onChanged: (v) => setState(() {
-                  k.einstellungen.massart = v ? 'fertig' : 'roh';
-                  k.einstellungen.speichern();
-                }),
-              ),
-              onTap: () async {
-                await verkleidungWaehlen(context, k, r);
-                setState(() {});
-              },
-            ),
-            const Divider(),
+          child: TabBarView(children: [
+            ListView(padding: const EdgeInsets.all(8), children: [
             for (var i = 0; i < seiten.length; i++)
               Builder(builder: (context) {
                 final r = seiten[i];
@@ -377,6 +361,57 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
                   },
                 );
               }),
+            ]),
+            ListView(padding: const EdgeInsets.all(8), children: [
+              if (oeffnungen.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Keine Fenster oder Türen an diesem Raum.')),
+            if (oeffnungen.isNotEmpty) ...[
+              const Divider(),
+              for (final o in oeffnungen)
+                ListTile(
+                  leading: Icon(o['art'] == 'fenster' ? Icons.window_outlined : Icons.door_front_door_outlined),
+                  title: Text('${switch (o['art']) { 'tuer' => 'Tür', 'fenster' => 'Fenster', 'balkontuer' => 'Balkontür', _ => 'Durchbruch' }} '
+                      '${massAnzeige(k, o, 'breite', o['breite'] as num).text} × ${massAnzeige(k, o, 'hoehe', o['hoehe'] as num).text}'),
+                  subtitle: o['art'] == 'fenster' ? Text('Brüstung ${massAnzeige(k, o, 'bruestung', o['bruestung'] as num).text}') : null,
+                  trailing: PopupMenuButton<String>(
+                    icon: const Icon(Icons.straighten),
+                    onSelected: (f) async {
+                      await oeffnungMessen(context, k, o, f, raum: id);
+                      setState(() {});
+                    },
+                    itemBuilder: (_) => [for (final e in oeffnungFelder.entries) PopupMenuItem(value: e.key, child: Text('${e.value} messen'))],
+                  ),
+                ),
+            ],
+            ]),
+            _installationenListe(g, r, installationen, seiten),
+            ListView(padding: const EdgeInsets.all(8), children: [
+            ListTile(
+              leading: const Icon(Icons.height),
+              title: const Text('Lichte Raumhöhe'),
+              subtitle: Text('Plan ${mmCm(hoehe)}'),
+              trailing: Text(hm.text, style: TextStyle(fontWeight: FontWeight.w700, color: hm.farbe)),
+              onTap: () async {
+                await raumHoeheMessen(context, k, r, g);
+                setState(() {});
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.layers_outlined),
+              title: const Text('Wandverkleidung'),
+              subtitle: Text('${k.verkleidung('$id') == 0 ? 'keine (Vorgabe für alle Wände)' : '${(k.plan.raum('$id')?.$1['verkleidung'] as Map?)?['art'] ?? ''} ${k.verkleidung('$id')} mm je Wandseite'} · '
+                  'Anzeige ${k.einstellungen.massart == 'fertig' ? 'fertig' : 'Rohbau'} · einzelne Wände: Wand antippen'),
+              trailing: Switch(
+                value: k.einstellungen.massart == 'fertig',
+                onChanged: (v) => setState(() {
+                  k.einstellungen.massart = v ? 'fertig' : 'roh';
+                  k.einstellungen.speichern();
+                }),
+              ),
+              onTap: () async {
+                await verkleidungWaehlen(context, k, r);
+                setState(() {});
+              },
+            ),
             if (punkte(r['umriss']).length >= 4) ...[
               const Divider(),
               const Padding(
@@ -407,28 +442,165 @@ class _RaumAufmassSeiteState extends State<RaumAufmassSeite> {
                   );
                 }),
             ],
-            if (oeffnungen.isNotEmpty) ...[
-              const Divider(),
-              for (final o in oeffnungen)
-                ListTile(
-                  leading: Icon(o['art'] == 'fenster' ? Icons.window_outlined : Icons.door_front_door_outlined),
-                  title: Text('${switch (o['art']) { 'tuer' => 'Tür', 'fenster' => 'Fenster', 'balkontuer' => 'Balkontür', _ => 'Durchbruch' }} '
-                      '${massAnzeige(k, o, 'breite', o['breite'] as num).text} × ${massAnzeige(k, o, 'hoehe', o['hoehe'] as num).text}'),
-                  subtitle: o['art'] == 'fenster' ? Text('Brüstung ${massAnzeige(k, o, 'bruestung', o['bruestung'] as num).text}') : null,
-                  trailing: PopupMenuButton<String>(
-                    icon: const Icon(Icons.straighten),
-                    onSelected: (f) async {
-                      await oeffnungMessen(context, k, o, f, raum: id);
-                      setState(() {});
-                    },
-                    itemBuilder: (_) => [for (final e in oeffnungFelder.entries) PopupMenuItem(value: e.key, child: Text('${e.value} messen'))],
-                  ),
-                ),
-            ],
+            ]),
           ]),
         ),
       ]),
+    ),
     );
+  }
+
+  /// Punktobjekte im Raum mit der nächsten Wandseite (für „ab Ecke“).
+  List<(Map<String, dynamic>, AppWandSeite?)> _installationen(Map<String, dynamic> g, String raumId, List<RaumSeite> seiten) {
+    final u = punkte(widget.raum['umriss']);
+    final aus = <(Map<String, dynamic>, AppWandSeite?)>[];
+    for (final o in Planstand.liste(g['objekte'])) {
+      if (o['geometrie'] != 'punkt') continue;
+      final p = punkte(o['punkte']);
+      if (p.isEmpty) continue;
+      if (o['raum'] != raumId && !(u.length >= 3 && imPolygon(p.first, u))) continue;
+      AppWandSeite? best;
+      var d = double.infinity;
+      for (final s in seiten) {
+        final sw = AppWandSeite(s.wand, s.links);
+        final dd = abstandStrecke(p.first, sw.a, sw.b) - sw.dicke / 2;
+        if (dd < d) {
+          d = dd;
+          best = sw;
+        }
+      }
+      aus.add((o, d < 600 ? best : null));
+    }
+    aus.sort((a, b) => '${a.$1['gewerk']}${a.$1['kennung']}'.compareTo('${b.$1['gewerk']}${b.$1['kennung']}'));
+    return aus;
+  }
+
+  Widget _installationenListe(Map<String, dynamic> g, Map<String, dynamic> r, List<(Map<String, dynamic>, AppWandSeite?)> l, List<RaumSeite> seiten) {
+    return ListView(padding: const EdgeInsets.all(8), children: [
+      const Padding(
+        padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
+        child: Text('Steckdosen, Schalter, Dosen, Leuchten … antippen und Abstand ab Wandecke sowie Höhe über Fertigfußboden messen. '
+            'Fehlt etwas im Plan: unten „Installation aufnehmen“.', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+      ),
+      if (l.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Im Plan ist hier noch nichts eingezeichnet.')),
+      for (final (o, sw) in l)
+        Builder(builder: (context) {
+          final p = punkte(o['punkte']).first;
+          final x = sw?.x(p);
+          final z = (o['h'] as num?)?.toDouble();
+          final ax = x == null ? null : massAnzeige(k, o, 'x', x);
+          final ah = massAnzeige(k, o, 'h', z ?? 0);
+          final farbe = k.plan.gewerke[o['gewerk']]?.farbe ?? BsFarben.textLeise;
+          return ListTile(
+            leading: CircleAvatar(radius: 16, backgroundColor: farbe.withValues(alpha: 0.18), child: Text('${o['typ']}', style: TextStyle(fontSize: 11, color: farbe, fontWeight: FontWeight.w700))),
+            title: Text('${o['kennung']} · ${o['name']}'),
+            subtitle: Text([
+              if (ax != null) 'ab Ecke ${ax.text}' else 'nicht an einer Wand',
+              'Höhe ${z == null && ah.farbe == massGrob ? 'offen' : ah.text}',
+            ].join(' · ')),
+            trailing: Icon(Icons.straighten, color: (ax?.farbe == massGrob || ah.farbe == massGrob) ? massOffen : massGemessen),
+            onTap: () => _installationMessen(o, sw, x, z),
+          );
+        }),
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: FilledButton.tonalIcon(onPressed: () => _installationAufnehmen(g, r, seiten), icon: const Icon(Icons.add_location_alt_outlined), label: const Text('Installation aufnehmen (fehlt im Plan)')),
+      ),
+    ]);
+  }
+
+  Future<void> _installationMessen(Map<String, dynamic> o, AppWandSeite? sw, double? x, double? z) async {
+    final feld = await showModalBottomSheet<String>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(title: Text('${o['kennung']} · ${o['name']}', style: const TextStyle(fontWeight: FontWeight.w700))),
+          if (sw != null) ListTile(leading: const Icon(Icons.straighten), title: const Text('Abstand ab linker Wandecke (Mitte Gerät)'), onTap: () => Navigator.pop(c, 'x')),
+          ListTile(leading: const Icon(Icons.height), title: const Text('Höhe über Fertigfußboden (Mitte Gerät)'), onTap: () => Navigator.pop(c, 'h')),
+        ]),
+      ),
+    );
+    if (feld == null || !mounted) return;
+    final plan = feld == 'x' ? (x ?? 0) : (z ?? 0);
+    final r = await massEingeben(context,
+        titel: '${o['kennung']}: ${feld == 'x' ? 'ab linker Ecke' : 'Höhe über FFB'}',
+        plan: plan,
+        bisher: k.gemessen(o, feld)?.wert,
+        hinweis: feld == 'x' ? 'Vor der Wand stehend von der linken Ecke bis zur Gerätemitte.' : 'Vom Fertigfußboden bis zur Gerätemitte.');
+    if (r == null) return;
+    await k.massSenden(ziel: 'objekt', objekt: o, feld: feld, wert: r.wert, plan: plan, seite: sw?.seiteKurz, raum: '${widget.raum['id']}', text: r.text, extra: {if (sw != null) 'wand': sw.wand['id']});
+    if (mounted) setState(() {});
+  }
+
+  static const _neuTypen = {
+    'SD': 'Steckdose',
+    'TA': 'Schalter / Taster',
+    'ND': 'Netzwerkdose',
+    'DO': 'Abzweigdose',
+    'FA': 'Festanschluss',
+    'LE': 'Leuchte / Auslass',
+    'RW': 'Rauchmelder',
+    'AP': 'Access Point / Kamera',
+    'EN': 'Wasseranschluss',
+    'HZ': 'Heizkörper / Gerät',
+  };
+
+  Future<void> _installationAufnehmen(Map<String, dynamic> g, Map<String, dynamic> r, List<RaumSeite> seiten) async {
+    if (seiten.isEmpty) return;
+    var typ = 'SD';
+    var seite = 0;
+    final notiz = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: const Text('Installation aufnehmen'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                for (final e in _neuTypen.entries) ChoiceChip(label: Text(e.value), selected: typ == e.key, onSelected: (_) => setD(() => typ = e.key)),
+              ]),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<int>(
+                isExpanded: true,
+                initialValue: seite,
+                decoration: const InputDecoration(labelText: 'An welcher Wand (Nummer wie im Plan oben)'),
+                items: [for (var i = 0; i < seiten.length; i++) DropdownMenuItem(value: i, child: Text('Wand ${i + 1} · ${mmCm(seiten[i].t2 - seiten[i].t1)}'))],
+                onChanged: (v) => setD(() {
+                  seite = v ?? 0;
+                  setState(() => _auswahl = seite);
+                }),
+              ),
+              TextField(controller: notiz, decoration: const InputDecoration(labelText: 'Notiz (optional)', hintText: 'z. B. 2fach, alt, defekt')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Weiter: messen')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final rs = seiten[seite];
+    final sw = AppWandSeite(rs.wand, rs.links);
+    final x = await massEingeben(context, titel: '${_neuTypen[typ]}: ab linker Wandecke', plan: 0, hinweis: 'Vor der Wand stehend von der linken Ecke bis zur Gerätemitte.');
+    if (x == null || !mounted) return;
+    final h = await massEingeben(context, titel: '${_neuTypen[typ]}: Höhe über FFB', plan: typ == 'TA' ? 1050 : (typ == 'LE' || typ == 'RW' ? 2500 : 300), hinweis: 'Vom Fertigfußboden bis zur Gerätemitte.');
+    if (h == null || !mounted) return;
+    await k.massSenden(
+      ziel: 'objekt_neu',
+      objekt: {'id': 'neu-${DateTime.now().millisecondsSinceEpoch}'},
+      feld: 'x',
+      wert: x.wert,
+      plan: 0,
+      seite: sw.seiteKurz,
+      raum: '${r['id']}',
+      text: '${_neuTypen[typ]}${notiz.text.trim().isEmpty ? '' : ' – ${notiz.text.trim()}'}',
+      extra: {'wand': rs.wand['id'], 'feld_json': {'typ': typ, 'h': h.wert, if (notiz.text.trim().isNotEmpty) 'notiz': notiz.text.trim()}},
+    );
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gesendet – am PC unter Aufmaß übernehmen.')));
   }
 }
 

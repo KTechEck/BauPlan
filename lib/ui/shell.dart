@@ -24,6 +24,7 @@ import 'tagebuch/tagebuch_page.dart';
 import 'verteiler/schrank_page.dart';
 import 'suche.dart';
 import 'hilfe_panel.dart';
+import 'live_anzeige.dart';
 import 'widgets.dart';
 import '../data/tagebuch_models.dart';
 import '../app/version.dart';
@@ -130,7 +131,8 @@ class Shell extends StatelessWidget {
                   PopupMenuItem(value: 'gewerke', child: ListTile(dense: true, leading: Icon(Icons.category_outlined), title: Text('Gewerke und Farben'))),
                 ],
               ),
-              if (state.touch)
+              if (state.touch && state.live != null) LiveChip(state: state),
+              if (state.touch && state.live == null)
                 TextButton.icon(
                   onPressed: () => projektZumPc(context, state),
                   icon: const Icon(Icons.upload_outlined, color: Color(0xFFC9CDD1), size: 18),
@@ -227,6 +229,7 @@ class _Statusleiste extends StatelessWidget {
       teil(Icons.straighten, MassEinheit.aktuell, tip: 'Maßeinheit (Einstellungen › Darstellung)'),
       teil(Icons.person_outline, store.benutzer, tip: 'Benutzer'),
       if (store.nurLesen) teil(Icons.lock_outline, 'nur lesen', tip: 'Projekt ausgeliehen oder schreibgeschützt'),
+      LivePcAnzeige(state: state),
       teil(Icons.verified_outlined, bauspurBuild),
       teil(Icons.save_outlined, 'gespeichert', tip: 'Änderungen werden sofort gespeichert'),
     ]);

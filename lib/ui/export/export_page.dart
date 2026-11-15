@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+
+import '../installation/legende.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -601,6 +603,8 @@ class PlanExport {
         maus: null,
         waende: [for (final w in store.waende(gid)) wandStrecke(w)],
       ).paint(canvas, logisch);
+      // automatische Legende unten rechts
+      legendeZeichnen(canvas, Offset(logisch.width - 4, logisch.height - 4), legendeBauen(sichtbareObjekte, typen, {for (final x in store.gewerke()) x.id: x}), skala: 0.8);
     }
     final bild = await rec.endRecording().toImage(
           (logisch.width * _aufloesung).round(),

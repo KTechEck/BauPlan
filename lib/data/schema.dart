@@ -414,4 +414,16 @@ const List<List<String>> migrationen = [
   ],
   // Version 27 – Gewerk Außenanlagen (Außenlicht, Außensteckdosen, Erd-/Außenkabel, Regenwasser, Zisterne, Bewässerung …; Startbestand in _migrieren)
   [],
+  // Version 28 – Änderungsliste für die Echtzeit-Synchronisation PC ↔ iPad
+  // (Einträge schreiben temporäre Trigger, siehe lib/data/sync.dart)
+  [
+    '''CREATE TABLE IF NOT EXISTS sync_log (
+      nr INTEGER PRIMARY KEY AUTOINCREMENT,
+      tabelle TEXT NOT NULL,
+      datensatz TEXT NOT NULL,
+      zeit TEXT NOT NULL,
+      herkunft TEXT
+    )''',
+    'CREATE INDEX IF NOT EXISTS idx_sync_log ON sync_log(tabelle, datensatz)',
+  ],
 ];

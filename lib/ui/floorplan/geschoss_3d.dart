@@ -33,7 +33,8 @@ Future<void> geschoss3dZeigen(BuildContext context, AppState state) async {
 
 /// Alles, was die Szene braucht, aus dem Projekt gelesen.
 class _Daten {
-  _Daten(this.waende, this.oeffnungen, this.raeume, this.geraete, this.leitungen, this.farben, this.hoehe, this.mitte, this.groesse);
+  _Daten(this.waende, this.oeffnungen, this.raeume, this.geraete, this.leitungen, this.farben, this.hoehe, this.mitte, this.groesse, this.geraete3d);
+  final List<Geraet3d> geraete3d;
   final List<Wand3d> waende;
   final List<Oeffnung3d> oeffnungen;
   final List<Raum3d> raeume;
@@ -154,6 +155,7 @@ _Daten? _lesen(AppState state, String geschossId) {
   double zUeberFfb(Objekt o, double vorgabe) => o.z == null || o.zBezug == null ? vorgabe : (absolut(o.z!, o.zBezug!, h) - h.ffb).toDouble();
   final farben = <String, Color>{};
   final geraete = <Quader>[];
+  final geraete3d = <Geraet3d>[];
   final leitungen = <Leitung3d>[];
   for (final o in store.objekte(geschossId)) {
     final t = otypen[o.typId];
@@ -173,6 +175,15 @@ _Daten? _lesen(AppState state, String geschossId) {
       case Geometrieart.punkt:
         final m = o.eigenschaften['masse'];
         final masse = m is List && m.length >= 3 ? [for (final x in m) (x as num).toDouble()] : [80.0, 60.0, 80.0];
+        geraete3d.add((
+          id: o.id,
+          kuerzel: t.kuerzel,
+          p: o.punkte.first,
+          z: o.z == null || o.zBezug == null ? null : zUeberFfb(o, 0),
+          masse: m is List && m.length >= 3 ? masse : null,
+          farbe: farben[o.id]!.toARGB32(),
+          drehung: (o.eigenschaften['drehung'] as num?)?.toInt() ?? 0,
+        ));
         geraete.add(Quader(
           id: o.id,
           name: o.kennung,
@@ -189,7 +200,7 @@ _Daten? _lesen(AppState state, String geschossId) {
     }
   }
   return _Daten(w3, oeff, raeume, geraete, leitungen, farben, hoehe, V3((x0 + x1) / 2, -(y0 + y1) / 2, hoehe / 3),
-      math.max(x1 - x0, y1 - y0));
+      math.max(x1 - x0, y1 - y0), geraete3d);
 }
 
 class Geschoss3d extends StatefulWidget {
@@ -238,25 +249,8 @@ class _Geschoss3dState extends State<Geschoss3d> {
     // Geräte als Quader dazu (rechtshändig: y gespiegelt)
     final flaechen = [...szene];
     if (_technik) {
-      for (final g in d.geraete) {
-        final e = [for (final p in g.ecken) V3(p.x, -p.y, p.z)];
-        const fl = [
-          [0, 3, 2, 1],
-          [4, 5, 6, 7],
-          [0, 1, 5, 4],
-          [1, 2, 6, 5],
-          [2, 3, 7, 6],
-          [3, 0, 4, 7],
-        ];
-        final mitte = e.fold(const V3(0, 0, 0), (a, b) => a + b) * (1 / 8);
-        for (final f in fl) {
-          final ecken = [for (final i in f) e[i]];
-          final fm = ecken.fold(const V3(0, 0, 0), (a, b) => a + b) * 0.25;
-          var n = normiert(kreuz(ecken[1] - ecken[0], ecken[2] - ecken[0]));
-          if (n.skalar(fm - mitte) < 0) n = n * -1;
-          flaechen.add(Flaeche3d(ecken, const [(0, 0), (1, 0), (1, 1), (0, 1)], 'geraet', normale: n, art: 'geraet', farbe: (d.farben[g.id] ?? Colors.grey).toARGB32(), id: g.id));
-        }
-      }
+      final g3 = _schnitt == 0 ? d.geraete3d : [for (final g in d.geraete3d) if (g.z != null || !const {'LE', 'RW', 'WR', 'CM', 'PM', 'BM', 'AP', 'LV'}.contains(g.kuerzel)) g];
+      flaechen.addAll(geraeteFlaechen(g3, d.waende, d.hoehe));
     }
     const licht = V3(0.35, -0.45, 0.82);
     final ln = normiert(licht);
@@ -569,7 +563,8 @@ class _GeschossPainter extends CustomPainter {
         _dreiecke(pos, t, b.$1, b.$2, b.$3);
         continue;
       }
-      reihe.add((pr.fold(0.0, (s, x) => s + x.$2) / pr.length, t, pos));
+      // Geräte sitzen auf der Wand: etwas nach vorne ziehen, damit große Wandkacheln sie nicht überdecken
+      reihe.add((pr.fold(0.0, (s, x) => s + x.$2) / pr.length - (fl.art == 'geraet' ? 150 : 0), t, pos));
     }
     for (final b in boeden.values) {
       _zeichnen(canvas, b.$1, b.$2, b.$3, b.$4);

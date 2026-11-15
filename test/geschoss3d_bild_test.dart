@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:bauspur/app/theme.dart';
 import 'package:bauspur/data/app_settings.dart';
+import 'package:bauspur/core/raumerkennung.dart';
 import 'package:bauspur/data/models.dart';
 import 'package:bauspur/data/project_store.dart';
 import 'package:bauspur/state/app_state.dart';
@@ -25,6 +26,12 @@ void main() {
     }
     store.oeffnungAnlegen(wandId: ids[0], art: OeffnungsArt.fenster, abstand: 1000, breite: 1200, hoehe: 1300, bruestung: 900);
     store.oeffnungAnlegen(wandId: ids[4], art: OeffnungsArt.tuer, abstand: 1500, breite: 885, hoehe: 2010, bruestung: 0);
+    final typ = {for (final t in store.objekttypen()) t.kuerzel: t};
+    store.objektAnlegen(geschossId: g, typ: typ['SD']!, punkte: const [Punkt(1500, 3800)]);
+    store.objektAnlegen(geschossId: g, typ: typ['SD']!, punkte: const [Punkt(2000, 3800)]);
+    store.objektAnlegen(geschossId: g, typ: typ['TA']!, punkte: const [Punkt(3300, 2300)]);
+    store.objektAnlegen(geschossId: g, typ: typ['LE']!, punkte: const [Punkt(1700, 2000)]);
+    store.objektAnlegen(geschossId: g, typ: typ['VT']!, punkte: const [Punkt(300, 2500)]);
     final fl = store.flaechenErkennen(g);
     store.raumAnlegen(geschossId: g, name: 'Wohnen', kuerzel: 'WO', flaeche: fl[0]);
     store.raumAnlegen(geschossId: g, name: 'Bad', kuerzel: 'BA', flaeche: fl[1]);

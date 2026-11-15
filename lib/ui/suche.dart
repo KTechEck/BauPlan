@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/theme.dart';
 import '../data/tagebuch_models.dart';
 import '../state/app_state.dart';
+import 'installation/kabel_suche.dart';
 
 /// Ein Suchtreffer mit Sprungziel.
 typedef SuchTreffer = ({String gruppe, String titel, String zeile, IconData symbol, void Function() oeffnen});
@@ -44,6 +45,14 @@ List<SuchTreffer> suchen(AppState s, String text) {
       s.modulWaehlen(Modul.installation);
     }));
     if (aus.length > 200) break;
+  }
+  for (final k in kabelSuchen(s, text).take(60)) {
+    aus.add((gruppe: 'Kabel und Leitungen', titel: k.titel, zeile: [k.geschoss, k.zeile].where((x) => x.isNotEmpty).join(' · '), symbol: Icons.cable, oeffnen: () {
+      s.markiert = {k.objekt.id};
+      s.geschossId = k.geschossId;
+      s.objektAuswahl = k.objekt.id;
+      s.modulWaehlen(Modul.installation);
+    }));
   }
   for (final a in store.aufgaben()) {
     if (!passt('${a.titel} ${a.beschreibung}')) continue;

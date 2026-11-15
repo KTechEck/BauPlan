@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import '../data/sync.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -88,8 +90,34 @@ Future<String> geraetKennung() async {
 /// Projekt vom PC ausleihen und im Dokumente-Ordner ablegen. Liefert den Projektordner.
 /// Am PC ist das Projekt danach nur lesbar, bis es zurückgegeben wird.
 Future<String?> projektVomPcHolen(BuildContext context) async {
+  final art = await showDialog<String>(
+    context: context,
+    builder: (c) => SimpleDialog(
+      title: const Text('Projekt vom PC'),
+      children: [
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(c, 'live'),
+          child: const ListTile(
+            leading: Icon(Icons.sync),
+            title: Text('Live mitarbeiten (empfohlen)'),
+            subtitle: Text('PC und iPad arbeiten gleichzeitig, Änderungen gehen sofort hin und her. Ohne WLAN arbeitest du weiter, abgeglichen wird beim nächsten Kontakt.'),
+          ),
+        ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(c, 'leihen'),
+          child: const ListTile(
+            leading: Icon(Icons.lock_clock_outlined),
+            title: Text('Ausleihen (lange ohne Netz)'),
+            subtitle: Text('Ganzes Projekt mitnehmen; am PC ist es bis zur Rückgabe nur lesbar.'),
+          ),
+        ),
+      ],
+    ),
+  );
+  if (art == null || !context.mounted) return null;
   final pc = await pcVerbindung(context);
   if (pc == null || !context.mounted) return null;
+  if (art == 'live') return _liveHolen(context, pc);
   try {
     final info = await pc.pruefen();
     final name = '${info['projekt'] ?? ''}'.trim();
@@ -114,6 +142,38 @@ Future<String?> projektVomPcHolen(BuildContext context) async {
     ziel.createSync(recursive: true);
     projektEntpacken(zip, ziel.path);
     Ausleihe(geraet: await geraetKennung(), name: 'iPad', seit: DateTime.now(), amPc: false, pc: '${info['name'] ?? ''}').schreiben(ziel.path);
+    return ziel.path;
+  } catch (e) {
+    if (context.mounted) zeigeFehler(context, 'Projekt holen fehlgeschlagen: ${'$e'.replaceFirst('Bad state: ', '')}');
+    return null;
+  }
+}
+
+/// Projekt für die Live-Arbeit holen (PC bleibt frei), Abgleichstand ablegen.
+Future<String?> _liveHolen(BuildContext context, PcSpeicher pc) async {
+  try {
+    final info = await pc.pruefen();
+    final name = '${info['projekt'] ?? ''}'.trim();
+    if (name.isEmpty) throw StateError('Am PC ist kein Projekt geöffnet.');
+    final ziel = Directory(p.join((await getApplicationDocumentsDirectory()).path, name));
+    final alt = ziel.existsSync() ? Ausleihe.lesen(ziel.path) : null;
+    if (alt != null && !alt.amPc && !alt.zurueckgegeben) {
+      if (!context.mounted) return null;
+      final weiter = await frage(context,
+          titel: 'Noch nicht zurückgegeben',
+          text: 'Auf diesem iPad liegt „$name“ noch als Ausleihe mit Änderungen. Erst öffnen und „An PC zurückgeben“ – sonst bleibt der alte Stand als Ordner „…_alt“ liegen.',
+          ja: 'Trotzdem live holen');
+      if (!weiter) return null;
+    }
+    final geraet = await geraetKennung();
+    final (zip, stand, pcZeit) = await pc.projektLive(geraet);
+    if (ziel.existsSync()) {
+      final stempel = DateTime.now().toIso8601String().substring(0, 16).replaceAll(':', '');
+      ziel.renameSync('${ziel.path}_alt_$stempel');
+    }
+    ziel.createSync(recursive: true);
+    projektEntpacken(zip, ziel.path);
+    SyncStand(pc: stand, eigen: -1, dateienSeit: pcZeit, eigeneDateienSeit: DateTime.now(), adresse: pc.adresse, code: pc.code, geraet: geraet).schreiben(ziel.path);
     return ziel.path;
   } catch (e) {
     if (context.mounted) zeigeFehler(context, 'Projekt holen fehlgeschlagen: ${'$e'.replaceFirst('Bad state: ', '')}');
