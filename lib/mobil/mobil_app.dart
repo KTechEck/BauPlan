@@ -33,7 +33,7 @@ class MobilApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: 'BauSpur',
         debugShowCheckedModeBanner: false,
-        theme: bauSpurTheme(),
+        theme: bauSpurTheme(touch: true),
         home: MobilStart(ordner: ordner, einstellungen: einstellungen, puffer: puffer, kamera: kamera),
       );
 }

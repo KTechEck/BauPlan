@@ -841,3 +841,5 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
       Dialoge/Menüs/Chips/Tooltips einheitlich), Einstellungen mit Symbolen in der Navigation, Ausgaben als
       Symbolkacheln, Foto-Werkzeuge als Symbolknöpfe, Löschen überall als dezenter roter Textknopf
       (gemeinsame Bausteine SymbolLeiste, LoeschenKnopf, AktionsKachel in lib/ui/widgets.dart).
+- [x] Auch iPad/iPhone-App: Touch-Thema (Fingerziele 44 pt), Kopfzeilen, untere Navigation, Listen-Symbole,
+      Hinweise und Auswahlblätter einheitlich mit dem PC.
