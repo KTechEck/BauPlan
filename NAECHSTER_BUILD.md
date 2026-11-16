@@ -801,3 +801,7 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Außenwandkontur: ganze Außenwand markieren und als eine Kontur führen – Wandtyp (mit WDVS) läuft durchgehend herum, Teilstücke/Versätze inklusive.
 - Ecken verbinden nicht richtig: rechts außen, zwischen Balkon und Büro, links unten am Balkon (freie Dicke) – Schichten/WDVS müssen um Ecken
   und Versprünge sauber laufen, auch bei Wänden ohne Wandtyp.
+- UMBAU Wandmodell (Tims Vorschlag): Wand = tragender Kern (z. B. Ziegel Hochloch 365, wird gezeichnet und an den Ecken über den Kern verbunden);
+  Bekleidung je Seite getrennt (innen: Putz/GK/Fliese …, außen: WDVS/Putz/Klinker …) als Schichten, die je Seite als zusammenhängende Kontur um
+  Ecken, Versprünge und Teilstücke laufen (Außenwandkontur). Bestehende Wandtypen werden beim Öffnen in Kern + Seitenschichten zerlegt (tragende
+  bzw. dickste Schicht = Kern), rückgängig machbar. Maße innen/außen/Rohbau aus Kern bzw. Oberfläche wählbar.
