@@ -794,3 +794,10 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
 - Sonne (core/sonne.dart, ui/bauphysik/sonne_dialog.dart, Einstellung `standort` lat/lon + `norden_grad`): Sonnenstand (NOAA), Sonnenbahn 21.3./6./12.,
   Sonnenstunden je Fenster mit Wandverschattung, PV-Faktor je Dachfläche; 3D „Sonne“ mit Datum/Uhrzeit, Licht und Wandschatten.
 - Tests test/build35_test.dart, test/dach3d_test.dart; 313 Tests grün.
+
+## Vorgemerkt für Build 36 (Tims Test von Build 35, sammelt noch – erst bauen, wenn er Bescheid gibt)
+- Balkon zeigt „Wandzug offen“, obwohl er geschlossen ist (offene Kanten/Teilstücke prüfen).
+- Teilstück hinter der Balkontür (910) passt nicht (Teilung/Typ an der Öffnung falsch).
+- Außenwandkontur: ganze Außenwand markieren und als eine Kontur führen – Wandtyp (mit WDVS) läuft durchgehend herum, Teilstücke/Versätze inklusive.
+- Ecken verbinden nicht richtig: rechts außen, zwischen Balkon und Büro, links unten am Balkon (freie Dicke) – Schichten/WDVS müssen um Ecken
+  und Versprünge sauber laufen, auch bei Wänden ohne Wandtyp.
