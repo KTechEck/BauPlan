@@ -773,3 +773,9 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Überstand; Sparren im Grundriss gezeichnet (abschaltbar), Klick auf einen Sparren öffnet seine Lage; Werte gelten beim Tippen.
 - Wandansicht: „Dachschräge …“ – Kniestock, Deckenhöhe, Tiefe oder Neigung für diese Wandseite (im Raum gespeichert wie das App-Aufmaß), Strg+Z.
 - Tests test/build34_test.dart; 304 Tests grün.
+
+## Vorgemerkt für Build 35 (Tim 16.11., aus dem Vergleich mit Plan7Architekt – nur diese drei, der Rest nicht)
+- Automatische Dachformen (Sattel-, Walm-, Pult-, Krüppelwalm-, Zelt-, Mansarddach …) mit Sparren, Pfetten, Balken, aus dem Grundriss erzeugt, in 3D und
+  Wandansicht.
+- Geländeeditor außen: Höhenpunkte, Hang/Böschung, Wege und Flächen mit Höhen, Gefälle und Entwässerung.
+- Sonnenstand und Verschattung: Tagesverlauf je Datum/Uhrzeit am Standort, Schatten in 3D und im Plan, Besonnung von Fenstern und PV-Flächen.
