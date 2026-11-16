@@ -735,7 +735,7 @@ class ProjectStore {
     var eig = <String, Object?>{'kern': {'d': dicke}};
     final typ = wandtypId == null ? null : wandtyp(wandtypId);
     if (typ != null && typ.schichten.isNotEmpty) {
-      final a = ausWandtyp(typ.schichten);
+      final a = ausWandtyp(typ.schichten, kern: wandtypKern(typ.id));
       eig = a.eigenschaften;
       dicke = a.kern;
     }
@@ -852,7 +852,7 @@ class ProjectStore {
     for (final w in alt) {
       final typ = w.wandtypId == null ? null : wandtyp(w.wandtypId!);
       if (typ != null && typ.schichten.isNotEmpty && !w.istKante && !w.teilhoch) {
-        final a = ausWandtyp(typ.schichten);
+        final a = ausWandtyp(typ.schichten, kern: wandtypKern(typ.id));
         versatz[w.id] = a.versatz;
         eig[w.id] = a.eigenschaften;
         kern[w.id] = a.kern;
@@ -985,7 +985,7 @@ class ProjectStore {
       db.execute('UPDATE wand SET wandtyp_id = NULL WHERE id = ?', [id]);
     } else if (alt['kern'] is Map && typ.schichten.isNotEmpty) {
       // Kern + Aufbau aus dem Wandtyp; die gezeichnete Achse bleibt Kernmitte
-      final a = ausWandtyp(typ.schichten);
+      final a = ausWandtyp(typ.schichten, kern: wandtypKern(typ.id));
       final neu = {...alt, ...a.eigenschaften}..removeWhere((k, v) => v == null);
       if (a.eigenschaften['aufbau_l'] == null) neu.remove('aufbau_l');
       if (a.eigenschaften['aufbau_r'] == null) neu.remove('aufbau_r');
@@ -1325,6 +1325,15 @@ class ProjectStore {
       .map((r) => Schicht(r['material_id'] as String, r['dicke_mm'] as int))
       .toList();
 
+  /// Gewählte Kernschicht eines Wandtyps (Index), null = dickste Schicht.
+  int? wandtypKern(String id) => ((einstellung<Map>('wandtyp_kern') ?? const {})[id] as num?)?.toInt();
+
+  void wandtypKernSetzen(String id, int? index) {
+    final m = Map<String, dynamic>.from(einstellung<Map>('wandtyp_kern') ?? const {});
+    index == null ? m.remove(id) : m[id] = index;
+    einstellungSetzen('wandtyp_kern', m);
+  }
+
   String wandtypAnlegen(String name, List<Schicht> schichten) {
     final id = neueId();
     final n = db.select('SELECT COUNT(*) AS n FROM wandtyp').first['n'] as int;
@@ -1355,7 +1364,7 @@ class ProjectStore {
       db.execute('UPDATE wand SET dicke_mm = ? WHERE wandtyp_id = ? AND geloescht IS NULL AND eigenschaften NOT LIKE ?', [dicke, id, '%"kern"%']);
       // Wände im Modell „Kern + Aufbau“: Kern und Seiten aus dem geänderten Typ
       if (schichten.isNotEmpty) {
-        final a = ausWandtyp(schichten);
+        final a = ausWandtyp(schichten, kern: wandtypKern(id));
         for (final r in db.select('SELECT id, eigenschaften FROM wand WHERE wandtyp_id = ? AND geloescht IS NULL AND eigenschaften LIKE ?', [id, '%"kern"%'])) {
           final e = {...Map<String, dynamic>.from(jsonDecode(r['eigenschaften'] as String? ?? '{}') as Map), ...a.eigenschaften}..removeWhere((k, v) => v == null);
           if (a.eigenschaften['aufbau_l'] == null) e.remove('aufbau_l');

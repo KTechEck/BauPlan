@@ -52,6 +52,24 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _eintrag(String text, [_Bereich? b]) => _Eintrag(
         text,
+        icon: switch (b) {
+          _Bereich.allgemein => Icons.tune,
+          _Bereich.darstellung => Icons.palette_outlined,
+          _Bereich.ki => Icons.auto_awesome_outlined,
+          _Bereich.speicher => Icons.sync_alt,
+          _Bereich.zeichnen => Icons.draw_outlined,
+          _Bereich.projekt => Icons.layers_outlined,
+          _Bereich.vorgaben => Icons.rule_outlined,
+          _Bereich.klima => Icons.wb_sunny_outlined,
+          _Bereich.gewerke => Icons.construction_outlined,
+          _Bereich.objekttypen => Icons.category_outlined,
+          _Bereich.kennungen => Icons.tag,
+          _Bereich.benutzer => Icons.group_outlined,
+          _Bereich.materialien => Icons.texture,
+          _Bereich.wandtypen => Icons.view_column_outlined,
+          _Bereich.sensoren => Icons.sensors,
+          null => Icons.chevron_right,
+        },
         aktiv: b != null && b == _bereich,
         verfuegbar: b != null,
         onTap: b == null ? null : () => setState(() => _bereich = b),
@@ -433,8 +451,9 @@ class _Ueberschrift extends StatelessWidget {
 }
 
 class _Eintrag extends StatelessWidget {
-  const _Eintrag(this.text, {required this.aktiv, required this.verfuegbar, this.onTap});
+  const _Eintrag(this.text, {required this.icon, required this.aktiv, required this.verfuegbar, this.onTap});
   final String text;
+  final IconData icon;
   final bool aktiv;
   final bool verfuegbar;
   final VoidCallback? onTap;
@@ -448,13 +467,19 @@ class _Eintrag extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              child: Text(text,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: aktiv ? FontWeight.w600 : FontWeight.w400,
-                    color: aktiv ? BsFarben.akzentDunkel : (verfuegbar ? null : const Color(0xFF9AA0A6)),
-                  )),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(children: [
+                Icon(icon, size: 18, color: aktiv ? BsFarben.akzent : BsFarben.textLeise),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(text,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: aktiv ? FontWeight.w600 : FontWeight.w400,
+                        color: aktiv ? BsFarben.akzentDunkel : (verfuegbar ? null : const Color(0xFF9AA0A6)),
+                      )),
+                ),
+              ]),
             ),
           ),
         ),

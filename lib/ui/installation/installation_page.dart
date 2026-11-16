@@ -5,6 +5,8 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/wandaufbau.dart';
+
 import '../zwei_finger.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -26,7 +28,6 @@ import '../../core/raumerkennung.dart';
 import '../../core/verteiler.dart';
 import '../../core/sensoren.dart';
 import '../../core/knx.dart' show haSlug;
-import '../../core/wandmasse.dart';
 import '../../data/bauelement_bibliothek.dart';
 import '../../data/models.dart';
 import '../../state/app_state.dart';
@@ -207,22 +208,13 @@ class _InstallationPageState extends State<InstallationPage> {
     final g = _s.geschossId;
     final waende = g == null ? <Wand>[] : store.waende(g);
     final global = store.einstellung<bool>('ecken_verbinden') ?? true;
-    final achsen = [for (final w in waende) w.achse];
-    final verb = [for (final w in waende) w.verbinden ?? global];
-    final nachbarn = [
-      for (var i = 0; i < waende.length; i++)
-        if (verb[i] && !waende[i].istKante) achsen[i]
-    ];
     final raeume = g == null ? <Raum>[] : store.raeume(g);
     final gewerke = {for (final x in store.gewerke()) x.id: x};
     _sichtbar ??= {for (final x in gewerke.values) if (x.sichtbar) x.id};
     final d = _Daten(
       waende: waende,
       umrisse: {
-        for (var i = 0; i < waende.length; i++)
-          waende[i].id: [
-            for (final p in wandUmriss(achsen[i], verb[i] ? nachbarn : [achsen[i]])) Offset(p.x, p.y)
-          ],
+        for (final e in wandUmrisse(waende, verbindenStandard: global).entries) e.key: [for (final p in e.value) Offset(p.x, p.y)],
       },
       raeume: raeume,
       raumBilder: [
@@ -3224,7 +3216,7 @@ class _InstallationPageState extends State<InstallationPage> {
         onChanged: (v) => aendern({'produkt_id': v}),
       ),
       const SizedBox(height: 20),
-      OutlinedButton.icon(onPressed: _loeschen, icon: const Icon(Sym.loeschen), label: const Text('Löschen (Entf)')),
+      LoeschenKnopf('Löschen', onPressed: _loeschen),
     ]));
   }
 }

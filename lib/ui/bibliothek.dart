@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../core/wandaufbau.dart';
 import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
@@ -358,8 +360,8 @@ class _WandtypenAnsichtState extends State<WandtypenAnsicht> {
                 FilledButton.icon(onPressed: _neu, icon: const Icon(Icons.add), label: const Text('Wandtyp')),
               ]),
               const SizedBox(height: 8),
-              const Text('Mehrschichtige Wände, z. B. Mauerwerk + WDVS + Putz. Im Grundriss wählen und '
-                  'zuweisen; die Wanddicke ergibt sich aus den Schichten.'),
+              const Text('Vorlagen für Wände: eine Schicht ist der Kern (gezeichnet, verbindet die Ecken, Symbol ▣), '
+                  'die übrigen werden zum Aufbau innen und außen. Im Grundriss wählen oder unter Wand › Aufbau übernehmen.'),
               const SizedBox(height: 16),
               Card(
                 child: Column(children: [
@@ -384,6 +386,29 @@ class _WandtypenAnsichtState extends State<WandtypenAnsicht> {
                       ),
                       onTap: () => _waehlen(w),
                     ),
+                ]),
+              ),
+              const SizedBox(height: 20),
+              Text('Aufbau-Vorlagen je Seite', style: Theme.of(context).textTheme.titleMedium),
+              const Text('Putz, Fliese, WDVS … ohne Kern. Anlegen in der Wand unter „Aufbau …“ › „Als Vorlage speichern“.',
+                  style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+              Card(
+                child: Column(children: [
+                  for (final (i, v) in aufbauVorlagen(store).indexed)
+                    ListTile(
+                      dense: true,
+                      title: Text(v.name),
+                      subtitle: Text(v.schichten.map((x) => '${materialien[x.material]?.name ?? '?'} ${x.dicke}').join(' + '), overflow: TextOverflow.ellipsis),
+                      trailing: IconButton(
+                        tooltip: 'Vorlage löschen',
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        onPressed: () {
+                          aufbauVorlagenSetzen(store, [...aufbauVorlagen(store)]..removeAt(i));
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                  if (aufbauVorlagen(store).isEmpty) const ListTile(dense: true, title: Text('Noch keine Vorlagen.', style: TextStyle(color: BsFarben.textLeise))),
                 ]),
               ),
             ],
@@ -443,6 +468,24 @@ class _WandtypenAnsichtState extends State<WandtypenAnsicht> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(children: [
                       SizedBox(width: 22, child: Text('${i + 1}', style: const TextStyle(color: BsFarben.textLeise))),
+                      Builder(builder: (_) {
+                        // Kern: gezeichnete, tragende Schicht (verbindet die Ecken); Rest = Aufbau je Seite
+                        final gesetzt = store.wandtypKern(t.id);
+                        var dickste = 0;
+                        for (var j = 1; j < schichten.length; j++) {
+                          if (schichten[j].dicke > schichten[dickste].dicke) dickste = j;
+                        }
+                        final istKern = (gesetzt ?? dickste) == i;
+                        return IconButton(
+                          tooltip: istKern ? 'Kern (tragend, wird gezeichnet)' : 'Diese Schicht als Kern',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            store.wandtypKernSetzen(t.id, i == dickste ? null : i);
+                            setState(() {});
+                          },
+                          icon: Icon(istKern ? Icons.foundation : Icons.radio_button_unchecked, size: 18, color: istKern ? BsFarben.akzentDunkel : BsFarben.textLeise),
+                        );
+                      }),
                       Farbfeld(materialien[schichten[i].materialId]?.farbe ?? 0xFFDDDDDD),
                       const SizedBox(width: 10),
                       Expanded(

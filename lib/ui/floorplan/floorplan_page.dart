@@ -40,6 +40,7 @@ import 'aufmass_dialog.dart';
 import 'sparren_dialog.dart';
 import 'gelaende_dialog.dart';
 import 'aufbau_dialog.dart';
+import 'anschluss_menue.dart';
 import '../bauphysik/sonne_dialog.dart';
 import 'dach_dialog.dart';
 import 'geschoss_3d.dart';
@@ -424,7 +425,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
           t.id: [for (final s in t.schichten) (s.dicke, Color(materialien[s.materialId]?.farbe ?? 0xFFDDDDDD))],
       },
       achsen: achsen,
-      aufbau: aufbauBaender(waende, verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true, oeffnungen: g == null ? const [] : store.oeffnungen(g)),
+      aufbau: aufbauBaender(waende,
+          verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true, oeffnungen: g == null ? const [] : store.oeffnungen(g), baustoffName: (id) => materialien[id]?.name),
       flanken: () {
         final roh = {
           for (var i = 0; i < waende.length; i++)
@@ -486,10 +488,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
       vorlage: g == null ? null : store.planvorlage(g),
       oeffnungen: g == null ? const [] : store.oeffnungen(g),
       umrisse: {
-        for (var i = 0; i < waende.length; i++)
-          waende[i].id: [
-            for (final p in wandUmriss(achsen[i], verbinden[i] ? nachbarn : [achsen[i]])) Offset(p.x, p.y)
-          ],
+        for (final e in wandUmrisse(waende, verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true, baustoffName: (id) => materialien[id]?.name).entries)
+          e.key: [for (final p in e.value) Offset(p.x, p.y)],
       },
     );
     _plan = plan;
@@ -1417,11 +1417,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
         Text('von (${mmText(b.x1)} | ${mmText(b.y1)})  nach (${mmText(b.x2)} | ${mmText(b.y2)})',
             style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
         const SizedBox(height: 20),
-        OutlinedButton.icon(
-          onPressed: _auswahlLoeschen,
-          icon: const Icon(Sym.loeschen),
-          label: const Text('Bemaßung löschen (Entf)'),
-        ),
+        LoeschenKnopf('Bemaßung löschen', onPressed: _auswahlLoeschen),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () {
@@ -1566,11 +1562,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
             'Wände am fernen Ende ziehen mit.',
             style: TextStyle(fontSize: 11, height: 1.4, color: BsFarben.textLeise)),
         const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: _auswahlLoeschen,
-          icon: const Icon(Sym.loeschen),
-          label: const Text('Winkelmaß löschen (Entf)'),
-        ),
+        LoeschenKnopf('Winkelmaß löschen', onPressed: _auswahlLoeschen),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () {
@@ -2065,22 +2057,43 @@ class _FloorplanPageState extends State<FloorplanPage> {
         Text('${o.art.label} ${mmText(o.breite)} × ${mmText(o.hoehe)}',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        DropdownButtonFormField<OeffnungsArt>(
-          key: ValueKey('oe-art-${o.id}-${o.art.name}'),
-          initialValue: o.art,
-          decoration: const InputDecoration(labelText: 'Art'),
-          items: [for (final a in OeffnungsArt.values) DropdownMenuItem(value: a, child: Text(a.label))],
-          onChanged: (a) {
-            if (a == null) return;
+        // Art als Symbole
+        SegmentedButton<OeffnungsArt>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            for (final a in OeffnungsArt.values)
+              ButtonSegment(
+                value: a,
+                tooltip: a.label,
+                icon: Icon(switch (a) {
+                  OeffnungsArt.tuer => Icons.door_front_door_outlined,
+                  OeffnungsArt.fenster => Icons.window_outlined,
+                  OeffnungsArt.balkontuer => Icons.door_sliding_outlined,
+                  OeffnungsArt.nische => Icons.crop_square,
+                  _ => Icons.highlight_alt,
+                }, size: 20),
+              ),
+          ],
+          selected: {o.art},
+          onSelectionChanged: (v) {
+            final a = v.first;
             final (_, h, br) = a.standard;
             aendern({'art': a.name, 'hoehe_mm': h, 'bruestung_mm': br});
           },
         ),
-        const SizedBox(height: 10),
-        zahl('Breite (Rohbau)', 'breite_mm', o.breite, max: wandLaenge - o.abstand),
-        zahl('Höhe (Rohbau)', 'hoehe_mm', o.hoehe),
-        zahl('Brüstung', 'bruestung_mm', o.bruestung),
-        zahl('Abstand vom Wandanfang', 'abstand_mm', o.abstand, max: wandLaenge - o.breite),
+        const SizedBox(height: 12),
+        // Maße kompakt in zwei Spalten
+        Row(children: [
+          Expanded(child: zahl('Breite', 'breite_mm', o.breite, max: wandLaenge - o.abstand)),
+          const SizedBox(width: 10),
+          Expanded(child: zahl('Höhe', 'hoehe_mm', o.hoehe)),
+        ]),
+        Row(children: [
+          Expanded(child: zahl('Brüstung', 'bruestung_mm', o.bruestung)),
+          const SizedBox(width: 10),
+          Expanded(child: zahl('ab Wandanfang', 'abstand_mm', o.abstand, max: wandLaenge - o.breite)),
+        ]),
         if (o.art == OeffnungsArt.nische) ...[
           SpeicherFeld(
             key: ValueKey('nt-${o.id}-${o.eigenschaften['tiefe']}'),
@@ -2099,33 +2112,40 @@ class _FloorplanPageState extends State<FloorplanPage> {
               style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
         ],
         if (o.art == OeffnungsArt.tuer || o.art == OeffnungsArt.balkontuer)
-          Wrap(spacing: 8, runSpacing: 6, children: [
-            OutlinedButton.icon(
+          Row(children: [
+            const Text('Drehen', style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+            const SizedBox(width: 8),
+            IconButton.outlined(
+              tooltip: 'Anschlag wechseln (Band links/rechts) – auch direkt an der Tür im Plan',
               onPressed: () => aendern({'band_rechts': o.bandRechts ? 0 : 1}),
               icon: const Icon(Icons.swap_horiz, size: 18),
-              label: const Text('Anschlag wechseln'),
             ),
-            OutlinedButton.icon(
+            IconButton.outlined(
+              tooltip: 'Aufschlagseite wechseln (nach innen/außen) – auch direkt an der Tür im Plan',
               onPressed: () => aendern({'aufgehen_links': o.aufgehenLinks ? 0 : 1}),
               icon: const Icon(Icons.swap_vert, size: 18),
-              label: const Text('Aufschlagseite wechseln'),
             ),
           ]),
         if (o.art == OeffnungsArt.tuer) ...[
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            key: ValueKey('tuerart-${o.id}-${o.eigenschaften['tuerart']}'),
-            initialValue: o.eigenschaften['tuerart'] as String? ?? 'dreh',
-            decoration: const InputDecoration(labelText: 'Türart'),
-            items: const [
-              DropdownMenuItem(value: 'dreh', child: Text('Drehtür')),
-              DropdownMenuItem(value: 'wandbuendig', child: Text('wandbündige Tür (verdeckte Zarge)')),
-              DropdownMenuItem(value: 'schiebe', child: Text('Schiebetür vor der Wand')),
-              DropdownMenuItem(value: 'tasche', child: Text('Taschen-/Schiebetür in der Wand')),
-              DropdownMenuItem(value: 'pendel', child: Text('Pendeltür')),
-            ],
-            onChanged: (v) => aendern({'eigenschaften': jsonEncode({...o.eigenschaften, 'tuerart': v})}),
-          ),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final (k, text, icon) in const [
+              ('dreh', 'Drehtür', Icons.door_front_door_outlined),
+              ('wandbuendig', 'wandbündig', Icons.vertical_align_center),
+              ('schiebe', 'Schiebetür vor der Wand', Icons.swap_horizontal_circle_outlined),
+              ('tasche', 'Taschen-/Schiebetür in der Wand', Icons.input),
+              ('pendel', 'Pendeltür', Icons.sync_alt),
+            ])
+              Tooltip(
+                message: text,
+                child: ChoiceChip(
+                  avatar: Icon(icon, size: 16),
+                  label: Text(k == 'dreh' ? 'Dreh' : k == 'wandbuendig' ? 'bündig' : k == 'schiebe' ? 'Schiebe' : k == 'tasche' ? 'Tasche' : 'Pendel'),
+                  selected: (o.eigenschaften['tuerart'] as String? ?? 'dreh') == k,
+                  onSelected: (_) => aendern({'eigenschaften': jsonEncode({...o.eigenschaften, 'tuerart': k})}),
+                ),
+              ),
+          ]),
           ..._tuerHinweise(o, w),
         ],
         if (o.art == OeffnungsArt.tuer || o.art == OeffnungsArt.balkontuer) ..._schwellenHinweise(o, w),
@@ -2177,11 +2197,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           ),
         ],
         const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: _auswahlLoeschen,
-          icon: const Icon(Sym.loeschen),
-          label: Text('${o.art.label} löschen (Entf)'),
-        ),
+        LoeschenKnopf('${o.art.label} löschen', onPressed: _auswahlLoeschen),
       ],
     );
   }
@@ -2298,7 +2314,45 @@ class _FloorplanPageState extends State<FloorplanPage> {
 
   /// Maus-/Stift-/Fingerdruck auf der Zeichenfläche.
   void _druck(PointerDownEvent e) {
+              // Knopf am Wandknoten der gewählten Wand: Anschluss einstellen
+              if (e.buttons == kPrimaryButton && _werkzeug == Werkzeug.auswahl && _plan != null) {
+                for (final (felder, k, _) in _tuerKnoepfe(_plan!)) {
+                  if ((k * _massstab + _verschiebung - e.localPosition).distance <= 11) {
+                    final o = _plan!.oeffnungen.firstWhere((x) => x.id == _oeffnungAuswahl);
+                    final store = _s.store!;
+                    final alt = store.oeffnungAendern(o.id, felder(o));
+                    if (alt.isNotEmpty) {
+                      _rueckgaengig.add(() => store.oeffnungAendern(o.id, alt));
+                      _s.geaendert();
+                    }
+                    return;
+                  }
+                }
+                for (final (w, amAnfang, k) in _knoten(_plan!)) {
+                  if ((k * _massstab + _verschiebung - e.localPosition).distance <= 11) {
+                    _anschlussOeffnen(w, amAnfang, e.position);
+                    return;
+                  }
+                }
+              }
               if (e.buttons == kPrimaryButton && _doppel.erkannt(e.localPosition)) {
+                // Doppelklick auf eine Wandecke öffnet den Anschluss
+                final welt = _zuWelt(e.localPosition);
+                final plan = _plan;
+                if (plan != null) {
+                  final kandidaten = [
+                    for (final w in plan.waende)
+                      for (final amAnfang in [true, false])
+                        if ((Offset(amAnfang ? w.x1.toDouble() : w.x2.toDouble(), amAnfang ? w.y1.toDouble() : w.y2.toDouble()) - welt).distance * _massstab < 12 &&
+                            anschlussNachbar(w, amAnfang, plan.waende) != null)
+                          (w, amAnfang),
+                  ];
+                  if (kandidaten.isNotEmpty) {
+                    final (w, amAnfang) = kandidaten.where((x) => _auswahl.contains(x.$1.id)).firstOrNull ?? kandidaten.first;
+                    _anschlussOeffnen(w, amAnfang, e.position);
+                    return;
+                  }
+                }
                 _eigFenster.nachKlickOeffnen(context, sperre: () => _auswahl.isNotEmpty || _massAuswahl != null || _winkelAuswahl != null);
               }
               if (e.buttons != kPrimaryMouseButton) return;
@@ -2494,6 +2548,48 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return KeyEventResult.ignored;
   }
 
+  /// Symbolknöpfe an der gewählten Tür: Anschlag drehen (am Band, in der
+  /// Wandflucht) und Aufschlag wechseln (auf der Aufschlagseite, Mitte).
+  List<(Map<String, Object?> Function(Oeffnung), Offset, IconData)> _tuerKnoepfe(_Plan plan) {
+    final id = _oeffnungAuswahl;
+    if (id == null || _werkzeug != Werkzeug.auswahl) return const [];
+    final o = plan.oeffnungen.where((x) => x.id == id).firstOrNull;
+    if (o == null || (o.art != OeffnungsArt.tuer && o.art != OeffnungsArt.balkontuer)) return const [];
+    final w = plan.waende.where((x) => x.id == o.wandId).firstOrNull;
+    if (w == null || w.laenge < 1) return const [];
+    final a = Offset(w.x1.toDouble(), w.y1.toDouble());
+    final u = (Offset(w.x2.toDouble(), w.y2.toDouble()) - a) / w.laenge;
+    final n = Offset(-u.dy, u.dx);
+    final abstand = w.dicke / 2 + 22 / _massstab;
+    final mitte = a + u * (o.abstand + o.breite / 2);
+    return [
+      ((x) => {'band_rechts': x.bandRechts ? 0 : 1}, mitte + n * abstand, Icons.swap_horiz),
+      ((x) => {'aufgehen_links': x.aufgehenLinks ? 0 : 1}, mitte - n * abstand, Icons.swap_vert),
+    ];
+  }
+
+  /// Knoten der (einzeln) gewählten Wand mit Nachbarwand: (Wand, Anfang?, Punkt).
+  List<(Wand, bool, Offset)> _knoten(_Plan plan) {
+    if (_auswahl.length != 1 || _werkzeug != Werkzeug.auswahl) return const [];
+    final w = plan.waende.where((x) => x.id == _auswahl.first).firstOrNull;
+    if (w == null || w.istKante || w.teilhoch) return const [];
+    return [
+      for (final amAnfang in [true, false])
+        if (anschlussNachbar(w, amAnfang, plan.waende) != null)
+          (w, amAnfang, Offset(amAnfang ? w.x1.toDouble() : w.x2.toDouble(), amAnfang ? w.y1.toDouble() : w.y2.toDouble())),
+    ];
+  }
+
+  Future<void> _anschlussOeffnen(Wand w, bool amAnfang, Offset global) async {
+    final store = _s.store!;
+    final alt = w.eigenschaften[amAnfang ? 'anschluss_a' : 'anschluss_b'];
+    final neu = await anschlussMenue(context, global, anschlussVon(w, amAnfang));
+    if (neu == null) return;
+    store.wandEigenschaftenSetzen(w.id, {amAnfang ? 'anschluss_a' : 'anschluss_b': neu.art == AnschlussArt.auto ? null : anschlussJson(neu)});
+    _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {amAnfang ? 'anschluss_a' : 'anschluss_b': alt}));
+    _s.geaendert();
+  }
+
   /// Kern (tragende Schicht) und Aufbau je Seite.
   List<Widget> _kernFelder(Wand w, _Plan plan) {
     final store = _s.store!;
@@ -2507,9 +2603,24 @@ class _FloorplanPageState extends State<FloorplanPage> {
       return b.length == 1 ? (t.isEmpty ? 'leer' : t) : '${b.length} Bereiche · $t …';
     }
 
+    final knoten = _knoten(plan);
     return [
       const SizedBox(height: 10),
-      const Text('Kern (tragend, verbindet die Ecken)', style: TextStyle(fontWeight: FontWeight.w600)),
+      Row(children: [
+        const Expanded(child: Text('Kern (tragend, verbindet die Ecken)', style: TextStyle(fontWeight: FontWeight.w600))),
+        for (final (_, amAnfang, k) in knoten)
+          Tooltip(
+            message: 'Anschluss am ${amAnfang ? 'Anfang' : 'Ende'}: ${switch (anschlussVon(w, amAnfang).art) { AnschlussArt.auto => 'automatisch', AnschlussArt.gehrung => 'Gehrung', AnschlussArt.durch => 'diese läuft durch', AnschlussArt.stumpf => 'stößt stumpf an', AnschlussArt.eingebunden => 'eingebunden' }}',
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(amAnfang ? Icons.first_page : Icons.last_page, size: 18),
+              onPressed: () {
+                final box = _flaecheKey.currentContext?.findRenderObject() as RenderBox?;
+                _anschlussOeffnen(w, amAnfang, box?.localToGlobal(k * _massstab + _verschiebung) ?? Offset.zero);
+              },
+            ),
+          ),
+      ]),
       Row(children: [
         Expanded(
           child: DropdownButton<String?>(
@@ -3719,6 +3830,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   schichten: plan.schichten,
                   aufbau: [for (final b in plan.aufbau) if (b.imPlan) ([for (final p in b.polygon) Offset(p.x, p.y)], Color(plan.materialien[b.material]?.farbe ?? 0xFFE9E4DA))],
                   kernFarben: {for (final e in plan.materialien.entries) e.key: Color(e.value.farbe)},
+                  knoten: [for (final k in _knoten(plan)) k.$3],
+                  objektKnoepfe: [for (final k in _tuerKnoepfe(plan)) (k.$2, k.$3)],
                   massstab: _massstab,
                   verschiebung: _verschiebung,
                   auswahl: _auswahl,
@@ -4040,11 +4153,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           label: const Text('Umbenennen'),
         ),
         const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => _raumLoeschen(r.id),
-          icon: const Icon(Sym.loeschen),
-          label: const Text('Raum löschen (Entf)'),
-        ),
+        LoeschenKnopf('Raum löschen', onPressed: () => _raumLoeschen(r.id)),
         const SizedBox(height: 12),
         const Text('Die Wände bleiben beim Löschen stehen; die Fläche wird wieder frei.',
             style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
@@ -4334,11 +4443,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           style: TextStyle(fontSize: 12, height: 1.4, color: BsFarben.textLeise),
         ),
         const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: _auswahlLoeschen,
-          icon: const Icon(Sym.loeschen),
-          label: Text('${waende.length} Wände löschen (Entf)'),
-        ),
+        LoeschenKnopf('${waende.length} Wände löschen', onPressed: _auswahlLoeschen),
       ],
     );
   }
@@ -4745,48 +4850,37 @@ class _FloorplanPageState extends State<FloorplanPage> {
             ),
           ),
         const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 4, children: [
-          OutlinedButton.icon(
-            onPressed: w.gesperrt ? null : () => setState(() => _parallelFuer = w.id),
-            icon: const Icon(Sym.parallel, size: 18),
-            label: const Text('Parallel zu …'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _verlaengernStarten(w),
-            icon: const Icon(Sym.verlaengern, size: 18),
-            label: Text('Verlängern am ${_amAnfang ? 'Anfang' : 'Ende'}'),
-          ),
-        ]),
-        if (_parallelFuer == w.id)
-          _hinweis('Jetzt die Wand anklicken, zu der diese Wand parallel werden soll. Das Ende '
-              '(„ändern am“) dreht sich, die Länge bleibt, anschließende Wände ziehen mit. Esc bricht ab.'),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 4, children: [
-          OutlinedButton.icon(
-            onPressed: () {
+        SymbolLeiste([
+          (Sym.parallel, 'Parallel zu … (Wand anklicken)', w.gesperrt ? null : () => setState(() => _parallelFuer = w.id), _parallelFuer == w.id),
+          (Sym.verlaengern, 'Verlängern am ${_amAnfang ? 'Anfang' : 'Ende'}', () => _verlaengernStarten(w), false),
+          (
+            (w.massanzeige ?? _massVoreinstellung) == MassAnzeige.keine ? Icons.visibility_off_outlined : Icons.straighten,
+            (w.massanzeige ?? _massVoreinstellung) == MassAnzeige.keine ? 'Maß einblenden' : 'Maß ausblenden',
+            () {
               final alt = w.massanzeige;
               final neu = (w.massanzeige ?? _massVoreinstellung) == MassAnzeige.keine ? null : MassAnzeige.keine;
               store.waendeMassanzeigeSetzen([w.id], neu);
               _rueckgaengig.add(() => store.waendeMassanzeigeSetzen([w.id], alt));
               _s.geaendert();
             },
-            icon: const Icon(Icons.visibility_off_outlined, size: 18),
-            label: Text((w.massanzeige ?? _massVoreinstellung) == MassAnzeige.keine ? 'Maß einblenden' : 'Maß ausblenden'),
+            (w.massanzeige ?? _massVoreinstellung) == MassAnzeige.keine,
+          ),
+          (
+            w.gesperrt ? Icons.lock : Icons.lock_open_outlined,
+            w.gesperrt ? 'Gesperrt: Länge und Lage bleiben fest (klicken zum Entsperren)' : 'Sperren: Länge und Lage bleiben bei Änderungen an anderen Wänden fest',
+            () {
+              final v = !w.gesperrt;
+              store.waendeSperren([w.id], v);
+              _rueckgaengig.add(() => store.waendeSperren([w.id], !v));
+              _s.geaendert();
+            },
+            w.gesperrt,
           ),
         ]),
+        if (_parallelFuer == w.id)
+          _hinweis('Jetzt die Wand anklicken, zu der diese Wand parallel werden soll. Das Ende '
+              '(„ändern am“) dreht sich, die Länge bleibt, anschließende Wände ziehen mit. Esc bricht ab.'),
         const SizedBox(height: 8),
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          value: w.gesperrt,
-          title: const Text('Gesperrt'),
-          subtitle: const Text('Länge und Lage bleiben bei Änderungen an anderen Wänden fest'),
-          onChanged: (v) {
-            store.waendeSperren([w.id], v);
-            _rueckgaengig.add(() => store.waendeSperren([w.id], !v));
-            _s.geaendert();
-          },
-        ),
         DropdownButtonFormField<String>(
           key: ValueKey('verb-${w.id}-${w.verbinden}'),
           initialValue: w.verbinden == null ? '' : (w.verbinden! ? 'an' : 'aus'),
@@ -4827,11 +4921,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           ],
         ),
         const SizedBox(height: 20),
-        OutlinedButton.icon(
-          onPressed: _auswahlLoeschen,
-          icon: const Icon(Sym.loeschen),
-          label: const Text('Wand löschen (Entf)'),
-        ),
+        LoeschenKnopf('Wand löschen', onPressed: _auswahlLoeschen),
       ],
     );
   }

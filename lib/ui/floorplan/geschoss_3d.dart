@@ -76,6 +76,7 @@ _Daten? _lesen(AppState state, String geschossId) {
       if (verb[i] && !waende[i].istKante) achsen[i]
   ];
   var x0 = double.infinity, y0 = double.infinity, x1 = -double.infinity, y1 = -double.infinity;
+  final umrisseMitAnschluss = wandUmrisse(waende, verbindenStandard: global, baustoffName: (id) => baustoffe[id]?.name);
   final w3 = <Wand3d>[];
   for (var i = 0; i < waende.length; i++) {
     final w = waende[i];
@@ -89,7 +90,7 @@ _Daten? _lesen(AppState state, String geschossId) {
       a: achsen[i].a,
       b: achsen[i].b,
       dicke: w.dicke,
-      umriss: wandUmriss(achsen[i], verb[i] ? nachbarn : [achsen[i]]),
+      umriss: umrisseMitAnschluss[w.id] ?? wandUmriss(achsen[i], verb[i] ? nachbarn : [achsen[i]]),
       hoehe: w.istKante ? 1000 : (w.teilhoch ? (w.hoehe ?? w.art.standardHoehe).toDouble() : hoehe),
       zustandFarbe: switch (w.zustand) {
         WandZustand.bestand => const Color(0xFF5B6168).toARGB32(),

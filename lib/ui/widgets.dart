@@ -450,3 +450,83 @@ class GruppenAuswahl<T> extends StatelessWidget {
     );
   }
 }
+
+/// Reihe kleiner Symbolknöpfe (Symbol, Tooltip, Aktion, aktiv) – statt
+/// breiter Textknöpfe in Eigenschaftsfenstern.
+class SymbolLeiste extends StatelessWidget {
+  const SymbolLeiste(this.knoepfe, {super.key});
+  final List<(IconData, String, VoidCallback?, bool)> knoepfe;
+
+  @override
+  Widget build(BuildContext context) => Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final (icon, tip, aktion, aktiv) in knoepfe)
+          aktiv
+              ? IconButton.filledTonal(tooltip: tip, onPressed: aktion, icon: Icon(icon, size: 18), visualDensity: VisualDensity.compact)
+              : IconButton.outlined(
+                  tooltip: tip,
+                  onPressed: aktion,
+                  icon: Icon(icon, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(side: const BorderSide(color: BsFarben.rand)),
+                ),
+      ]);
+}
+
+/// Dezenter Löschen-Knopf am Ende eines Eigenschaftsfensters.
+class LoeschenKnopf extends StatelessWidget {
+  const LoeschenKnopf(this.text, {super.key, required this.onPressed});
+  final String text;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFFC92A2A), visualDensity: VisualDensity.compact),
+          onPressed: onPressed,
+          icon: const Icon(Icons.delete_outline, size: 18),
+          label: Text('$text  ·  Entf', style: const TextStyle(fontSize: 13)),
+        ),
+      );
+}
+
+/// Kachel mit großem Symbol und kurzem Titel (Ausgaben, Werkzeuge …);
+/// die Erklärung steht im Tooltip.
+class AktionsKachel extends StatelessWidget {
+  const AktionsKachel({super.key, required this.icon, required this.text, this.hinweis, this.onPressed, this.betont = false});
+  final IconData icon;
+  final String text;
+  final String? hinweis;
+  final VoidCallback? onPressed;
+  final bool betont;
+
+  @override
+  Widget build(BuildContext context) {
+    final aktiv = onPressed != null;
+    final k = Material(
+      color: betont ? BsFarben.akzentHell : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: betont ? BsFarben.akzent : BsFarben.rand)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 128,
+          height: 92,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(icon, size: 28, color: aktiv ? (betont ? BsFarben.akzentDunkel : const Color(0xFF343A40)) : BsFarben.rand),
+              const SizedBox(height: 6),
+              Text(text,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, height: 1.2, color: aktiv ? const Color(0xFF212529) : BsFarben.textLeise)),
+            ]),
+          ),
+        ),
+      ),
+    );
+    return hinweis == null ? k : Tooltip(message: hinweis!, child: k);
+  }
+}

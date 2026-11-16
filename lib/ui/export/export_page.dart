@@ -129,47 +129,55 @@ class _ExportPageState extends State<ExportPage> {
                 : const Icon(Sym.pdf),
             label: const Text('PDF erstellen'),
           ),
-          FilledButton.tonalIcon(
+          AktionsKachel(
             onPressed: _laeuft ? null : _hausdoku,
-            icon: const Icon(Icons.menu_book_outlined),
-            label: const Text('Hausdokumentation (komplett)'),
+            icon: Icons.menu_book_outlined,
+            text: 'Hausdoku',
+            hinweis: 'Hausdokumentation komplett als PDF', betont: true,
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: _laeuft ? null : _zip,
-            icon: const Icon(Icons.archive_outlined),
-            label: const Text('Projekt als ZIP'),
+            icon: Icons.archive_outlined,
+            text: 'Projekt-ZIP',
+            hinweis: 'Ganzes Projekt als ZIP sichern',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => WohnflaechePage(state: widget.state))),
-            icon: const Icon(Icons.square_foot),
-            label: const Text('Wohnfläche (WoFlV)'),
+            icon: Icons.square_foot,
+            text: 'Wohnfläche',
+            hinweis: 'Wohnflächenberechnung nach WoFlV',
           ),
-          FilledButton.tonalIcon(
+          AktionsKachel(
             onPressed: _laeuft ? null : () => _ausgabe('Hausakte', () => hausakteErstellen(_s.store!)),
-            icon: const Icon(Icons.folder_special_outlined),
-            label: const Text('Hausakte (Ordner + ZIP + HTML)'),
+            icon: Icons.folder_special_outlined,
+            text: 'Hausakte',
+            hinweis: 'Hausakte als Ordner, ZIP und HTML', betont: true,
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: _laeuft ? null : () => _ausgabe('Raumbuch', () => raumbuchPdf(_s.store!)),
-            icon: const Icon(Icons.meeting_room_outlined),
-            label: const Text('Raumbuch (PDF)'),
+            icon: Icons.meeting_room_outlined,
+            text: 'Raumbuch',
+            hinweis: 'Raumbuch als PDF',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: _laeuft ? null : () => _ausgabe('Fotobericht', () => fotoberichtPdf(_s.store!)),
-            icon: const Icon(Icons.photo_library_outlined),
-            label: const Text('Fotobericht (PDF)'),
+            icon: Icons.photo_library_outlined,
+            text: 'Fotobericht',
+            hinweis: 'Fotobericht als PDF',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: _s.geschossId == null ? null : () => raumbildDialog(context, _s),
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text('KI-Raumbild …'),
+            icon: Icons.auto_awesome,
+            text: 'KI-Raumbild',
+            hinweis: 'Raumbild mit der KI erzeugen',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: _laeuft ? null : _etiketten,
-            icon: const Icon(Icons.label_outline),
-            label: const Text('Etiketten …'),
+            icon: Icons.label_outline,
+            text: 'Etiketten',
+            hinweis: 'Etiketten für Leitungen, Geräte und Verteiler drucken',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: () async {
               final store = _s.store!;
               final k = Map<String, dynamic>.from(store.einstellung<Map>('plankopf') ?? const {});
@@ -195,28 +203,32 @@ class _ExportPageState extends State<ExportPage> {
               store.einstellungSetzen('plankopf', {for (final e in c.entries) if (e.value.text.trim().isNotEmpty) e.key: e.value.text.trim()});
               _s.geaendert();
             },
-            icon: const Icon(Icons.badge_outlined),
-            label: const Text('Plankopf …'),
+            icon: Icons.badge_outlined,
+            text: 'Plankopf',
+            hinweis: 'Bearbeiter, Firma, Änderungsstand und Anschrift im Plankopf',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: _laeuft ? null : _weitereAusgaben,
-            icon: const Icon(Icons.dataset_outlined),
-            label: const Text('Daten: CSV, DXF, SVG, PNG, Home Assistant …'),
+            icon: Icons.dataset_outlined,
+            text: 'Daten',
+            hinweis: 'CSV, DXF, SVG, PNG, Home Assistant …',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: () async {
               final name = await texteingabe(context, titel: 'Einstellungen als Vorlage', feld: 'Name der Vorlage', vorschlag: 'Meine Vorgaben');
               if (name == null || name.trim().isEmpty) return;
               final f = await einstellungenAlsVorlage(widget.state, name.trim());
               if (context.mounted) zeigeHinweis(context, 'Vorlage gespeichert: ${p.basename(f)} – beim nächsten neuen Projekt auf der Startseite wählbar.');
             },
-            icon: const Icon(Icons.copy_all_outlined),
-            label: const Text('Einstellungen als Vorlage'),
+            icon: Icons.copy_all_outlined,
+            text: 'Als Vorlage',
+            hinweis: 'Einstellungen als Vorlage für neue Projekte speichern',
           ),
-          OutlinedButton.icon(
+          AktionsKachel(
             onPressed: () => Process.run('explorer', [exporte.path]),
-            icon: const Icon(Sym.ordner),
-            label: const Text('Ordner öffnen'),
+            icon: Sym.ordner,
+            text: 'Ordner',
+            hinweis: 'Export-Ordner im Explorer öffnen',
           ),
           if (_letzteDatei != null) ...[
               Flexible(child: Text('Erstellt: ${p.basename(_letzteDatei!)}', overflow: TextOverflow.ellipsis)),
@@ -554,8 +566,8 @@ class PlanExport {
             ),
       ],
       umrisse: {
-        for (var i = 0; i < waende.length; i++)
-          waende[i].id: [for (final q in wandUmriss(achsen[i], verb[i] ? nachbarn : [achsen[i]])) Offset(q.x, q.y)],
+        for (final e in wandUmrisse(waende, verbindenStandard: global, baustoffName: (id) => store.materialien().where((m) => m.id == id).firstOrNull?.name).entries)
+          e.key: [for (final q in e.value) Offset(q.x, q.y)],
       },
       flanken: {
         for (var i = 0; i < waende.length; i++) waende[i].id: flankenLaengen(achsen[i], verb[i] ? nachbarn : [achsen[i]]),

@@ -4,13 +4,14 @@ import 'dart:math' as math;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/wandaufbau.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/raumerkennung.dart';
-import '../../core/wandmasse.dart';
 import '../../data/models.dart';
 import '../../state/app_state.dart';
 import '../floorplan/floorplan_painter.dart';
@@ -73,15 +74,8 @@ class _FotosPageState extends State<FotosPage> {
     final g = _s.geschossId;
     _waende = g == null ? [] : store.waende(g);
     final global = store.einstellung<bool>('ecken_verbinden') ?? true;
-    final achsen = [for (final w in _waende) w.achse];
-    final verb = [for (final w in _waende) w.verbinden ?? global];
-    final nachbarn = [
-      for (var i = 0; i < _waende.length; i++)
-        if (verb[i] && !_waende[i].istKante) achsen[i]
-    ];
     _umrisse = {
-      for (var i = 0; i < _waende.length; i++)
-        _waende[i].id: [for (final q in wandUmriss(achsen[i], verb[i] ? nachbarn : [achsen[i]])) Offset(q.x, q.y)],
+      for (final e in wandUmrisse(_waende, verbindenStandard: global).entries) e.key: [for (final q in e.value) Offset(q.x, q.y)],
     };
     _raeume = g == null ? [] : store.raeume(g);
     _oeffnungen = g == null ? [] : store.oeffnungen(g);
@@ -288,12 +282,14 @@ class _FotosPageState extends State<FotosPage> {
                 icon: const Icon(Sym.importieren),
                 label: const Text('Fotos importieren'),
               ),
-              OutlinedButton.icon(
+              IconButton.outlined(
+                tooltip: 'Alles zeigen',
                 onPressed: _einpassen,
                 icon: const Icon(Sym.allesZeigen, size: 18),
-                label: const Text('Alles zeigen'),
+                style: IconButton.styleFrom(side: const BorderSide(color: BsFarben.rand)),
               ),
-              OutlinedButton.icon(
+              IconButton.outlined(
+                tooltip: 'Zuordnen …',
                 onPressed: _s.geschossId == null
                     ? null
                     : () async {
@@ -301,17 +297,19 @@ class _FotosPageState extends State<FotosPage> {
                         if (mounted) setState(() {});
                       },
                 icon: const Icon(Icons.auto_fix_high, size: 18),
-                label: const Text('Zuordnen …'),
+                style: IconButton.styleFrom(side: const BorderSide(color: BsFarben.rand)),
               ),
-              OutlinedButton.icon(
+              IconButton.outlined(
+                tooltip: 'Zeitleiste / Vorher-Nachher',
                 onPressed: _s.geschossId == null ? null : () => zeitleisteRaum(context, _s),
                 icon: const Icon(Icons.timeline, size: 18),
-                label: const Text('Zeitleiste / Vorher-Nachher'),
+                style: IconButton.styleFrom(side: const BorderSide(color: BsFarben.rand)),
               ),
-              OutlinedButton.icon(
+              IconButton.outlined(
+                tooltip: 'Verdeckt ohne Foto',
                 onPressed: () => pflichtfotoUebersicht(context, _s),
                 icon: const Icon(Icons.no_photography_outlined, size: 18),
-                label: const Text('Verdeckt ohne Foto'),
+                style: IconButton.styleFrom(side: const BorderSide(color: BsFarben.rand)),
               ),
               Text(
                 '${_fotos.length} Fotos im Geschoss · ${_fotos.where((e) => !e.verortet).length} noch nicht verortet',
@@ -587,7 +585,7 @@ class _FotosPageState extends State<FotosPage> {
           },
         ),
       const SizedBox(height: 16),
-      OutlinedButton.icon(onPressed: () => _loeschen(f.id), icon: const Icon(Sym.loeschen), label: const Text('Foto löschen (Entf)')),
+      LoeschenKnopf('Foto löschen', onPressed: () => _loeschen(f.id)),
     ]);
   }
 

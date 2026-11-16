@@ -80,6 +80,8 @@ class FloorplanPainter extends CustomPainter {
     this.sparren = const [],
     this.aufbau = const [],
     this.kernFarben = const {},
+    this.knoten = const [],
+    this.objektKnoepfe = const [],
     this.massAbPxJeM = 25,
     this.beideAbPxJeM = 70,
   });
@@ -89,6 +91,13 @@ class FloorplanPainter extends CustomPainter {
 
   /// Seitenaufbau (Putz, WDVS …) als Bänder in Weltkoordinaten mit Farbe.
   final List<(List<Offset>, Color)> aufbau;
+
+  /// Knöpfe an den Wandknoten der gewählten Wand (Welt): Anschluss einstellen.
+  final List<Offset> knoten;
+
+  /// Kleine Symbolknöpfe direkt am gewählten Objekt (Welt, Symbol), z. B.
+  /// Anschlag/Aufschlag einer Tür drehen.
+  final List<(Offset, IconData)> objektKnoepfe;
 
   /// Farben der Baustoffe (Kern der Wand).
   final Map<String, Color> kernFarben;
@@ -361,6 +370,41 @@ class FloorplanPainter extends CustomPainter {
         )..layout();
         tp.paint(canvas, c + const Offset(12, 10));
       }
+    }
+    // Knöpfe an den Wandknoten (Anschluss) und am gewählten Objekt
+    void knopf(Offset welt, IconData? icon) {
+      final c = _s(welt);
+      canvas.drawCircle(c + const Offset(0, 1), 10, Paint()..color = const Color(0x33000000));
+      canvas.drawCircle(c, 10, Paint()..color = Colors.white);
+      canvas.drawCircle(c, 10, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = BsFarben.akzent);
+      if (icon == null) {
+        // Eckglyphe
+        final g = Paint()
+          ..color = BsFarben.akzentDunkel
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round;
+        canvas.drawPath(Path()
+          ..moveTo(c.dx - 4, c.dy - 4)
+          ..lineTo(c.dx + 4, c.dy - 4)
+          ..lineTo(c.dx + 4, c.dy + 4), g);
+        return;
+      }
+      final tp = TextPainter(
+        text: TextSpan(text: String.fromCharCode(icon.codePoint), style: TextStyle(fontSize: 14, fontFamily: icon.fontFamily, package: icon.fontPackage, color: BsFarben.akzentDunkel)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    }
+
+    for (final k in knoten) {
+      knopf(k, null);
+    }
+    for (final (k, icon) in objektKnoepfe) {
+      knopf(k, icon);
     }
   }
 
@@ -1070,6 +1114,8 @@ class FloorplanPainter extends CustomPainter {
       old.raster != raster ||
       old.sparren.length != sparren.length ||
       old.aufbau != aufbau ||
+      old.knoten.length != knoten.length ||
+      old.objektKnoepfe != objektKnoepfe ||
       old.massAbPxJeM != massAbPxJeM ||
       old.beideAbPxJeM != beideAbPxJeM ||
       old.raumStuecke != raumStuecke ||

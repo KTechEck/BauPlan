@@ -50,8 +50,81 @@ ThemeData bauSpurTheme({bool touch = false}) {
       style: FilledButton.styleFrom(
         backgroundColor: BsFarben.akzent,
         foregroundColor: BsFarben.leiste,
-        minimumSize: const Size(44, 44),
+        minimumSize: Size(touch ? 44 : 36, touch ? 44 : 36),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        iconSize: 18,
       ),
     ),
+    // Schlanke Knöpfe: weniger Fläche, klare Kante, kleine Schrift
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF343A40),
+        minimumSize: Size(touch ? 44 : 32, touch ? 44 : 32),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        visualDensity: touch ? null : VisualDensity.compact,
+        side: const BorderSide(color: BsFarben.rand),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+        iconSize: 17,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: Size(touch ? 44 : 32, touch ? 44 : 32),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        visualDensity: touch ? null : VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        iconSize: 17,
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        visualDensity: touch ? null : VisualDensity.compact,
+        side: const WidgetStatePropertyAll(BorderSide(color: BsFarben.rand)),
+        textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 12.5)),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: Colors.white,
+      selectedColor: BsFarben.akzentHell,
+      side: const BorderSide(color: BsFarben.rand),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      labelStyle: const TextStyle(fontSize: 12.5, color: Color(0xFF343A40)),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+    ),
+    cardTheme: CardThemeData(
+      color: Colors.white,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: BsFarben.rand)),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      titleTextStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF212529)),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: BsFarben.rand)),
+      textStyle: const TextStyle(fontSize: 13, color: Color(0xFF212529)),
+    ),
+    tooltipTheme: TooltipThemeData(
+      waitDuration: const Duration(milliseconds: 350),
+      decoration: BoxDecoration(color: BsFarben.leiste, borderRadius: BorderRadius.circular(6)),
+      textStyle: const TextStyle(fontSize: 12, color: Colors.white),
+    ),
+    listTileTheme: ListTileThemeData(dense: !touch, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : null),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? BsFarben.akzent : null),
+    ),
+    dividerTheme: const DividerThemeData(color: BsFarben.rand, thickness: 1, space: 1),
+    expansionTileTheme: const ExpansionTileThemeData(shape: Border(), collapsedShape: Border()),
   );
 }

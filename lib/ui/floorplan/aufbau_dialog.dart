@@ -78,6 +78,18 @@ class _AufbauDialogState extends State<_AufbauDialog> {
               itemBuilder: (_) => [for (final t in typen) PopupMenuItem(value: t, child: Text(t.name))],
               child: const Chip(avatar: Icon(Icons.layers_outlined, size: 16), label: Text('Aus Wandtyp …')),
             ),
+            PopupMenuButton<AufbauVorlage>(
+              tooltip: 'Gespeicherte Aufbau-Vorlage für die ganze Wand',
+              enabled: aufbauVorlagen(widget.store).isNotEmpty,
+              onSelected: (v) {
+                setState(() => _bereiche = [
+                      Aufbaubereich(schichten: v.schichten).toJson(),
+                    ]);
+                _speichern();
+              },
+              itemBuilder: (_) => [for (final v in aufbauVorlagen(widget.store)) PopupMenuItem(value: v, child: Text(v.name))],
+              child: Chip(avatar: const Icon(Icons.bookmark_outline, size: 16), label: Text('Vorlage (${aufbauVorlagen(widget.store).length})')),
+            ),
             ActionChip(
               avatar: const Icon(Icons.add, size: 16),
               label: const Text('Bereich'),
@@ -111,6 +123,27 @@ class _AufbauDialogState extends State<_AufbauDialog> {
                     _zahl('bis', b['bis'], (v) => v == null ? b.remove('bis') : b['bis'] = v),
                     _zahl('Höhe von', b['z_von'], (v) => v == null ? b.remove('z_von') : b['z_von'] = v),
                     _zahl('Höhe bis', b['z_bis'], (v) => v == null ? b.remove('z_bis') : b['z_bis'] = v),
+                    IconButton(
+                      tooltip: 'Als Aufbau-Vorlage speichern',
+                      onPressed: () async {
+                        final c = TextEditingController(text: '${widget.seitenName} ${i + 1}');
+                        final name = await showDialog<String>(
+                          context: context,
+                          builder: (d) => AlertDialog(
+                            title: const Text('Als Vorlage speichern'),
+                            content: TextField(controller: c, autofocus: true, decoration: const InputDecoration(labelText: 'Name', hintText: 'z. B. Putz innen 15, WDVS 160 mineralisch')),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(d), child: const Text('Abbrechen')),
+                              FilledButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('Speichern')),
+                            ],
+                          ),
+                        );
+                        if (name == null || name.isEmpty) return;
+                        aufbauVorlagenSetzen(widget.store, [...aufbauVorlagen(widget.store), (name: name, schichten: Aufbaubereich.ausJson(b).schichten)]);
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                    ),
                     IconButton(
                       tooltip: 'Bereich entfernen',
                       onPressed: () {

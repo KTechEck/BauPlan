@@ -827,3 +827,17 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Fuge enden; Anzeige des Knotens im Plan, Vorgabe aus den Baustoffen (Leichtbau stößt stumpf an Massivwand).
 - Bibliothek: Wandtypen werden zu „Kern“ (tragender Baustoff + Dicke) und „Aufbau-Vorlagen“ je Seite (innen/außen) umgestellt; bestehende Wandtypen
   bleiben als Vorlage nutzbar.
+
+## Build 37 (16.11.) – Wandanschlüsse, Kerne/Vorlagen, Bedienung mit Symbolen
+- [x] Wandanschluss je Ecke: automatisch (Leichtbau stößt stumpf an Massiv, sonst Gehrung), Gehrung,
+      diese läuft durch, andere läuft durch (stumpf), eingebunden mit Tiefe. Die Nachbarwand richtet sich danach.
+- [x] Bedienung: kleiner runder Knopf an den Ecken der gewählten Wand, Doppelklick auf eine Wandecke,
+      Ecksymbole im Wandpanel; kompaktes Bildmenü mit Einbindetiefe. Rückgängig mit Strg+Z.
+- [x] Bibliothek: Kernschicht je Wandtyp wählbar; Aufbau-Vorlagen je Seite (im Aufbau-Dialog speichern/anwenden).
+- [x] Türen direkt am Objekt drehen: Symbolknöpfe neben der gewählten Tür (Anschlag, Aufschlagseite).
+- [x] Öffnungspanel mit Symbolen: Art als Bildleiste, Türart als Chips, Maße zweispaltig.
+- [x] Wandpanel: Parallel, Verlängern, Maß ein/aus, Sperren als Symbolleiste; Löschen dezent als Textknopf.
+- [x] Ganze PC-Software: schlankeres Grundthema (kleinere, runde Knöpfe, Karten mit feiner Kante statt Schatten,
+      Dialoge/Menüs/Chips/Tooltips einheitlich), Einstellungen mit Symbolen in der Navigation, Ausgaben als
+      Symbolkacheln, Foto-Werkzeuge als Symbolknöpfe, Löschen überall als dezenter roter Textknopf
+      (gemeinsame Bausteine SymbolLeiste, LoeschenKnopf, AktionsKachel in lib/ui/widgets.dart).
