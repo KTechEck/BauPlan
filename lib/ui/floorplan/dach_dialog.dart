@@ -122,7 +122,20 @@ class _DachDialogState extends State<_DachDialog> {
                 _zahl('Dachneigung', 'neigung', d.neigung, einheit: '°', komma: true),
                 _zahl('Kniestock', 'kniestock', d.kniestock, hilfe: 'Höhe der Schräge an der Außenwand über FFB'),
                 _zahl('Kehlbalken UK', 'kehlbalken', d.kehlbalken, hilfe: '0 = offen bis First'),
+                _zahl('Dachüberstand', 'ueberstand', d.ueberstand, hilfe: 'Traufe und Ortgang, waagrecht'),
+                if (d.form == Dachform.mansard) ...[
+                  _zahl('Neigung unten (steil)', 'neigung_unten', d.neigungUnten, einheit: '°', komma: true),
+                  _zahl('Knickhöhe', 'knick', d.knick, hilfe: 'über dem Kniestock'),
+                ],
+                if (d.form == Dachform.krueppelwalm) _zahl('Walm ab', 'krueppel', d.krueppel, hilfe: 'Höhe über Kniestock, ab der der Giebel abgewalmt ist'),
               ]),
+              if (d.aktiv && g != null) ...[
+                const SizedBox(height: 14),
+                Text('Dachstuhl (Holzliste, vereinfacht – keine Statik)', style: Theme.of(context).textTheme.titleSmall),
+                for (final e in holzliste(dachstuhl(d, g)).entries)
+                  Text('${e.value.anzahl} × ${e.key} mm · zusammen ${e.value.meter.toStringAsFixed(1).replaceAll('.', ',')} m', style: const TextStyle(fontSize: 12)),
+                const Text('In 3D (Grundriss › 3D) mit Dachfläche, Sparren und Pfetten zu sehen.', style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+              ],
               const SizedBox(height: 14),
               Row(children: [
                 Text('Kniestock abschnittsweise (${d.abschnitte.length})', style: Theme.of(context).textTheme.titleSmall),
@@ -359,6 +372,7 @@ class _SchnittPainter extends CustomPainter {
       Dachform.sattel => math.min(v - a, b - v),
       Dachform.pult => d.hochSeiteVorne ? b - v : v - a,
       Dachform.keins => 0,
+      _ => math.min(v - a, b - v),
     };
   }
 

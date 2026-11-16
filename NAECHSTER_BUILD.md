@@ -779,3 +779,18 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Wandansicht.
 - Geländeeditor außen: Höhenpunkte, Hang/Böschung, Wege und Flächen mit Höhen, Gefälle und Entwässerung.
 - Sonnenstand und Verschattung: Tagesverlauf je Datum/Uhrzeit am Standort, Schatten in 3D und im Plan, Besonnung von Fenstern und PV-Flächen.
+
+## Build 35 (16.11.) – Dachformen, Gelände, Sonne, Wand-Teilstücke, Bearbeitungsfenster, Raum-Mehrfachauswahl
+- Wand: „Nur ein Teilstück anders (Wandtyp/Aufbau) …“ teilt die Wand (store.wandTeilen) und gibt dem Mittelstück den Typ (Innenseite fest),
+  Schnellwahl je Raumstück, Strg+Z stellt Wände/Öffnungen wieder her.
+- Bearbeitungsfenster (EigenschaftenFenster): links, bis 560 px breit, volle Höhe, Plan bleibt sichtbar; `imBlick` rückt das Objekt rechts ins Bild
+  (Grundriss und Installation). Wand-Eigenschaften: Häufiges oben, Rest unter „Erweitert“.
+- Projektbaum: Strg/Umschalt-Klick markiert Räume, „n Räume löschen“ mit Rückgängig.
+- Dach (core/dach.dart): Formen Walm, Krüppelwalm, Zelt, Mansard (+ Sattel/Pult), Überstand, dachFlaecheHoehe, dachstuhl() mit Sparren/Schiftern/
+  Gratsparren/First-, Fuß-, Mittelpfetten/Kehlbalken, holzliste(); Dach-Dialog zeigt Holzliste; 3D: Dachhaut (Ziegeltextur) und Dachstuhl getrennt
+  schaltbar, Wände enden an der Dachschräge (geschossSzene oben:).
+- Gelände (core/gelaende.dart, ui/floorplan/gelaende_dialog.dart, Einstellung `gelaende`): Höhenpunkte, Hang-Vorlage, Höhenlinien, Gefällepfeile,
+  Hinweise Entwässerung/Sockel; 3D-Gelände im EG (Rasen). Aufruf: Installation › Gelände, Grundriss › Optionen.
+- Sonne (core/sonne.dart, ui/bauphysik/sonne_dialog.dart, Einstellung `standort` lat/lon + `norden_grad`): Sonnenstand (NOAA), Sonnenbahn 21.3./6./12.,
+  Sonnenstunden je Fenster mit Wandverschattung, PV-Faktor je Dachfläche; 3D „Sonne“ mit Datum/Uhrzeit, Licht und Wandschatten.
+- Tests test/build35_test.dart, test/dach3d_test.dart; 313 Tests grün.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app/symbole.dart';
 import '../app/theme.dart';
@@ -24,6 +25,10 @@ class ProjectTree extends StatefulWidget {
 class _ProjectTreeState extends State<ProjectTree> {
   final Set<String> _offen = {};
   bool _erstesMal = true;
+
+  /// Mehrfachauswahl von Räumen (Strg/Umschalt-Klick).
+  final Set<String> _raumMarkiert = {};
+  String? _letzterRaum;
 
   AppState get state => widget.state;
 
@@ -170,7 +175,23 @@ class _ProjectTreeState extends State<ProjectTree> {
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DeckePage(state: state, raumId: r.id))),
                   )
                 : null,
+            markiert: _raumMarkiert.contains(r.id),
             onTap: () {
+              final strg = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
+              final umschalt = HardwareKeyboard.instance.isShiftPressed;
+              setState(() {
+                if (umschalt && _letzterRaum != null) {
+                  final ids = [for (final x in raeume) x.id];
+                  final a = ids.indexOf(_letzterRaum!), b = ids.indexOf(r.id);
+                  if (a >= 0 && b >= 0) _raumMarkiert.addAll(ids.sublist(a < b ? a : b, (a < b ? b : a) + 1));
+                } else if (strg) {
+                  if (_raumMarkiert.isEmpty && state.raumId != null && state.raumId != r.id) _raumMarkiert.add(state.raumId!);
+                  _raumMarkiert.contains(r.id) ? _raumMarkiert.remove(r.id) : _raumMarkiert.add(r.id);
+                } else {
+                  _raumMarkiert.clear();
+                }
+                _letzterRaum = r.id;
+              });
               state.geschossWaehlen(g.id);
               state.raumWaehlen(r.id);
             },
@@ -207,6 +228,7 @@ class _ProjectTreeState extends State<ProjectTree> {
       ),
     ));
 
+    final markiert = _raumMarkiert.length;
     return Container(
       width: 260,
       decoration: const BoxDecoration(
@@ -231,16 +253,64 @@ class _ProjectTreeState extends State<ProjectTree> {
               ),
             ]),
           ),
+          if (markiert > 1)
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: BsFarben.akzentHell, borderRadius: BorderRadius.circular(6)),
+              child: Row(children: [
+                Expanded(child: Text('$markiert Räume markiert', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                IconButton(
+                  tooltip: 'Markierte Räume löschen (Wände bleiben)',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  onPressed: () => _markierteLoeschen(store),
+                ),
+                IconButton(
+                  tooltip: 'Markierung aufheben',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => setState(_raumMarkiert.clear),
+                ),
+              ]),
+            ),
           ...eintraege,
         ],
       ),
     );
   }
 
+  Future<void> _markierteLoeschen(ProjectStore store) async {
+    final n = _raumMarkiert.length;
+    final ok = await frage(context, titel: '$n Räume löschen?', text: 'Die Räume verschwinden aus der Liste, die Wände bleiben stehen. Die Flächen lassen sich wieder als Räume zuordnen.', ja: 'Löschen');
+    if (!ok) return;
+    final ids = _raumMarkiert.toList();
+    for (final id in ids) {
+      store.raumLoeschen(id);
+    }
+    _raumMarkiert.clear();
+    state.raumWaehlen(null);
+    state.geaendert();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('$n Räume gelöscht'),
+      action: SnackBarAction(
+        label: 'Rückgängig',
+        onPressed: () {
+          for (final id in ids) {
+            store.raumWiederherstellen(id);
+          }
+          state.geaendert();
+        },
+      ),
+    ));
+  }
+
   Widget _zeile({
     required String text,
     required int einzug,
     bool aktiv = false,
+    bool markiert = false,
     bool fett = false,
     bool aufklappbar = false,
     bool offen = false,
@@ -253,7 +323,7 @@ class _ProjectTreeState extends State<ProjectTree> {
     Widget? aktion,
   }) {
     return Material(
-      color: aktiv ? BsFarben.akzentHell : Colors.transparent,
+      color: aktiv || markiert ? BsFarben.akzentHell : Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),

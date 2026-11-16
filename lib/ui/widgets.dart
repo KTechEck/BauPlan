@@ -328,6 +328,10 @@ class EigenschaftenFenster {
       ? const Center(child: Text('Eigenschaften sind im eigenen Fenster geöffnet.', style: TextStyle(color: Colors.black54)))
       : inhalt();
 
+  /// Wird nach dem Öffnen mit der rechten Kante des Fensters (global, px)
+  /// aufgerufen – die Seite rückt das bearbeitete Objekt rechts daneben ins Bild.
+  void Function(double rechteKante)? imBlick;
+
   void nachKlickOeffnen(BuildContext context, {String titel = 'Eigenschaften', bool Function()? sperre}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (auswahl && !_offen && context.mounted && !(sperre?.call() ?? false)) zeigen(context, titel);
@@ -335,16 +339,24 @@ class EigenschaftenFenster {
     WidgetsBinding.instance.scheduleFrame();
   }
 
+  /// Fenster links, groß genug für die meisten Eigenschaften ohne Scrollen; der
+  /// Plan bleibt rechts sichtbar (leichte Abdunklung), das Objekt rückt dorthin.
   Future<void> zeigen(BuildContext context, String titel) async {
     _offen = true;
     (context as Element).markNeedsBuild();
+    final groesse = MediaQuery.of(context).size;
+    final breite = math.max(380.0, math.min(560.0, groesse.width * 0.4));
+    WidgetsBinding.instance.addPostFrameCallback((_) => imBlick?.call(12 + breite));
     try {
       await showDialog<void>(
         context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.06),
         builder: (c) => Dialog(
+          alignment: Alignment.centerLeft,
+          insetPadding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
           child: SizedBox(
-            width: 440,
-            height: math.min(720, MediaQuery.of(c).size.height - 80),
+            width: breite,
+            height: MediaQuery.of(c).size.height - 32,
             child: Material(
               color: Colors.white,
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

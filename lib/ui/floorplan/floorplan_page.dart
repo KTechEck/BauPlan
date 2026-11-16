@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/aufmass.dart';
+import '../../data/sync.dart';
 import '../../core/brandschutz.dart';
 import '../../core/sparren.dart';
 import '../../core/dach.dart' show wohnflaeche;
@@ -36,6 +37,8 @@ import '../bauteile/bauelement_wahl.dart';
 import '../widgets.dart';
 import 'aufmass_dialog.dart';
 import 'sparren_dialog.dart';
+import 'gelaende_dialog.dart';
+import '../bauphysik/sonne_dialog.dart';
 import 'dach_dialog.dart';
 import 'geschoss_3d.dart';
 import 'einbaudetail_page.dart';
@@ -2484,6 +2487,95 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return KeyEventResult.ignored;
   }
 
+  /// Teilstück einer durchgehenden Wand mit eigenem Wandtyp: Wand an „von“
+  /// und „bis“ teilen, dem Mittelstück den Typ geben (Innenseite bleibt fest).
+  /// Die Stücke bleiben automatisch verbunden. Strg+Z stellt alles wieder her.
+  Future<void> _teilstueckDialog(Wand w, _Plan plan) async {
+    final store = _s.store!;
+    final raeume = store.raeume(w.geschossId);
+    final stuecke = <(String, double, double)>[
+      for (final links in [true, false])
+        for (final e in raumStuecke(w, links, raeume).entries)
+          (raeume.where((r) => r.id == e.key).firstOrNull?.name ?? 'Raum', e.value.$1, e.value.$2),
+    ];
+    final von = TextEditingController(text: '0'), bis = TextEditingController(text: '${w.laenge.round()}');
+    String? typId = w.wandtypId;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: const Text('Teilstück mit eigenem Wandtyp'),
+          content: SizedBox(
+            width: 460,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Wand ${mmText(w.laenge.round())} lang. Das Stück zwischen „von“ und „bis“ (ab Wandanfang) bekommt den gewählten Wandtyp; '
+                  'die Ecken verbinden sich weiter automatisch.', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+              if (stuecke.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text('Schnell: Stück an einem Raum', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Wrap(spacing: 6, children: [
+                  for (final (n, a, b) in stuecke)
+                    ActionChip(
+                      label: Text('$n (${mmText(a.round())}–${mmText(b.round())})'),
+                      onPressed: () => setD(() {
+                        von.text = '${a.round()}';
+                        bis.text = '${b.round()}';
+                      }),
+                    ),
+                ]),
+              ],
+              Row(children: [
+                Expanded(child: TextField(controller: von, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'von', suffixText: 'mm'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: bis, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'bis', suffixText: 'mm'))),
+              ]),
+              DropdownButtonFormField<String?>(
+                isExpanded: true,
+                initialValue: typId,
+                decoration: const InputDecoration(labelText: 'Wandtyp des Teilstücks'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('ohne (freie Dicke)')),
+                  for (final t in plan.typen) DropdownMenuItem(value: t.id, child: Text('${t.name} · ${t.dicke} mm', overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: (v) => typId = v,
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Abbrechen')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Teilen und zuweisen')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final a = (double.tryParse(von.text.trim()) ?? 0).clamp(0.0, w.laenge), b = (double.tryParse(bis.text.trim()) ?? w.laenge).clamp(0.0, w.laenge);
+    if (b - a < 20) return;
+    // Stand vorher für Strg+Z
+    Map<String, Object?> zeile(Map<String, Object?> r) => {for (final k in r.keys) k: r[k]};
+    final vorher = [
+      for (final r in store.db.select('SELECT * FROM wand WHERE geschoss_id = ?', [w.geschossId])) {'t': 'wand', 'id': r['id'], 'zeile': zeile(r)},
+      for (final r in store.db.select('SELECT o.* FROM oeffnung o JOIN wand x ON x.id = o.wand_id WHERE x.geschoss_id = ?', [w.geschossId]))
+        {'t': 'oeffnung', 'id': r['id'], 'zeile': zeile(r)},
+    ];
+    final idsVorher = {for (final x in vorher) if (x['t'] == 'wand') x['id']};
+    String mitte = w.id;
+    if (b < w.laenge - 10) store.wandTeilen(w.id, b);
+    if (a > 10) mitte = store.wandTeilen(w.id, a) ?? w.id;
+    final m = store.waende(w.geschossId).where((x) => x.id == mitte).firstOrNull;
+    if (m != null && m.wandtypId != typId) {
+      wandDickeMitInnenmass(store, m, () => typId == null ? store.wandAendern(m.id, dicke: w.dicke) : store.wandWandtypSetzen(m.id, typId));
+    }
+    _rueckgaengig.add(() {
+      for (final x in store.waende(w.geschossId)) {
+        if (!idsVorher.contains(x.id)) store.db.execute('DELETE FROM wand WHERE id = ?', [x.id]);
+      }
+      aenderungenAnwenden(store, [for (final x in vorher) Map<String, dynamic>.from(x)]);
+    });
+    setState(() => _auswahl = {mitte});
+    _s.geaendert();
+  }
+
   /// Parallele Nachbarwände in Verlängerung mit versetzter Achse (Absatz):
   /// Knöpfe, um eine Seite oder die Achse bündig zu machen.
   List<Widget> _fluchtFelder(Wand w) {
@@ -3140,6 +3232,10 @@ class _FloorplanPageState extends State<FloorplanPage> {
                     }
                   });
                   _s.settings.speichern();
+                case 'gelaende':
+                  gelaendeDialog(context, _s);
+                case 'sonne':
+                  sonneDialog(context, _s);
                 case 'sparren_neu':
                   if (_s.geschossId != null) {
                     sparrenDialogZeigen(context, _s, _s.geschossId!).then((_) {
@@ -3197,6 +3293,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
               CheckedPopupMenuItem(value: 'raster', checked: _s.settings.darstellung['raster_aus'] == true, child: const Text('Raster ausblenden')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'dach', child: ListTile(dense: true, leading: Icon(Icons.roofing), title: Text('Dachgeschoss: Dach, Sparren, Kniestock …'))),
+              const PopupMenuItem(value: 'sonne', child: ListTile(dense: true, leading: Icon(Icons.wb_sunny_outlined), title: Text('Sonne, Verschattung, PV …'))),
+              const PopupMenuItem(value: 'gelaende', child: ListTile(dense: true, leading: Icon(Icons.landscape_outlined), title: Text('Gelände ums Haus …'))),
               const PopupMenuItem(value: 'sparren_neu', child: ListTile(dense: true, leading: Icon(Icons.view_week_outlined), title: Text('Sparrenlage über das Geschoss …'))),
               CheckedPopupMenuItem(value: 'sparren_aus', checked: _s.settings.darstellung['sparren_aus'] != true, child: const Text('Sparren im Grundriss zeigen')),
               const PopupMenuDivider(),
@@ -3352,9 +3450,40 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return bilder;
   }
 
+  final _flaecheKey = GlobalKey();
+
+  /// Gewähltes Objekt rechts neben das Eigenschaften-Fenster rücken.
+  void _inBlickRuecken(double rechteKante) {
+    final box = _flaecheKey.currentContext?.findRenderObject() as RenderBox?;
+    final plan = _plan;
+    if (box == null || plan == null || !mounted) return;
+    Offset? welt;
+    final o = plan.oeffnungen.where((x) => x.id == _oeffnungAuswahl).firstOrNull;
+    final w = o == null ? plan.waende.where((x) => _auswahl.contains(x.id)).firstOrNull : plan.waende.where((x) => x.id == o.wandId).firstOrNull;
+    if (w != null && w.laenge > 0) {
+      final t = o == null ? w.laenge / 2 : o.abstand + o.breite / 2;
+      welt = Offset(w.x1 + (w.x2 - w.x1) * t / w.laenge, w.y1 + (w.y2 - w.y1) * t / w.laenge);
+    } else if (_s.raumId != null) {
+      final r = _s.store!.raeume(_s.geschossId ?? '').where((x) => x.id == _s.raumId).firstOrNull;
+      if (r?.umriss != null) {
+        final p = punktImInneren(r!.umriss!);
+        welt = Offset(p.x, p.y);
+      }
+    }
+    if (welt == null) return;
+    final links = box.localToGlobal(Offset.zero).dx;
+    final frei0 = math.max(0.0, rechteKante - links);
+    if (frei0 > _flaeche.width - 120) return;
+    final ziel = Offset(frei0 + (_flaeche.width - frei0) / 2, _flaeche.height / 2);
+    final jetzt = welt * _massstab + _verschiebung;
+    if (jetzt.dx > frei0 + 60 && jetzt.dx < _flaeche.width - 40) return; // schon gut sichtbar
+    setState(() => _verschiebung += ziel - jetzt);
+  }
+
   Widget _zeichenflaeche(_Plan plan, Raum? raum, ErkannterRaum? frei) {
     final raumBilder = _raumBilder(plan, raum, frei);
-    return LayoutBuilder(builder: (context, c) {
+    _eigFenster.imBlick = _inBlickRuecken;
+    return LayoutBuilder(key: _flaecheKey, builder: (context, c) {
       _flaeche = Size(c.maxWidth, c.maxHeight);
       if (!_eingepasst) {
         _eingepasst = true;
@@ -4303,6 +4432,183 @@ class _FloorplanPageState extends State<FloorplanPage> {
         const SizedBox(height: 12),
         ..._laengeAendern(w, plan),
         _aufmassZeile(w.id),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String?>(
+          key: ValueKey('typ-${w.id}-${w.wandtypId}'),
+          initialValue: typ?.id,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Wandtyp'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('ohne (freie Dicke)')),
+            for (final t in plan.typen)
+              DropdownMenuItem(value: t.id, child: Text('${t.name} · ${t.dicke} mm', overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) {
+            final altTyp = w.wandtypId;
+            final altDicke = w.dicke;
+            final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
+            wandDickeMitInnenmass(store, w, () => store.wandWandtypSetzen(w.id, v));
+            _rueckgaengig.add(() {
+              if (altTyp != null) {
+                store.wandWandtypSetzen(w.id, altTyp);
+              } else {
+                store.wandAendern(w.id, dicke: altDicke);
+              }
+              store.waendeKoordinatenSetzen(koord);
+            });
+            _s.geaendert();
+          },
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _teilstueckDialog(w, plan),
+            icon: const Icon(Icons.content_cut, size: 16),
+            label: const Text('Nur ein Teilstück anders (Wandtyp/Aufbau) …'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (typ != null) ...[
+          SchichtenVorschau(schichten: typ.schichten, materialien: plan.materialien, hoehe: 28),
+          const SizedBox(height: 6),
+          for (final s in typ.schichten)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Row(children: [
+                Farbfeld(plan.materialien[s.materialId]?.farbe ?? 0xFFDDDDDD, groesse: 12),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(plan.materialien[s.materialId]?.name ?? 'unbekanntes Material',
+                      style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                ),
+                Text('${s.dicke} mm', style: const TextStyle(fontSize: 12)),
+              ]),
+            ),
+          const SizedBox(height: 4),
+          Text('Dicke ${typ.dicke} mm aus den Schichten', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () {
+              store.wandUmdrehen(w.id);
+              _rueckgaengig.add(() => store.wandUmdrehen(w.id));
+              _s.geaendert();
+            },
+            icon: const Icon(Sym.umdrehen),
+            label: const Text('Wand umdrehen (Schichten spiegeln)'),
+          ),
+        ] else
+          DropdownButtonFormField<int>(
+            key: ValueKey('dicke-${w.id}-${w.dicke}'),
+            initialValue: _dicken.contains(w.dicke) ? w.dicke : null,
+            hint: Text('${w.dicke} mm'),
+            decoration: const InputDecoration(labelText: 'Dicke'),
+            items: [for (final d in _dicken) DropdownMenuItem(value: d, child: Text('$d mm'))],
+            onChanged: (d) {
+              if (d == null) return;
+              final alt = w.dicke;
+              final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
+              wandDickeMitInnenmass(store, w, () => store.wandAendern(w.id, dicke: d));
+              _rueckgaengig.add(() {
+                store.wandAendern(w.id, dicke: alt);
+                store.waendeKoordinatenSetzen(koord);
+              });
+              _s.geaendert();
+            },
+          ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<WandZustand>(
+          key: ValueKey('zustand-${w.id}-${w.zustand.name}'),
+          initialValue: w.zustand,
+          decoration: const InputDecoration(labelText: 'Zustand'),
+          items: [for (final z in WandZustand.values) DropdownMenuItem(value: z, child: Text(z.label))],
+          onChanged: (z) {
+            if (z == null) return;
+            final alt = w.zustand;
+            store.wandAendern(w.id, zustand: z);
+            _rueckgaengig.add(() => store.wandAendern(w.id, zustand: alt));
+            _s.geaendert();
+          },
+        ),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            flex: 3,
+            child: DropdownButtonFormField<WandArt>(
+              key: ValueKey('wart-${w.id}-${w.art.name}'),
+              isExpanded: true,
+              initialValue: w.art,
+              decoration: const InputDecoration(labelText: 'Höhe / Art'),
+              items: [for (final a in WandArt.values) DropdownMenuItem(value: a, child: Text(a.label, overflow: TextOverflow.ellipsis))],
+              onChanged: (a) {
+                if (a == null) return;
+                final alt = {'art': w.eigenschaften['art'], 'hoehe': w.eigenschaften['hoehe']};
+                store.wandEigenschaftenSetzen(
+                    w.id,
+                    a == WandArt.raumhoch
+                        ? {'art': null, 'hoehe': null}
+                        : a == WandArt.kante
+                            ? {'art': 'kante', 'hoehe': null}
+                            : {'art': a.name, 'hoehe': w.hoehe ?? a.standardHoehe});
+                _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, alt));
+                _s.geaendert();
+              },
+            ),
+          ),
+          if (w.teilhoch) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: SpeicherFeld(
+                key: ValueKey('whoehe-${w.id}-${w.hoehe}'),
+                initialValue: '${w.hoehe ?? w.art.standardHoehe}',
+                decoration: const InputDecoration(labelText: 'Höhe', suffixText: 'mm'),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onFieldSubmitted: (t) {
+                  final h = int.tryParse(t);
+                  if (h == null || h <= 0) return;
+                  final alt = w.eigenschaften['hoehe'];
+                  store.wandEigenschaftenSetzen(w.id, {'hoehe': h});
+                  _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'hoehe': alt}));
+                  _s.geaendert();
+                },
+              ),
+            ),
+          ],
+        ]),
+        if (w.teilhoch)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Teilhohe Wand: bildet keine Raumgrenze, im Plan heller mit Höhe gezeichnet.',
+                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          ),
+        if (w.istKante) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Offene Kante: begrenzt den Balkon/die Terrasse, ist aber keine Wand (keine Wandfläche, kein Mauerwerk, keine Hüllfläche).',
+                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          ),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: w.gelaender,
+            title: const Text('Geländer auf der Kante'),
+            onChanged: (v) {
+              final alt = w.eigenschaften['gelaender'];
+              store.wandEigenschaftenSetzen(w.id, {'gelaender': v == true ? true : null});
+              _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'gelaender': alt}));
+              _s.geaendert();
+            },
+          ),
+        ],
+        const SizedBox(height: 12),
+        ..._fluchtFelder(w),
+        const SizedBox(height: 8),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: EdgeInsets.zero,
+          title: const Text('Erweitert', style: TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: const Text('Sparren, Brandschutz, Parallel/Verlängern, Sperren, Ecken, Statik', style: TextStyle(fontSize: 11)),
+          children: [
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () => sparrenDialogZeigen(context, _s, w.geschossId, wand: w),
@@ -4394,81 +4700,6 @@ class _FloorplanPageState extends State<FloorplanPage> {
             _s.geaendert();
           },
         ),
-        const SizedBox(height: 16),
-        DropdownButtonFormField<String?>(
-          key: ValueKey('typ-${w.id}-${w.wandtypId}'),
-          initialValue: typ?.id,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Wandtyp'),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('ohne (freie Dicke)')),
-            for (final t in plan.typen)
-              DropdownMenuItem(value: t.id, child: Text('${t.name} · ${t.dicke} mm', overflow: TextOverflow.ellipsis)),
-          ],
-          onChanged: (v) {
-            final altTyp = w.wandtypId;
-            final altDicke = w.dicke;
-            final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
-            wandDickeMitInnenmass(store, w, () => store.wandWandtypSetzen(w.id, v));
-            _rueckgaengig.add(() {
-              if (altTyp != null) {
-                store.wandWandtypSetzen(w.id, altTyp);
-              } else {
-                store.wandAendern(w.id, dicke: altDicke);
-              }
-              store.waendeKoordinatenSetzen(koord);
-            });
-            _s.geaendert();
-          },
-        ),
-        const SizedBox(height: 12),
-        if (typ != null) ...[
-          SchichtenVorschau(schichten: typ.schichten, materialien: plan.materialien, hoehe: 28),
-          const SizedBox(height: 6),
-          for (final s in typ.schichten)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 1),
-              child: Row(children: [
-                Farbfeld(plan.materialien[s.materialId]?.farbe ?? 0xFFDDDDDD, groesse: 12),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(plan.materialien[s.materialId]?.name ?? 'unbekanntes Material',
-                      style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
-                ),
-                Text('${s.dicke} mm', style: const TextStyle(fontSize: 12)),
-              ]),
-            ),
-          const SizedBox(height: 4),
-          Text('Dicke ${typ.dicke} mm aus den Schichten', style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () {
-              store.wandUmdrehen(w.id);
-              _rueckgaengig.add(() => store.wandUmdrehen(w.id));
-              _s.geaendert();
-            },
-            icon: const Icon(Sym.umdrehen),
-            label: const Text('Wand umdrehen (Schichten spiegeln)'),
-          ),
-        ] else
-          DropdownButtonFormField<int>(
-            key: ValueKey('dicke-${w.id}-${w.dicke}'),
-            initialValue: _dicken.contains(w.dicke) ? w.dicke : null,
-            hint: Text('${w.dicke} mm'),
-            decoration: const InputDecoration(labelText: 'Dicke'),
-            items: [for (final d in _dicken) DropdownMenuItem(value: d, child: Text('$d mm'))],
-            onChanged: (d) {
-              if (d == null) return;
-              final alt = w.dicke;
-              final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
-              wandDickeMitInnenmass(store, w, () => store.wandAendern(w.id, dicke: d));
-              _rueckgaengig.add(() {
-                store.wandAendern(w.id, dicke: alt);
-                store.waendeKoordinatenSetzen(koord);
-              });
-              _s.geaendert();
-            },
-          ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey('fest-${store.einstellung<String>('dicke_fest')}'),
@@ -4486,97 +4717,12 @@ class _FloorplanPageState extends State<FloorplanPage> {
             _s.geaendert();
           },
         ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<WandZustand>(
-          key: ValueKey('zustand-${w.id}-${w.zustand.name}'),
-          initialValue: w.zustand,
-          decoration: const InputDecoration(labelText: 'Zustand'),
-          items: [for (final z in WandZustand.values) DropdownMenuItem(value: z, child: Text(z.label))],
-          onChanged: (z) {
-            if (z == null) return;
-            final alt = w.zustand;
-            store.wandAendern(w.id, zustand: z);
-            _rueckgaengig.add(() => store.wandAendern(w.id, zustand: alt));
-            _s.geaendert();
-          },
-        ),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            flex: 3,
-            child: DropdownButtonFormField<WandArt>(
-              key: ValueKey('wart-${w.id}-${w.art.name}'),
-              isExpanded: true,
-              initialValue: w.art,
-              decoration: const InputDecoration(labelText: 'Höhe / Art'),
-              items: [for (final a in WandArt.values) DropdownMenuItem(value: a, child: Text(a.label, overflow: TextOverflow.ellipsis))],
-              onChanged: (a) {
-                if (a == null) return;
-                final alt = {'art': w.eigenschaften['art'], 'hoehe': w.eigenschaften['hoehe']};
-                store.wandEigenschaftenSetzen(
-                    w.id,
-                    a == WandArt.raumhoch
-                        ? {'art': null, 'hoehe': null}
-                        : a == WandArt.kante
-                            ? {'art': 'kante', 'hoehe': null}
-                            : {'art': a.name, 'hoehe': w.hoehe ?? a.standardHoehe});
-                _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, alt));
-                _s.geaendert();
-              },
-            ),
-          ),
-          if (w.teilhoch) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: SpeicherFeld(
-                key: ValueKey('whoehe-${w.id}-${w.hoehe}'),
-                initialValue: '${w.hoehe ?? w.art.standardHoehe}',
-                decoration: const InputDecoration(labelText: 'Höhe', suffixText: 'mm'),
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onFieldSubmitted: (t) {
-                  final h = int.tryParse(t);
-                  if (h == null || h <= 0) return;
-                  final alt = w.eigenschaften['hoehe'];
-                  store.wandEigenschaftenSetzen(w.id, {'hoehe': h});
-                  _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'hoehe': alt}));
-                  _s.geaendert();
-                },
-              ),
-            ),
-          ],
-        ]),
-        if (w.teilhoch)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text('Teilhohe Wand: bildet keine Raumgrenze, im Plan heller mit Höhe gezeichnet.',
-                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-          ),
-        if (w.istKante) ...[
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text('Offene Kante: begrenzt den Balkon/die Terrasse, ist aber keine Wand (keine Wandfläche, kein Mauerwerk, keine Hüllfläche).',
-                style: TextStyle(fontSize: 12, color: BsFarben.textLeise)),
-          ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: w.gelaender,
-            title: const Text('Geländer auf der Kante'),
-            onChanged: (v) {
-              final alt = w.eigenschaften['gelaender'];
-              store.wandEigenschaftenSetzen(w.id, {'gelaender': v == true ? true : null});
-              _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'gelaender': alt}));
-              _s.geaendert();
-            },
-          ),
-        ],
-        const SizedBox(height: 12),
-        ..._fluchtFelder(w),
         ..._statikFelder(w),
         const SizedBox(height: 12),
         Text('von (${mmText(w.x1)} | ${mmText(w.y1)})  nach (${mmText(w.x2)} | ${mmText(w.y2)})',
             style: const TextStyle(fontSize: 12, color: BsFarben.textLeise)),
+          ],
+        ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: _auswahlLoeschen,

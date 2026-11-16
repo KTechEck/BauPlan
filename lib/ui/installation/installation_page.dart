@@ -56,6 +56,7 @@ import '../symbole_plan.dart';
 import '../widgets.dart';
 import 'kabel_suche.dart';
 import 'legende.dart';
+import '../floorplan/gelaende_dialog.dart';
 import 'geraete_bibliothek.dart';
 import 'kabelzugliste_dialog.dart';
 
@@ -1162,6 +1163,7 @@ class _InstallationPageState extends State<InstallationPage> {
           ),
           TextButton(onPressed: () => wlanDialog(context, _s, _wlanBand!), child: const Text('Auswertung …')),
         ],
+        chip(Icons.landscape_outlined, 'Gelände', 'Geländeeditor: Höhenpunkte, Hang, Höhenlinien, Gefälle und Entwässerung rund ums Haus', () => gelaendeDialog(context, _s)),
         chip(Icons.yard_outlined, 'Außenanlagen', 'Außenbereich: Regenwasser, Zisterne, Bewässerung, Außenlicht, Außensteckdosen, Erd- und Außenkabel', () => aussenDialog(context, _s)),
       ]),
     );
@@ -1319,8 +1321,24 @@ class _InstallationPageState extends State<InstallationPage> {
     );
   }
 
+  final _flaecheKey = GlobalKey();
+
+  /// Gewähltes Objekt rechts neben das Eigenschaften-Fenster rücken.
+  void _inBlickRuecken(double rechteKante) {
+    final box = _flaecheKey.currentContext?.findRenderObject() as RenderBox?;
+    final o = _daten?.objekte.where((x) => x.id == _auswahl).firstOrNull;
+    if (box == null || o == null || o.punkte.isEmpty || !mounted) return;
+    final p = o.punkte[o.punkte.length ~/ 2];
+    final frei0 = math.max(0.0, rechteKante - box.localToGlobal(Offset.zero).dx);
+    if (frei0 > _flaeche.width - 120) return;
+    final jetzt = Offset(p.x, p.y) * _massstab + _verschiebung;
+    if (jetzt.dx > frei0 + 60 && jetzt.dx < _flaeche.width - 40) return;
+    setState(() => _verschiebung += Offset(frei0 + (_flaeche.width - frei0) / 2, _flaeche.height / 2) - jetzt);
+  }
+
   Widget _zeichenflaeche(_Daten d) {
-    return LayoutBuilder(builder: (context, c) {
+    _eigFenster.imBlick = _inBlickRuecken;
+    return LayoutBuilder(key: _flaecheKey, builder: (context, c) {
       _flaeche = Size(c.maxWidth, c.maxHeight);
       if (!_eingepasst) {
         _eingepasst = true;

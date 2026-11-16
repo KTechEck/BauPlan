@@ -819,6 +819,32 @@ class ProjectStore {
     _nachWandAenderung(id);
   }
 
+  /// Wand an der Stelle [t] (mm ab Anfang) in zwei Wände teilen. Beide behalten
+  /// alle Eigenschaften; Öffnungen wandern auf das Stück, in dem sie liegen.
+  /// Liefert die ID des neuen (hinteren) Stücks oder null.
+  String? wandTeilen(String id, double t) {
+    final r = db.select('SELECT * FROM wand WHERE id = ?', [id]).firstOrNull;
+    if (r == null) return null;
+    final w = Wand.ausZeile(r);
+    final l = w.laenge;
+    if (w.gesperrt || t < 10 || t > l - 10) return null;
+    final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+    final mx = (w.x1 + ux * t).round(), my = (w.y1 + uy * t).round();
+    final neu = neueId();
+    final spalten = [for (final c in db.select('PRAGMA table_info(wand)')) '${c['name']}'];
+    db.execute('INSERT INTO wand (${spalten.join(', ')}) SELECT ${[for (final c in spalten) c == 'id' ? '?' : c].join(', ')} FROM wand WHERE id = ?', [neu, id]);
+    db.execute('UPDATE wand SET x2 = ?, y2 = ? WHERE id = ?', [mx, my, id]);
+    db.execute('UPDATE wand SET x1 = ?, y1 = ? WHERE id = ?', [mx, my, neu]);
+    // Öffnungen hinter der Teilung auf das neue Stück
+    for (final o in db.select('SELECT id, abstand_mm FROM oeffnung WHERE wand_id = ? AND geloescht IS NULL', [id])) {
+      final a = (o['abstand_mm'] as int);
+      if (a >= t) db.execute('UPDATE oeffnung SET wand_id = ?, abstand_mm = ? WHERE id = ?', [neu, (a - t).round(), o['id']]);
+    }
+    _protokoll('wand', id, 'teilen', {'bei': t.round(), 'neu': neu});
+    _nachWandAenderung(id);
+    return neu;
+  }
+
   void wandWandtypSetzen(String id, String? wandtypId) {
     final typ = wandtypId == null ? null : wandtyp(wandtypId);
     if (typ == null) {

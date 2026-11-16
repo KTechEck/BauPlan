@@ -61,6 +61,9 @@ const oberflaechen3d = <Oberflaeche3d>[
   Oberflaeche3d('estrich', 'Estrich (roh)', 'estrich', 0xFFC7C3BA),
   Oberflaeche3d('pflaster', 'Pflaster / Platten außen', 'pflaster', 0xFFFFFFFF),
   Oberflaeche3d('wpc', 'WPC-/Holzdielen außen', 'dielen', 0xFF8A8580),
+  Oberflaeche3d('dachziegel', 'Dachziegel rot', 'dachziegel', 0xFFFFFFFF),
+  Oberflaeche3d('rasen', 'Rasen / Gelände', 'rasen', 0xFFFFFFFF),
+  Oberflaeche3d('dachziegel_anthrazit', 'Dachziegel anthrazit', 'dachziegel', 0xFF6A6A6A),
 ];
 
 final _nachKey = {for (final o in oberflaechen3d) o.key: o};
@@ -179,8 +182,11 @@ List<Flaeche3d> geschossSzene({
   required List<Raum3d> raeume,
   double schnitt = double.infinity,
   double raster = 900,
+  double Function(Punkt p)? oben,
 }) {
   final aus = <Flaeche3d>[];
+  // Wandoberkante unter einer Dachschräge (Giebel, Kniestock)
+  double top(Punkt p, double z) => oben == null ? z : math.min(z, math.max(0, oben(p)));
   // ----------------------------------------------------------- Böden
   for (final r in raeume) {
     if (r.umriss.length < 3) continue;
@@ -259,16 +265,29 @@ List<Flaeche3d> geschossSzene({
             for (var k = 0; k < m; k++) {
               final za = z0 + (z1 - z0) * k / m, zb = z0 + (z1 - z0) * (k + 1) / m;
               // Ecken gegen den Uhrzeigersinn von außen gesehen
-              final ecken = seite > 0 ? [_w(p1, za), _w(p0, za), _w(p0, zb), _w(p1, zb)] : [_w(p0, za), _w(p1, za), _w(p1, zb), _w(p0, zb)];
-              final uv = seite > 0 ? [(-s1, za), (-s0, za), (-s0, zb), (-s1, zb)] : [(s0, za), (s1, za), (s1, zb), (s0, zb)];
+              final a0z = top(p0, za), b0z = top(p0, zb), a1z = top(p1, za), b1z = top(p1, zb);
+              if (b0z - a0z < 1 && b1z - a1z < 1) continue; // ganz über der Dachschräge
+              final ecken = seite > 0 ? [_w(p1, a1z), _w(p0, a0z), _w(p0, b0z), _w(p1, b1z)] : [_w(p0, a0z), _w(p1, a1z), _w(p1, b1z), _w(p0, b0z)];
+              final uv = seite > 0 ? [(-s1, a1z), (-s0, a0z), (-s0, b0z), (-s1, b1z)] : [(s0, a0z), (s1, a1z), (s1, b1z), (s0, b0z)];
               aus.add(Flaeche3d(ecken, uv, mat, normale: normale, id: w.id));
             }
           }
         }
         // Oberseite (Schnitt) und Unterseite (Sturz)
         final quer = [links(t0), links(t1), rechts(t1), rechts(t0)];
-        aus.add(Flaeche3d([for (final p in quer.reversed) _w(p, z1)], [for (final p in quer.reversed) (p.x, -p.y)], 'schnitt',
-            normale: const V3(0, 0, 1), art: 'schnitt', farbe: z1 >= hoch - 1 ? w.zustandFarbe : null, id: w.id));
+        if (oben == null) {
+          aus.add(Flaeche3d([for (final p in quer.reversed) _w(p, z1)], [for (final p in quer.reversed) (p.x, -p.y)], 'schnitt',
+              normale: const V3(0, 0, 1), art: 'schnitt', farbe: z1 >= hoch - 1 ? w.zustandFarbe : null, id: w.id));
+        } else {
+          // Oberseite unter der Dachschräge in Stücken (folgt dem Giebel)
+          final n = math.max(1, ((t1 - t0) / raster).ceil());
+          for (var i = 0; i < n; i++) {
+            final s0 = t0 + (t1 - t0) * i / n, s1 = t0 + (t1 - t0) * (i + 1) / n;
+            final q = [links(s0), links(s1), rechts(s1), rechts(s0)];
+            aus.add(Flaeche3d([for (final p in q.reversed) _w(p, top(p, z1))], [for (final p in q.reversed) (p.x, -p.y)], 'schnitt',
+                normale: const V3(0, 0, 1), art: 'schnitt', farbe: w.zustandFarbe, id: w.id));
+          }
+        }
         if (z0 > 1) {
           aus.add(Flaeche3d([for (final p in quer) _w(p, z0)], [for (final p in quer) (p.x, -p.y)], 'putz', normale: const V3(0, 0, -1), id: w.id));
         }
@@ -541,4 +560,79 @@ List<Flaeche3d> _scheibe(String id, Punkt m, double z0, double h, double r, int 
         normale: normiert(V3(mid.x, -mid.y, 0)), art: 'geraet', farbe: farbe, id: id));
   }
   return f;
+}
+
+/// Dachfläche als Raster von Dreiecken über dem Gebäuderahmen (mit Überstand);
+/// Höhe je Punkt aus [hoehe] (über FFB, Oberkante Dachhaut).
+List<Flaeche3d> dachFlaechen({required double x0, required double y0, required double x1, required double y1, required double Function(double x, double y) hoehe, double raster = 300}) {
+  final aus = <Flaeche3d>[];
+  final nx = math.max(1, ((x1 - x0) / raster).ceil()), ny = math.max(1, ((y1 - y0) / raster).ceil());
+  final dx = (x1 - x0) / nx, dy = (y1 - y0) / ny;
+  V3 p(int i, int j) {
+    final x = x0 + i * dx, y = y0 + j * dy;
+    return V3(x, -y, hoehe(x, y));
+  }
+
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      final a = p(i, j), b = p(i + 1, j), c = p(i + 1, j + 1), d = p(i, j + 1);
+      for (final t in [
+        [a, c, b],
+        [a, d, c],
+      ]) {
+        var n = normiert(kreuz(t[1] - t[0], t[2] - t[0]));
+        if (n.z < 0) n = n * -1;
+        aus.add(Flaeche3d(t, [for (final q in t) (q.x, -q.y * 1.0)], 'dachziegel', normale: n, beidseitig: true, art: 'dach'));
+      }
+    }
+  }
+  return aus;
+}
+
+/// Holzbalken als Quader entlang einer Strecke (Grundriss x/y, z), Breite b, Höhe h.
+List<Flaeche3d> balkenFlaechen(String id, double x1, double y1, double z1, double x2, double y2, double z2, int b, int h, {int farbe = 0xFFC08A55}) {
+  final a = V3(x1, -y1, z1), e = V3(x2, -y2, z2);
+  final dir = e - a;
+  if (dir.laenge < 1) return const [];
+  final d = normiert(dir);
+  var s = kreuz(d, const V3(0, 0, 1));
+  s = s.laenge < 1e-6 ? const V3(1, 0, 0) : normiert(s);
+  final u = normiert(kreuz(s, d));
+  final sb = s * (b / 2), uh = u * (h / 2);
+  // Oberkante liegt auf der Strecke: Mitte eine halbe Höhe darunter
+  final a0 = a - uh, e0 = e - uh;
+  final aus = <Flaeche3d>[];
+  for (final (o1, o2, n) in [(sb + uh, sb - uh, s), (sb * -1 - uh, sb * -1 + uh, s * -1), (sb * -1 + uh, sb + uh, u), (sb - uh, sb * -1 - uh, u * -1)]) {
+    aus.add(Flaeche3d([a0 + o1, e0 + o1, e0 + o2, a0 + o2], const [(0, 0), (1, 0), (1, 1), (0, 1)], 'holz', normale: n, art: 'holz', farbe: farbe, id: id));
+  }
+  return aus;
+}
+
+
+/// Geländefläche als Dreiecksraster (ohne die Zellen unter dem Haus [haus]).
+List<Flaeche3d> gelaendeFlaechen({required double x0, required double y0, required double x1, required double y1, required double Function(double x, double y) hoehe, required (double, double, double, double) haus, double raster = 600}) {
+  final aus = <Flaeche3d>[];
+  final nx = math.max(1, ((x1 - x0) / raster).ceil()), ny = math.max(1, ((y1 - y0) / raster).ceil());
+  final dx = (x1 - x0) / nx, dy = (y1 - y0) / ny;
+  V3 p(int i, int j) {
+    final x = x0 + i * dx, y = y0 + j * dy;
+    return V3(x, -y, hoehe(x, y));
+  }
+
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      final cx = x0 + (i + 0.5) * dx, cy = y0 + (j + 0.5) * dy;
+      if (cx > haus.$1 && cx < haus.$3 && cy > haus.$2 && cy < haus.$4) continue;
+      final a = p(i, j), b = p(i + 1, j), c = p(i + 1, j + 1), d = p(i, j + 1);
+      for (final t in [
+        [a, c, b],
+        [a, d, c],
+      ]) {
+        var n = normiert(kreuz(t[1] - t[0], t[2] - t[0]));
+        if (n.z < 0) n = n * -1;
+        aus.add(Flaeche3d(t, [for (final q in t) (q.x, -q.y * 1.0)], 'rasen', normale: n, art: 'gelaende'));
+      }
+    }
+  }
+  return aus;
 }

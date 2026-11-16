@@ -15,6 +15,11 @@ import '../../core/wandmasse.dart';
 import '../../data/models.dart';
 import '../../state/app_state.dart';
 import 'texturen3d.dart';
+import '../../core/gelaende.dart';
+import '../../core/sonne.dart';
+import '../bauphysik/sonne_dialog.dart';
+import 'dach_dialog.dart' show dachLesen, gebaeuderahmen;
+import '../../core/dach.dart' show dachFlaecheHoehe, dachstuhl, Holzteil;
 
 /// Ganzes Geschoss in 3D: Wände mit Fenstern und Türen, Böden und Wände mit
 /// Texturen je Material, Geräte und Leitungen. Ziehen dreht, Mausrad oder
@@ -226,9 +231,26 @@ class _Geschoss3dState extends State<Geschoss3d> {
   Orbit? _k;
   _Daten? _d;
   List<_Teil> _teile = const [];
-  (int, int, bool)? _stand;
+  Object? _stand;
+
+  /// Sonne: an/aus, Tag und Minute des Tages (Ortszeit).
+  bool _sonne = false;
+  DateTime _sonneTag = DateTime(DateTime.now().year, 6, 21);
+  int _sonneMinute = 15 * 60;
+
+  /// Richtung zur Sonne (rechtshändig) oder null (aus / unter dem Horizont).
+  V3? get _sonnenVektor {
+    if (!_sonne) return null;
+    final store = widget.state.store!;
+    final ort = Map<String, dynamic>.from(store.einstellung<Map>('standort') ?? const {});
+    final st = sonnenstand((ort['lat'] as num?)?.toDouble() ?? 51.0, (ort['lon'] as num?)?.toDouble() ?? 10.0, _sonneTag.add(Duration(minutes: _sonneMinute)));
+    if (st.hoehe <= 0.5) return null;
+    final r = sonnenRichtungPlan(st.azimut, st.hoehe, (store.einstellung<num>('norden_grad') ?? 0).toDouble());
+    final h = st.hoehe * math.pi / 180;
+    return V3(r.x * math.cos(h), -r.y * math.cos(h), math.sin(h));
+  }
   int _schnitt = 0; // 0 voll, 1 halbhoch, 2 Grundriss
-  bool _texturen = true, _technik = true, _namen = true;
+  bool _texturen = true, _technik = true, _namen = true, _dach = true, _dachstuhl = true, _gelaende = true;
   final _zeiger = <int, Offset>{};
   Offset? _letzte;
   bool _verschieben = false;
@@ -238,22 +260,78 @@ class _Geschoss3dState extends State<Geschoss3d> {
   double get _schnittHoehe => switch (_schnitt) { 1 => 1300.0, 2 => 250.0, _ => double.infinity };
 
   void _aufbauen() {
-    final stand = (widget.state.revision, _schnitt, _texturen);
+    final stand = (widget.state.revision, _schnitt, _texturen, _sonne, _sonneTag, _sonneMinute ~/ 30);
     if (stand == _stand) return;
     _stand = stand;
     _d = _lesen(widget.state, widget.geschossId);
     final d = _d;
     if (d == null) return;
     _k ??= Orbit(ziel: d.mitte, abstand: math.max(5000, d.groesse * 1.5));
-    final szene = geschossSzene(waende: d.waende, oeffnungen: d.oeffnungen, raeume: d.raeume, schnitt: _schnittHoehe);
+    final dachE = dachLesen(widget.state.store!, widget.geschossId);
+    final dachG = dachE.aktiv ? gebaeuderahmen(widget.state.store!.waende(widget.geschossId)) : null;
+    final szene = geschossSzene(
+      waende: d.waende,
+      oeffnungen: d.oeffnungen,
+      raeume: d.raeume,
+      schnitt: _schnittHoehe,
+      // Dachgeschoss: Wände enden an der Dachschräge (Kniestock, Giebel)
+      oben: dachG == null ? null : (p) => dachFlaecheHoehe(dachE, dachG, p),
+    );
     // Geräte als Quader dazu (rechtshändig: y gespiegelt)
     final flaechen = [...szene];
+    // Gelände im Erdgeschoss (Höhen zu ±0 = FFB EG)
+    if (_gelaende) {
+      final store = widget.state.store!;
+      final punkte = gelaendeLesen(store.einstellung<Object>('gelaende'));
+      final gs = [for (final geb in store.gebaeude()) ...store.geschosse(geb.id)];
+      final eg = gs.where((g) => g.kuerzel.toUpperCase().contains('EG')).firstOrNull ?? gs.firstOrNull;
+      if (punkte.isNotEmpty && eg?.id == widget.geschossId && d.waende.isNotEmpty) {
+        var x0 = double.infinity, y0 = double.infinity, x1 = -double.infinity, y1 = -double.infinity;
+        for (final w in d.waende) {
+          for (final q in [w.a, w.b]) {
+            x0 = math.min(x0, q.x);
+            y0 = math.min(y0, q.y);
+            x1 = math.max(x1, q.x);
+            y1 = math.max(y1, q.y);
+          }
+        }
+        flaechen.addAll(gelaendeFlaechen(
+          x0: x0 - 8000,
+          y0: y0 - 8000,
+          x1: x1 + 8000,
+          y1: y1 + 8000,
+          hoehe: (x, y) => gelaendeHoehe(punkte, x, y)!,
+          haus: (x0 - 100, y0 - 100, x1 + 100, y1 + 100),
+        ));
+      }
+    }
+    // Dach mit Dachstuhl (Dachgeschoss mit Dachform)
+    if ((_dach || _dachstuhl) && _schnitt == 0) {
+      final store = widget.state.store!;
+      final dach = dachLesen(store, widget.geschossId);
+      final g = dach.aktiv ? gebaeuderahmen(store.waende(widget.geschossId)) : null;
+      if (g != null) {
+        final u = dach.ueberstand.toDouble();
+        if (_dach) {
+          flaechen.addAll(dachFlaechen(
+            x0: g.x0 - u,
+            y0: g.y0 - u,
+            x1: g.x1 + u,
+            y1: g.y1 + u,
+            hoehe: (x, y) => dachFlaecheHoehe(dach, g, Punkt(x, y)) + dach.sparrenHoehe + 60,
+          ));
+        }
+        for (final (i, t) in (_dachstuhl ? dachstuhl(dach, g) : const <Holzteil>[]).indexed) {
+          flaechen.addAll(balkenFlaechen('holz-$i', t.x1, t.y1, t.z1, t.x2, t.y2, t.z2, t.b, t.h, farbe: t.name.contains('pfette') ? 0xFFA9744A : 0xFFC9935F));
+        }
+      }
+    }
     if (_technik) {
       final g3 = _schnitt == 0 ? d.geraete3d : [for (final g in d.geraete3d) if (g.z != null || !const {'LE', 'RW', 'WR', 'CM', 'PM', 'BM', 'AP', 'LV'}.contains(g.kuerzel)) g];
       flaechen.addAll(geraeteFlaechen(g3, d.waende, d.hoehe));
     }
     const licht = V3(0.35, -0.45, 0.82);
-    final ln = normiert(licht);
+    final ln = _sonnenVektor ?? normiert(licht);
     _teile = [
       for (final f in flaechen)
         () {
@@ -365,7 +443,7 @@ class _Geschoss3dState extends State<Geschoss3d> {
               _letzte = null;
             },
             child: CustomPaint(
-              painter: _GeschossPainter(_teile, _k!, d, technik: _technik, namen: _namen, kollision: koll.ids),
+              painter: _GeschossPainter(_teile, _k!, d, technik: _technik, namen: _namen, kollision: koll.ids, sonne: _sonnenVektor),
               child: const SizedBox.expand(),
             ),
           );
@@ -403,7 +481,8 @@ class _Geschoss3dState extends State<Geschoss3d> {
       child: Container(
       width: 270,
       padding: const EdgeInsets.all(8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      constraints: BoxConstraints(maxHeight: math.max(200, _groesse.height - 40)),
+      child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
         Wrap(spacing: 2, children: [
           IconButton(tooltip: 'Hineinzoomen', icon: const Icon(Icons.zoom_in), onPressed: () => _zoom(1 / 1.3)),
           IconButton(tooltip: 'Herauszoomen', icon: const Icon(Icons.zoom_out), onPressed: () => _zoom(1.3)),
@@ -434,7 +513,59 @@ class _Geschoss3dState extends State<Geschoss3d> {
                     _stand = null;
                   })),
           FilterChip(label: const Text('Namen'), selected: _namen, onSelected: (v) => setState(() => _namen = v)),
+          FilterChip(
+              avatar: const Icon(Icons.wb_sunny_outlined, size: 16),
+              label: const Text('Sonne'),
+              selected: _sonne,
+              onSelected: (v) => setState(() => _sonne = v)),
+          FilterChip(
+              label: const Text('Gelände'),
+              selected: _gelaende,
+              onSelected: (v) => setState(() {
+                    _gelaende = v;
+                    _stand = null;
+                  })),
+          FilterChip(
+              label: const Text('Dachhaut'),
+              selected: _dach,
+              onSelected: (v) => setState(() {
+                    _dach = v;
+                    _stand = null;
+                  })),
+          FilterChip(
+              label: const Text('Dachstuhl'),
+              selected: _dachstuhl,
+              onSelected: (v) => setState(() {
+                    _dachstuhl = v;
+                    _stand = null;
+                  })),
         ]),
+        if (_sonne) ...[
+          const SizedBox(height: 6),
+          DropdownButton<int>(
+            isDense: true,
+            isExpanded: true,
+            value: _sonneTag.month == 3 && _sonneTag.day == 21 ? 3 : (_sonneTag.month == 6 && _sonneTag.day == 21 ? 6 : (_sonneTag.month == 12 && _sonneTag.day == 21 ? 12 : 0)),
+            items: const [
+              DropdownMenuItem(value: 3, child: Text('21. März / Sept. (Tagundnachtgleiche)')),
+              DropdownMenuItem(value: 6, child: Text('21. Juni (höchster Stand)')),
+              DropdownMenuItem(value: 12, child: Text('21. Dezember (tiefster Stand)')),
+              DropdownMenuItem(value: 0, child: Text('heute')),
+            ],
+            onChanged: (v) => setState(() {
+              final j = DateTime.now().year;
+              _sonneTag = v == 0 ? DateTime(j, DateTime.now().month, DateTime.now().day) : DateTime(j, v!, 21);
+            }),
+          ),
+          Row(children: [
+            Text('${(_sonneMinute ~/ 60).toString().padLeft(2, '0')}:${(_sonneMinute % 60).toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 12)),
+            Expanded(
+              child: Slider(min: 300, max: 1320, divisions: 68, value: _sonneMinute.toDouble().clamp(300, 1320), onChanged: (v) => setState(() => _sonneMinute = v.round())),
+            ),
+          ]),
+          if (_sonnenVektor == null) const Text('Sonne unter dem Horizont', style: TextStyle(fontSize: 11, color: BsFarben.textLeise)),
+          TextButton(onPressed: () => sonneDialog(context, widget.state), child: const Text('Standort, Fenster-Sonnenstunden, PV …')),
+        ],
         const SizedBox(height: 6),
         if (echte.isNotEmpty)
           PopupMenuButton<Raum3d>(
@@ -449,7 +580,7 @@ class _Geschoss3dState extends State<Geschoss3d> {
           title: const Text('Oberflächen je Raum …'),
           onTap: () => _oberflaechenDialog(context, echte),
         ),
-      ]),
+      ]),)
     ),
     );
   }
@@ -522,8 +653,11 @@ class _Geschoss3dState extends State<Geschoss3d> {
 }
 
 class _GeschossPainter extends CustomPainter {
-  _GeschossPainter(this.teile, this.k, this.d, {required this.technik, required this.namen, required this.kollision});
+  _GeschossPainter(this.teile, this.k, this.d, {required this.technik, required this.namen, required this.kollision, this.sonne});
   final List<_Teil> teile;
+
+  /// Richtung zur Sonne (rechtshändig) – zeichnet Schatten der Wände auf den Boden.
+  final V3? sonne;
   final Orbit k;
   final _Daten d;
   final bool technik, namen;
@@ -568,6 +702,27 @@ class _GeschossPainter extends CustomPainter {
     }
     for (final b in boeden.values) {
       _zeichnen(canvas, b.$1, b.$2, b.$3, b.$4);
+    }
+    // Schatten der Wände auf dem Boden (Sonne an)
+    final sv = sonne;
+    if (sv != null && sv.z > 0.02) {
+      canvas.saveLayer(rect, Paint()..color = const Color(0x52000000));
+      final schwarz = Paint()..color = Colors.black;
+      for (final w in d.waende) {
+        if (w.umriss.length != 4) continue;
+        final versatz = V3(-sv.x / sv.z * w.hoehe, -sv.y / sv.z * w.hoehe, 0);
+        final unten = [for (final q in w.umriss) V3(q.x, -q.y, 0)];
+        final oben = [for (final q in unten) q + versatz];
+        final pu = [for (final q in unten) p(q)], po = [for (final q in oben) p(q)];
+        if ([...pu, ...po].any((x) => x.$2 < nah)) continue;
+        final pfad = Path()..addPolygon([for (final x in po) x.$1], true);
+        for (var i = 0; i < 4; i++) {
+          final j = (i + 1) % 4;
+          pfad.addPolygon([pu[i].$1, pu[j].$1, po[j].$1, po[i].$1], true);
+        }
+        canvas.drawPath(pfad, schwarz);
+      }
+      canvas.restore();
     }
     // Leitungen einsortieren
     final linien = <(double, Offset, Offset, Color, double)>[];

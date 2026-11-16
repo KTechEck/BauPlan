@@ -42,6 +42,7 @@ Textur3d? _zeichnen(Oberflaeche3d o) {
     'pflaster' => (800.0, 800.0),
     'stein' => (1200.0, 1200.0),
     'daemmung' => (1000.0, 500.0),
+    'dachziegel' => (600.0, 600.0),
     _ => (1000.0, 1000.0),
   };
   const px = 256;
@@ -173,6 +174,18 @@ Textur3d? _zeichnen(Oberflaeche3d o) {
       rauschen(2500, 0.09, 1.3);
     case 'pflaster':
       verband(200, 100, 6, const [Color(0xFF9A958C), Color(0xFF8C877E), Color(0xFFA7A298)], const Color(0xFF6F6B64));
+    case 'rasen':
+      flaeche(const Color(0xFF7FA05A));
+      for (var i = 0; i < 2200; i++) {
+        final x = r.nextDouble() * w, y = r.nextDouble() * h;
+        c.drawLine(Offset(x, y), Offset(x + r.nextDouble() * 2 - 1, y - 2 - r.nextDouble() * 3),
+            Paint()..color = (r.nextBool() ? const Color(0xFF94B86A) : const Color(0xFF5E7F3E)).withValues(alpha: 0.7)..strokeWidth = 1);
+      }
+    case 'dachziegel':
+      verband(300, 200, 8, const [Color(0xFFB4442E), Color(0xFFA53D29), Color(0xFFC0533A), Color(0xFF9B3A27)], const Color(0xFF6E2A1D));
+      for (var y = 0.0; y < mmH; y += 200) {
+        c.drawLine(Offset(0, (y + 190) * sy), Offset(w.toDouble(), (y + 190) * sy), Paint()..color = Colors.black.withValues(alpha: 0.25)..strokeWidth = 2);
+      }
     case 'daemmung':
       flaeche(const Color(0xFFF2E9C2));
       verband(1000, 500, 4, const [Color(0xFFF4ECC8), Color(0xFFEFE5BB)], const Color(0xFFD9CE9E));

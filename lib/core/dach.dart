@@ -11,7 +11,11 @@ import 'raumerkennung.dart';
 enum Dachform {
   keins('kein Dach / Flachdecke'),
   sattel('Satteldach'),
-  pult('Pultdach');
+  pult('Pultdach'),
+  walm('Walmdach'),
+  krueppelwalm('Krüppelwalmdach'),
+  zelt('Zeltdach'),
+  mansard('Mansarddach');
 
   const Dachform(this.label);
   final String label;
@@ -51,7 +55,21 @@ class DachEinstellung {
     this.sparrenVersatz = 0,
     this.dachfenster = const [],
     this.abschnitte = const [],
+    this.neigungUnten = 70,
+    this.knick = 2300,
+    this.krueppel = 1500,
+    this.ueberstand = 500,
   });
+
+  /// Mansarddach: Neigung des steilen unteren Teils (°) und Höhe des Knicks über dem Kniestock.
+  final double neigungUnten;
+  final int knick;
+
+  /// Krüppelwalm: Höhe über dem Kniestock, ab der der Giebel abgewalmt ist.
+  final int krueppel;
+
+  /// Dachüberstand an Traufe und Ortgang (mm, waagrecht).
+  final int ueberstand;
 
   /// Kniestock abschnittsweise entlang des Firsts (ab Giebel), je Traufseite.
   final List<KniestockAbschnitt> abschnitte;
@@ -98,6 +116,10 @@ class DachEinstellung {
         'sp_versatz': sparrenVersatz,
         'fenster': [for (final f in dachfenster) f.toJson()],
         'abschnitte': [for (final a in abschnitte) a.toJson()],
+        'neigung_unten': neigungUnten,
+        'knick': knick,
+        'krueppel': krueppel,
+        'ueberstand': ueberstand,
       };
 
   static DachEinstellung ausJson(Map<String, dynamic>? m) {
@@ -121,6 +143,10 @@ class DachEinstellung {
       sparrenVersatz: i('sp_versatz', 0),
       dachfenster: [for (final f in (m['fenster'] as List? ?? const [])) Dachfenster.ausJson(Map<String, dynamic>.from(f as Map))],
       abschnitte: [for (final a in (m['abschnitte'] as List? ?? const [])) KniestockAbschnitt.ausJson(Map<String, dynamic>.from(a as Map))],
+      neigungUnten: d('neigung_unten', 70),
+      knick: i('knick', 2300),
+      krueppel: i('krueppel', 1500),
+      ueberstand: i('ueberstand', 500),
     );
   }
 }
@@ -133,11 +159,35 @@ double _tan(DachEinstellung d) => math.tan(d.neigung.clamp(1, 80) * math.pi / 18
 /// Abstand von der (niedrigen) Traufe quer zum First.
 double _vonTraufe(DachEinstellung d, Gebaeuderahmen g, Punkt p) {
   final (a, b, v) = d.firstInX ? (g.y0, g.y1, p.y) : (g.x0, g.x1, p.x);
+  final (c, e, w) = d.firstInX ? (g.x0, g.x1, p.x) : (g.y0, g.y1, p.y);
   return switch (d.form) {
-    Dachform.sattel => math.min(v - a, b - v),
+    Dachform.sattel || Dachform.mansard || Dachform.krueppelwalm => math.min(v - a, b - v),
     Dachform.pult => d.hochSeiteVorne ? b - v : v - a,
+    Dachform.walm || Dachform.zelt => math.min(math.min(v - a, b - v), math.min(w - c, e - w)),
     Dachform.keins => double.infinity,
   };
+}
+
+/// Höhe der Dachfläche über dem Kniestock bei waagrechtem Abstand [x] zur Traufe.
+double _anstieg(DachEinstellung d, double x) {
+  if (d.form != Dachform.mansard) return x * _tan(d);
+  final tu = math.tan(d.neigungUnten.clamp(1, 85) * math.pi / 180);
+  final xk = d.knick / tu;
+  return x <= xk ? x * tu : d.knick + (x - xk) * _tan(d);
+}
+
+/// Höhe der Dachfläche (Unterseite Sparren) über FFB an [p], ohne Kehlbalken;
+/// auch außerhalb des Gebäudes (Überstand, dort unter dem Kniestock).
+double dachFlaecheHoehe(DachEinstellung d, Gebaeuderahmen g, Punkt p) {
+  final k = kniestockBei(d, g, p).toDouble();
+  final x = _vonTraufe(d, g, p);
+  var h = k + (x >= 0 ? _anstieg(d, x) : x * _tan(d));
+  if (d.form == Dachform.krueppelwalm) {
+    final (c, e, w) = d.firstInX ? (g.x0, g.x1, p.x) : (g.y0, g.y1, p.y);
+    final giebel = math.min(w - c, e - w);
+    h = math.min(h, k + d.krueppel + giebel * _tan(d));
+  }
+  return h;
 }
 
 /// Kniestock an [p]: Abschnitt entlang des Firsts und Traufseite (vorne = kleine Koordinate).
@@ -154,7 +204,7 @@ int kniestockBei(DachEinstellung d, Gebaeuderahmen g, Punkt p) {
 /// Lichte Höhe unter der Dachschräge (bzw. Kehlbalken) über FFB an [p]; null ohne Dach.
 double? dachHoehe(DachEinstellung d, Gebaeuderahmen g, Punkt p) {
   if (!d.aktiv) return null;
-  final h = kniestockBei(d, g, p) + math.max(0.0, _vonTraufe(d, g, p)) * _tan(d);
+  final h = math.max(kniestockBei(d, g, p).toDouble(), dachFlaecheHoehe(d, g, p));
   return d.kehlbalken > 0 ? math.min(h, d.kehlbalken.toDouble()) : h;
 }
 
@@ -168,7 +218,7 @@ List<double> hoehenLinie(DachEinstellung d, Gebaeuderahmen g, double h, {int? vo
   return switch (d.form) {
     Dachform.sattel => [if (h > kv && a + av < (a + b) / 2) a + av, if (h > kh && b - ah > (a + b) / 2) b - ah],
     Dachform.pult => [if (h > kv && av < b - a) (d.hochSeiteVorne ? b - av : a + av)],
-    Dachform.keins => const [],
+    _ => const [],
   };
 }
 
@@ -211,7 +261,7 @@ List<double> sparrenLagen(DachEinstellung d, Gebaeuderahmen g) {
 
 /// Firstlinie (Koordinate quer zum First), null beim Pultdach.
 double? firstLage(DachEinstellung d, Gebaeuderahmen g) =>
-    d.form == Dachform.sattel ? (d.firstInX ? (g.y0 + g.y1) / 2 : (g.x0 + g.x1) / 2) : null;
+    const {Dachform.sattel, Dachform.mansard, Dachform.krueppelwalm, Dachform.walm}.contains(d.form) ? (d.firstInX ? (g.y0 + g.y1) / 2 : (g.x0 + g.x1) / 2) : null;
 
 /// Wohnfläche nach WoFlV: unter 1 m nicht, 1–2 m zur Hälfte, ab 2 m voll (m²).
 ({double grund, double wohn, double unter1, double zwischen}) wohnflaeche(List<Punkt> umriss, DachEinstellung d, Gebaeuderahmen g, {double raster = 100}) {
@@ -269,4 +319,119 @@ class KniestockAbschnitt {
         vorne: (m['vorne'] as num?)?.toInt() ?? 1000,
         hinten: (m['hinten'] as num?)?.toInt() ?? (m['vorne'] as num?)?.toInt() ?? 1000,
       );
+}
+
+
+/// Ein Holzteil des Dachstuhls: Strecke im Raum (Grundriss x/y, z über FFB des
+/// Dachgeschosses), Querschnitt b×h, Name (Sparren, Gratsparren, Pfette …).
+typedef Holzteil = ({String name, double x1, double y1, double z1, double x2, double y2, double z2, int b, int h});
+
+/// Dachstuhl aus Dachform und Gebäuderahmen: Sparren (mit Überstand), Grat-
+/// sparren, Fuß-, Mittel- und Firstpfetten, Kehlbalken. Vereinfacht für die
+/// Mengen (Holzliste) und die 3D-Ansicht – keine Statik.
+List<Holzteil> dachstuhl(DachEinstellung d, Gebaeuderahmen g) {
+  if (!d.aktiv) return const [];
+  final u = d.ueberstand.toDouble();
+  final aus = <Holzteil>[];
+  double z(double x, double y) => dachFlaecheHoehe(d, g, Punkt(x, y)) + d.sparrenHoehe;
+  void teil(String n, double x1, double y1, double x2, double y2, {int? b, int? h, double? z1, double? z2}) =>
+      aus.add((name: n, x1: x1, y1: y1, z1: z1 ?? z(x1, y1), x2: x2, y2: y2, z2: z2 ?? z(x2, y2), b: b ?? d.sparrenBreite, h: h ?? d.sparrenHoehe));
+  final fx = d.firstInX;
+  // längs = entlang First, quer = Richtung der Neigung
+  final (l0, l1) = fx ? (g.x0, g.x1) : (g.y0, g.y1);
+  final (q0, q1) = fx ? (g.y0, g.y1) : (g.x0, g.x1);
+  (double, double) pt(double laengs, double quer) => fx ? (laengs, quer) : (quer, laengs);
+  final qm = (q0 + q1) / 2;
+  final walm = d.form == Dachform.walm || d.form == Dachform.zelt;
+  final halb = (q1 - q0) / 2;
+  for (final s in sparrenLagen(d, g)) {
+    if (walm && (s - l0 < halb || l1 - s < halb)) {
+      // Schifter: vom Grat zur Traufe
+      final abstand = math.min(s - l0, l1 - s);
+      for (final (von, bis) in [(q0 - u, q0 + abstand), (q1 + u, q1 - abstand)]) {
+        final a = pt(s, von), b = pt(s, bis);
+        teil('Schiftersparren', a.$1, a.$2, b.$1, b.$2);
+      }
+      continue;
+    }
+    if (d.form == Dachform.pult) {
+      final a = pt(s, q0 - u), b = pt(s, q1 + u);
+      teil('Sparren', a.$1, a.$2, b.$1, b.$2);
+      continue;
+    }
+    for (final (von, bis) in [(q0 - u, qm), (q1 + u, qm)]) {
+      final a = pt(s, von), b = pt(s, bis);
+      teil('Sparren', a.$1, a.$2, b.$1, b.$2);
+    }
+  }
+  // Walm: Schifter an den Walmseiten (quer zum First) und Gratsparren
+  if (walm) {
+    final grenze = math.min(halb, (l1 - l0) / 2);
+    for (var q = q0 + d.sparrenBreite / 2 + d.sparrenVersatz; q <= q1 - d.sparrenBreite / 2 + 1; q += d.sparrenAbstand) {
+      final tief = math.min(q - q0, q1 - q);
+      for (final (von, bis) in [(l0 - u, l0 + math.min(tief, grenze)), (l1 + u, l1 - math.min(tief, grenze))]) {
+        final a = pt(von, q), b = pt(bis, q);
+        teil('Schiftersparren', a.$1, a.$2, b.$1, b.$2);
+      }
+    }
+    final ra = l0 + grenze, re = l1 - grenze;
+    for (final (ex, ey, fx2, fy2) in [
+      (pt(l0, q0), pt(ra, qm)),
+      (pt(l0, q1), pt(ra, qm)),
+      (pt(l1, q0), pt(re, qm)),
+      (pt(l1, q1), pt(re, qm)),
+    ].map((e) => (e.$1.$1, e.$1.$2, e.$2.$1, e.$2.$2))) {
+      teil('Gratsparren', ex, ey, fx2, fy2, b: d.sparrenBreite + 20, h: d.sparrenHoehe + 40);
+    }
+    if (re > ra + 1) {
+      final a = pt(ra, qm), b = pt(re, qm);
+      teil('Firstpfette', a.$1, a.$2, b.$1, b.$2, b: 120, h: 200);
+    }
+  } else if (d.form != Dachform.pult) {
+    final a = pt(l0 - u, qm), b = pt(l1 + u, qm);
+    teil('Firstpfette', a.$1, a.$2, b.$1, b.$2, b: 120, h: 200);
+  }
+  // Fußpfetten auf den Traufwänden (Höhe Kniestock)
+  final k = d.kniestock.toDouble();
+  for (final q in d.form == Dachform.pult ? [q0, q1] : [q0, q1]) {
+    final a = pt(l0, q), b = pt(l1, q);
+    teil('Fußpfette', a.$1, a.$2, b.$1, b.$2, b: 140, h: 140, z1: k, z2: k);
+  }
+  if (walm) {
+    for (final l in [l0, l1]) {
+      final a = pt(l, q0), b = pt(l, q1);
+      teil('Fußpfette', a.$1, a.$2, b.$1, b.$2, b: 140, h: 140, z1: k, z2: k);
+    }
+  }
+  // Mittelpfetten bei langen Sparren (> 4,5 m waagrecht)
+  final spann = d.form == Dachform.pult ? (q1 - q0) : halb;
+  if (spann > 4500 && !walm) {
+    for (final q in d.form == Dachform.pult ? [(q0 + q1) / 2] : [q0 + halb / 2, q1 - halb / 2]) {
+      final a = pt(l0, q), b = pt(l1, q);
+      teil('Mittelpfette', a.$1, a.$2, b.$1, b.$2, b: 120, h: 200);
+    }
+  }
+  // Kehlbalken
+  if (d.kehlbalken > 0 && d.form != Dachform.pult) {
+    final x = (d.kehlbalken - k) / _tan(d);
+    if (x > 0 && x < halb) {
+      for (final s in sparrenLagen(d, g)) {
+        final a = pt(s, q0 + x), b = pt(s, q1 - x);
+        teil('Kehlbalken', a.$1, a.$2, b.$1, b.$2, b: 80, h: 160, z1: d.kehlbalken.toDouble(), z2: d.kehlbalken.toDouble());
+      }
+    }
+  }
+  return aus;
+}
+
+/// Holzliste: Name, Querschnitt → (Anzahl, Gesamtlänge m).
+Map<String, ({int anzahl, double meter})> holzliste(List<Holzteil> teile) {
+  final m = <String, ({int anzahl, double meter})>{};
+  for (final t in teile) {
+    final l = math.sqrt(math.pow(t.x2 - t.x1, 2) + math.pow(t.y2 - t.y1, 2) + math.pow(t.z2 - t.z1, 2)) / 1000;
+    final k = '${t.name} ${t.b}/${t.h}';
+    final a = m[k];
+    m[k] = (anzahl: (a?.anzahl ?? 0) + 1, meter: (a?.meter ?? 0) + l);
+  }
+  return m;
 }
