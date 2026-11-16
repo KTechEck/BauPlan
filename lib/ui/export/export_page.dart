@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../installation/legende.dart';
+import '../../core/wandaufbau.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -579,6 +580,14 @@ class PlanExport {
           mitObjekten ? MassAnzeige.keine : (MassAnzeige.values.where((m) => m.name == mv).firstOrNull ?? MassAnzeige.innenAussen),
       bemassungen: mitObjekten ? const [] : store.bemassungen(gid),
       oeffnungen: store.oeffnungen(gid),
+      aufbau: () {
+        final mat = {for (final m in store.materialien()) m.id: m.farbe};
+        return [
+          for (final b in aufbauBaender(waende, verbindenStandard: global, oeffnungen: store.oeffnungen(gid)))
+            if (b.imPlan) ([for (final q in b.polygon) Offset(q.x, q.y)], Color(mat[b.material] ?? 0xFFE9E4DA)),
+        ];
+      }(),
+      kernFarben: {for (final m in store.materialien()) m.id: Color(m.farbe)},
     );
     final rec = ui.PictureRecorder();
     final canvas = Canvas(rec);

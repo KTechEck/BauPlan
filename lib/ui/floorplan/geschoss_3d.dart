@@ -16,6 +16,7 @@ import '../../data/models.dart';
 import '../../state/app_state.dart';
 import 'texturen3d.dart';
 import '../../core/gelaende.dart';
+import '../../core/wandaufbau.dart';
 import '../../core/sonne.dart';
 import '../bauphysik/sonne_dialog.dart';
 import 'dach_dialog.dart' show dachLesen, gebaeuderahmen;
@@ -279,6 +280,49 @@ class _Geschoss3dState extends State<Geschoss3d> {
     );
     // Geräte als Quader dazu (rechtshändig: y gespiegelt)
     final flaechen = [...szene];
+    // Aufbau je Wandseite (Putz, WDVS …) als dünne Körper vor dem Kern
+    {
+      final store = widget.state.store!;
+      final mats = {for (final m in store.materialien()) m.id: m};
+      final h = math.min(d.hoehe, _schnittHoehe);
+      for (final b in aufbauBaender(store.waende(widget.geschossId), oeffnungen: store.oeffnungen(widget.geschossId), raumhoehe: d.hoehe)) {
+        final poly = b.polygon;
+        final name = mats[b.material]?.name ?? '';
+        final key = oberflaecheAusText(name) ?? 'aussenputz';
+        for (final (z0, z1raw) in b.hoehen ?? [(0.0, d.hoehe)]) {
+          final z1 = math.min(z1raw, h);
+          if (z1 - z0 < 1) continue;
+          V3 w3(Punkt p, double z) => V3(p.x, -p.y, z);
+          flaechen.add(Flaeche3d([for (final p in poly.reversed) w3(p, z1)], [for (final p in poly.reversed) (p.x, -p.y)], 'schnitt',
+              normale: const V3(0, 0, 1), art: 'schnitt', farbe: mats[b.material]?.farbe ?? 0xFFE9E4DA, id: b.wandId));
+          if (b.aussen) {
+            final a = poly[3], e = poly[2];
+            final mitte = Punkt((poly[0].x + poly[1].x) / 2, (poly[0].y + poly[1].y) / 2);
+            final dx = e.x - a.x, dy = e.y - a.y;
+            var nx = dy, ny = -dx;
+            final l = math.sqrt(nx * nx + ny * ny);
+            if (l < 1) continue;
+            nx /= l;
+            ny /= l;
+            if ((a.x - mitte.x) * nx + (a.y - mitte.y) * ny < 0) {
+              nx = -nx;
+              ny = -ny;
+            }
+            // in Kacheln (sauberes Sortieren, Textur)
+            final n = math.max(1, (l / 900).ceil()), m = math.max(1, ((z1 - z0) / 900).ceil());
+            for (var i = 0; i < n; i++) {
+              final pa = Punkt(a.x + dx * i / n, a.y + dy * i / n), pe = Punkt(a.x + dx * (i + 1) / n, a.y + dy * (i + 1) / n);
+              for (var k = 0; k < m; k++) {
+                final za = z0 + (z1 - z0) * k / m, zb = z0 + (z1 - z0) * (k + 1) / m;
+                final ta = l * i / n, te = l * (i + 1) / n;
+                flaechen.add(Flaeche3d([w3(pa, za), w3(pe, za), w3(pe, zb), w3(pa, zb)], [(ta, za), (te, za), (te, zb), (ta, zb)], key,
+                    normale: V3(nx, -ny, 0), id: b.wandId));
+              }
+            }
+          }
+        }
+      }
+    }
     // Gelände im Erdgeschoss (Höhen zu ±0 = FFB EG)
     if (_gelaende) {
       final store = widget.state.store!;

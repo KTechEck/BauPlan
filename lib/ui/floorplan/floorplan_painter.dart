@@ -78,12 +78,20 @@ class FloorplanPainter extends CustomPainter {
     this.massSchrift = 1,
     this.raster = true,
     this.sparren = const [],
+    this.aufbau = const [],
+    this.kernFarben = const {},
     this.massAbPxJeM = 25,
     this.beideAbPxJeM = 70,
   });
 
   /// Raster zeigen (Option „Raster ausblenden“).
   final bool raster;
+
+  /// Seitenaufbau (Putz, WDVS …) als Bänder in Weltkoordinaten mit Farbe.
+  final List<(List<Offset>, Color)> aufbau;
+
+  /// Farben der Baustoffe (Kern der Wand).
+  final Map<String, Color> kernFarben;
 
   /// Sparren im Grundriss: Anfang, Ende (Welt), Breite (mm), gewählt.
   final List<(Offset, Offset, double, bool)> sparren;
@@ -162,6 +170,18 @@ class FloorplanPainter extends CustomPainter {
     _vorlageZeichnen(canvas);
     for (final r in raeume) {
       _raumFlaeche(canvas, r);
+    }
+    // Aufbau je Seite (unter den Kernen, damit Kernkanten oben liegen)
+    if (aufbau.isNotEmpty) {
+      final kante = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6
+        ..color = const Color(0x66000000);
+      for (final (poly, farbe) in aufbau) {
+        final pfad = Path()..addPolygon([for (final q in poly) _s(q)], true);
+        canvas.drawPath(pfad, Paint()..color = farbe);
+        if (massstab > 0.03) canvas.drawPath(pfad, kante);
+      }
     }
     for (final (a, b, breite, gewaehlt) in sparren) {
       canvas.drawLine(_s(a), _s(b), Paint()
@@ -481,6 +501,20 @@ class FloorplanPainter extends CustomPainter {
       );
     }
     final breite = w.dicke * massstab;
+    final kern = w.eigenschaften['kern'];
+    if (kern is Map) {
+      // Neues Wandmodell: nur der Kern, Aufbau kommt als Bänder
+      final kf = kernFarben[kern['m']];
+      canvas.drawPath(path, Paint()..color = kf == null ? (w.zustand == WandZustand.abbruch ? farbe.withValues(alpha: 0.6) : farbe) : (w.zustand == WandZustand.abbruch ? kf.withValues(alpha: 0.5) : kf));
+      if (kf != null) {
+        final k = Paint()
+          ..color = farbe
+          ..strokeWidth = w.zustand == WandZustand.bestand ? 1.2 : 2.2;
+        canvas.drawLine(p[0], p[1], k);
+        canvas.drawLine(p[3], p[2], k);
+      }
+      return;
+    }
     final lagen = w.wandtypId == null ? null : schichten[w.wandtypId];
     final summe = lagen?.fold<int>(0, (s, e) => s + e.$1) ?? 0;
     if (lagen == null || lagen.isEmpty || breite < 7 || summe <= 0) {
@@ -1035,6 +1069,7 @@ class FloorplanPainter extends CustomPainter {
       old.massSchrift != massSchrift ||
       old.raster != raster ||
       old.sparren.length != sparren.length ||
+      old.aufbau != aufbau ||
       old.massAbPxJeM != massAbPxJeM ||
       old.beideAbPxJeM != beideAbPxJeM ||
       old.raumStuecke != raumStuecke ||

@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import '../../app/symbole.dart';
 import '../../app/theme.dart';
 import '../../core/aufmass.dart';
+import '../../core/wandaufbau.dart';
 import '../../data/sync.dart';
 import '../../core/brandschutz.dart';
 import '../../core/sparren.dart';
@@ -38,6 +39,7 @@ import '../widgets.dart';
 import 'aufmass_dialog.dart';
 import 'sparren_dialog.dart';
 import 'gelaende_dialog.dart';
+import 'aufbau_dialog.dart';
 import '../bauphysik/sonne_dialog.dart';
 import 'dach_dialog.dart';
 import 'geschoss_3d.dart';
@@ -81,7 +83,11 @@ class _Plan {
     required this.winkelmasse,
     required this.vorlage,
     required this.oeffnungen,
+    this.aufbau = const [],
   });
+
+  /// Seitenaufbau als Bänder (Kern + Aufbau je Seite).
+  final List<Aufbauband> aufbau;
 
   final List<WandAchse> achsen; // gleiche Reihenfolge wie waende
   final Map<String, (double, double)> flanken; // Seitenlängen je Wand
@@ -418,6 +424,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
           t.id: [for (final s in t.schichten) (s.dicke, Color(materialien[s.materialId]?.farbe ?? 0xFFDDDDDD))],
       },
       achsen: achsen,
+      aufbau: aufbauBaender(waende, verbindenStandard: store.einstellung<bool>('ecken_verbinden') ?? true, oeffnungen: g == null ? const [] : store.oeffnungen(g)),
       flanken: () {
         final roh = {
           for (var i = 0; i < waende.length; i++)
@@ -2487,6 +2494,85 @@ class _FloorplanPageState extends State<FloorplanPage> {
     return KeyEventResult.ignored;
   }
 
+  /// Kern (tragende Schicht) und Aufbau je Seite.
+  List<Widget> _kernFelder(Wand w, _Plan plan) {
+    final store = _s.store!;
+    final km = kernMaterial(w);
+    String seite(bool links) => WandSeite.berechnen(w, plan.waende, plan.raeume, _eckenVerbinden, links).raum?.name ?? (links ? 'Seite A (außen)' : 'Seite B (außen)');
+    String kurz(bool links) {
+      final b = aufbau(w, links);
+      if (b.isEmpty) return 'kein Aufbau';
+      final s0 = b.first.schichten;
+      final t = s0.map((x) => '${plan.materialien[x.material]?.name ?? '?'} ${x.dicke}').join(' + ');
+      return b.length == 1 ? (t.isEmpty ? 'leer' : t) : '${b.length} Bereiche · $t …';
+    }
+
+    return [
+      const SizedBox(height: 10),
+      const Text('Kern (tragend, verbindet die Ecken)', style: TextStyle(fontWeight: FontWeight.w600)),
+      Row(children: [
+        Expanded(
+          child: DropdownButton<String?>(
+            isExpanded: true,
+            value: plan.materialien.containsKey(km) ? km : null,
+            hint: const Text('Baustoff des Kerns'),
+            items: [
+              for (final m in plan.materialien.values)
+                DropdownMenuItem(value: m.id, child: Row(children: [Container(width: 12, height: 12, color: Color(m.farbe)), const SizedBox(width: 6), Expanded(child: Text(m.name, overflow: TextOverflow.ellipsis))])),
+            ],
+            onChanged: (v) {
+              final alt = w.eigenschaften['kern'];
+              store.wandEigenschaftenSetzen(w.id, {'kern': {...(alt as Map? ?? const {}), 'm': v, 'd': w.dicke}});
+              _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {'kern': alt}));
+              _s.geaendert();
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 110,
+          child: SpeicherFeld(
+            key: ValueKey('kern-${w.id}-${w.dicke}'),
+            initialValue: '${w.dicke}',
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(labelText: 'Kerndicke', suffixText: 'mm', isDense: true),
+            onFieldSubmitted: (t) {
+              final d = int.tryParse(t);
+              if (d == null || d <= 0 || d == w.dicke) return;
+              final koord = {for (final x in plan.waende) x.id: (x.x1, x.y1, x.x2, x.y2)};
+              final alt = w.dicke, altK = w.eigenschaften['kern'];
+              wandDickeMitInnenmass(store, w, () {
+                store.wandAendern(w.id, dicke: d);
+                store.wandEigenschaftenSetzen(w.id, {'kern': {...(altK as Map? ?? const {}), 'd': d}});
+              });
+              _rueckgaengig.add(() {
+                store.wandAendern(w.id, dicke: alt);
+                store.wandEigenschaftenSetzen(w.id, {'kern': altK});
+                store.waendeKoordinatenSetzen(koord);
+              });
+              _s.geaendert();
+            },
+          ),
+        ),
+      ]),
+      for (final links in [true, false])
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('Aufbau ${seite(links)}'),
+          subtitle: Text(kurz(links), maxLines: 2, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.edit_outlined, size: 18),
+          onTap: () {
+            final alt = w.eigenschaften[links ? 'aufbau_l' : 'aufbau_r'];
+            aufbauDialog(context, store, w, links, seite(links), geaendert: _s.geaendert).then((_) {
+              _rueckgaengig.add(() => store.wandEigenschaftenSetzen(w.id, {links ? 'aufbau_l' : 'aufbau_r': alt}));
+              if (mounted) setState(() {});
+            });
+          },
+        ),
+    ];
+  }
+
   /// Teilstück einer durchgehenden Wand mit eigenem Wandtyp: Wand an „von“
   /// und „bis“ teilen, dem Mittelstück den Typ geben (Innenseite bleibt fest).
   /// Die Stücke bleiben automatisch verbunden. Strg+Z stellt alles wieder her.
@@ -3232,6 +3318,18 @@ class _FloorplanPageState extends State<FloorplanPage> {
                     }
                   });
                   _s.settings.speichern();
+                case 'wandmodell_zurueck':
+                  final gz = _s.geschossId;
+                  if (gz != null) {
+                    frage(context,
+                            titel: 'Wandmodell zurücksetzen?',
+                            text: 'Die Wände dieses Geschosses bekommen den Stand vor der Umstellung auf „Kern + Aufbau“ zurück (Lage, Dicke, Wandtyp). '
+                                'Änderungen an Wänden seit der Umstellung gehen dabei verloren.',
+                            ja: 'Zurücksetzen')
+                        .then((ok) {
+                      if (ok && _s.store!.wandmodellZurueck(gz)) _s.geaendert();
+                    });
+                  }
                 case 'gelaende':
                   gelaendeDialog(context, _s);
                 case 'sonne':
@@ -3293,6 +3391,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
               CheckedPopupMenuItem(value: 'raster', checked: _s.settings.darstellung['raster_aus'] == true, child: const Text('Raster ausblenden')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'dach', child: ListTile(dense: true, leading: Icon(Icons.roofing), title: Text('Dachgeschoss: Dach, Sparren, Kniestock …'))),
+              if (_s.geschossId != null && _s.store!.einstellung<Map>('wandmodell_vorher_${_s.geschossId}') != null)
+                const PopupMenuItem(value: 'wandmodell_zurueck', child: ListTile(dense: true, leading: Icon(Icons.restore), title: Text('Wandmodell: alten Stand wiederherstellen …'))),
               const PopupMenuItem(value: 'sonne', child: ListTile(dense: true, leading: Icon(Icons.wb_sunny_outlined), title: Text('Sonne, Verschattung, PV …'))),
               const PopupMenuItem(value: 'gelaende', child: ListTile(dense: true, leading: Icon(Icons.landscape_outlined), title: Text('Gelände ums Haus …'))),
               const PopupMenuItem(value: 'sparren_neu', child: ListTile(dense: true, leading: Icon(Icons.view_week_outlined), title: Text('Sparrenlage über das Geschoss …'))),
@@ -3617,6 +3717,8 @@ class _FloorplanPageState extends State<FloorplanPage> {
                   raeume: raumBilder,
                   umrisse: _versatz == Offset.zero ? plan.umrisse : const {},
                   schichten: plan.schichten,
+                  aufbau: [for (final b in plan.aufbau) if (b.imPlan) ([for (final p in b.polygon) Offset(p.x, p.y)], Color(plan.materialien[b.material]?.farbe ?? 0xFFE9E4DA))],
+                  kernFarben: {for (final e in plan.materialien.entries) e.key: Color(e.value.farbe)},
                   massstab: _massstab,
                   verschiebung: _verschiebung,
                   auswahl: _auswahl,
@@ -4459,6 +4561,7 @@ class _FloorplanPageState extends State<FloorplanPage> {
             _s.geaendert();
           },
         ),
+        if (hatKern(w)) ..._kernFelder(w, plan),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(

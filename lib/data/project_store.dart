@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import 'sync.dart';
+import '../core/wandaufbau.dart';
 
 import '../core/exif.dart';
 import '../core/fbh.dart';
@@ -127,6 +128,8 @@ class ProjectStore {
           if (store.einstellung<bool>('waende_zusammengefuehrt') != true) store.waendeZusammenfuehren(g.id);
           store.doppelteWaendeEntfernen(g.id);
           store._waendeAusrichten(g.id, store.flaechenErkennen(g.id));
+          // Build 36: Wandmodell Kern + Aufbau je Seite (einmalig, rückgängig über wandmodellZurueck)
+          if (store.einstellung<bool>('wandmodell_aus_${g.id}') != true) store.wandmodellUmstellen(g.id);
         }
       }
       store.einstellungSetzen('waende_zusammengefuehrt', true);
@@ -728,10 +731,18 @@ class ProjectStore {
     bool? verbinden,
   }) {
     final id = neueId();
-    if (wandtypId != null) dicke = wandtyp(wandtypId)?.dicke ?? dicke;
+    // Neues Wandmodell: gezeichnet wird der Kern; der Wandtyp liefert Kern und Aufbau je Seite
+    var eig = <String, Object?>{'kern': {'d': dicke}};
+    final typ = wandtypId == null ? null : wandtyp(wandtypId);
+    if (typ != null && typ.schichten.isNotEmpty) {
+      final a = ausWandtyp(typ.schichten);
+      eig = a.eigenschaften;
+      dicke = a.kern;
+    }
+    eig.removeWhere((k, v) => v == null);
     db.execute(
-      'INSERT INTO wand (id, geschoss_id, x1, y1, x2, y2, dicke_mm, zustand, wandtyp_id, verbinden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, geschossId, x1, y1, x2, y2, dicke, zustand.name, wandtypId, verbinden == null ? null : (verbinden ? 1 : 0)],
+      'INSERT INTO wand (id, geschoss_id, x1, y1, x2, y2, dicke_mm, zustand, wandtyp_id, verbinden, eigenschaften) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, geschossId, x1, y1, x2, y2, dicke, zustand.name, wandtypId, verbinden == null ? null : (verbinden ? 1 : 0), jsonEncode(eig)],
     );
     _protokoll('wand', id, 'anlegen',
         {'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'dicke': dicke, 'wandtyp': wandtypId});
@@ -819,6 +830,127 @@ class ProjectStore {
     _nachWandAenderung(id);
   }
 
+  /// Bestehende Wände eines Geschosses auf „Kern + Aufbau je Seite“ umstellen:
+  /// Kern = dickste Schicht des Wandtyps, die Achse rückt auf die Kernmitte,
+  /// Wandenden folgen den verschobenen Nachbarachsen (Ecken bleiben verbunden),
+  /// Öffnungen bleiben an ihrer Stelle. Der alte Stand wird gesichert
+  /// (`wandmodell_vorher_<geschoss>`, [wandmodellZurueck]). Liefert die Anzahl.
+  int wandmodellUmstellen(String geschossId) {
+    final ws = waende(geschossId);
+    final alt = [for (final w in ws) if (!hatKern(w)) w];
+    if (alt.isEmpty) return 0;
+    // Sicherung (Wände und Öffnungen)
+    Map<String, Object?> zeile(Map<String, Object?> r) => {for (final k in r.keys) k: r[k]};
+    einstellungSetzen('wandmodell_vorher_$geschossId', {
+      'waende': [for (final r in db.select('SELECT * FROM wand WHERE geschoss_id = ?', [geschossId])) zeile(r)],
+      'oeffnungen': [for (final r in db.select('SELECT o.* FROM oeffnung o JOIN wand w ON w.id = o.wand_id WHERE w.geschoss_id = ?', [geschossId])) zeile(r)],
+    });
+    // Versatz je Wand (Kernmitte gegenüber Achse, Richtung links der Zeichenrichtung)
+    final versatz = <String, double>{};
+    final eig = <String, Map<String, Object?>>{};
+    final kern = <String, int>{};
+    for (final w in alt) {
+      final typ = w.wandtypId == null ? null : wandtyp(w.wandtypId!);
+      if (typ != null && typ.schichten.isNotEmpty && !w.istKante && !w.teilhoch) {
+        final a = ausWandtyp(typ.schichten);
+        versatz[w.id] = a.versatz;
+        eig[w.id] = a.eigenschaften;
+        kern[w.id] = a.kern;
+      } else {
+        versatz[w.id] = 0;
+        eig[w.id] = {'kern': {'d': w.dicke}};
+        kern[w.id] = w.dicke;
+      }
+    }
+    // verschobene Achsen
+    ({double px, double py, double dx, double dy}) linie(Wand w) {
+      final l = math.max(1.0, w.laenge);
+      final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+      final v = versatz[w.id] ?? 0;
+      return (px: w.x1 + uy * v, py: w.y1 - ux * v, dx: ux, dy: uy);
+    }
+
+    (double, double)? schnitt(Wand a, Wand b) {
+      final la = linie(a), lb = linie(b);
+      final n = la.dx * lb.dy - la.dy * lb.dx;
+      if (n.abs() < 1e-3) return null;
+      final t = ((lb.px - la.px) * lb.dy - (lb.py - la.py) * lb.dx) / n;
+      return (la.px + la.dx * t, la.py + la.dy * t);
+    }
+
+    bool an(Wand o, double x, double y) {
+      if (((o.x1 - x).abs() < 3 && (o.y1 - y).abs() < 3) || ((o.x2 - x).abs() < 3 && (o.y2 - y).abs() < 3)) return true;
+      final l = o.laenge;
+      if (l < 1) return false;
+      final ux = (o.x2 - o.x1) / l, uy = (o.y2 - o.y1) / l;
+      final t = (x - o.x1) * ux + (y - o.y1) * uy;
+      final quer = ((x - o.x1) * uy - (y - o.y1) * ux).abs();
+      return quer < 3 && t > -3 && t < l + 3;
+    }
+
+    final neu = <String, (int, int, int, int)>{};
+    for (final w in ws) {
+      if ((versatz[w.id] ?? 0) == 0 && ws.every((o) => (versatz[o.id] ?? 0) == 0)) continue;
+      final lw = linie(w);
+      (int, int) ende(int x, int y) {
+        for (final o in ws) {
+          if (o.id == w.id || !an(o, x.toDouble(), y.toDouble())) continue;
+          final p = schnitt(w, o);
+          if (p != null) return (p.$1.round(), p.$2.round());
+        }
+        // frei oder nur gleichlaufend: Lot auf die verschobene Achse
+        final t = (x - lw.px) * lw.dx + (y - lw.py) * lw.dy;
+        return ((lw.px + lw.dx * t).round(), (lw.py + lw.dy * t).round());
+      }
+
+      final a = ende(w.x1, w.y1), b = ende(w.x2, w.y2);
+      neu[w.id] = (a.$1, a.$2, b.$1, b.$2);
+    }
+    for (final w in ws) {
+      final k = neu[w.id];
+      if (k != null) {
+        // Öffnungen an ihrer Stelle halten (Wandanfang verschiebt sich entlang der Achse)
+        final l = math.max(1.0, w.laenge);
+        final ux = (w.x2 - w.x1) / l, uy = (w.y2 - w.y1) / l;
+        final schub = ((k.$1 - w.x1) * ux + (k.$2 - w.y1) * uy).round();
+        if (schub != 0) db.execute('UPDATE oeffnung SET abstand_mm = abstand_mm - ? WHERE wand_id = ?', [schub, w.id]);
+        db.execute('UPDATE wand SET x1 = ?, y1 = ?, x2 = ?, y2 = ? WHERE id = ?', [k.$1, k.$2, k.$3, k.$4, w.id]);
+      }
+      if (eig.containsKey(w.id)) {
+        final e = {...w.eigenschaften, ...eig[w.id]!}..removeWhere((k, v) => v == null);
+        db.execute('UPDATE wand SET dicke_mm = ?, eigenschaften = ? WHERE id = ?', [kern[w.id], jsonEncode(e), w.id]);
+      }
+    }
+    _protokoll('geschoss', geschossId, 'wandmodell', {'waende': alt.length});
+    _raeumeAbgleichen(geschossId);
+    return alt.length;
+  }
+
+  /// Umstellung auf das neue Wandmodell zurücknehmen (gesicherter Stand).
+  bool wandmodellZurueck(String geschossId) {
+    final m = einstellung<Map>('wandmodell_vorher_$geschossId');
+    if (m == null) return false;
+    void setzen(String t, List rows) {
+      for (final r in rows) {
+        final z = Map<String, Object?>.from(r as Map);
+        final cols = z.keys.toList();
+        db.execute('INSERT INTO $t (${cols.join(', ')}) VALUES (${List.filled(cols.length, '?').join(', ')}) '
+            'ON CONFLICT(id) DO UPDATE SET ${[for (final c in cols) if (c != 'id') '$c = excluded.$c'].join(', ')}', [for (final c in cols) z[c]]);
+      }
+    }
+
+    final ids = {for (final r in (m['waende'] as List? ?? const [])) (r as Map)['id']};
+    for (final w in waende(geschossId)) {
+      if (!ids.contains(w.id)) db.execute('UPDATE wand SET geloescht = ? WHERE id = ?', [jetzt(), w.id]);
+    }
+    setzen('wand', m['waende'] as List? ?? const []);
+    setzen('oeffnung', m['oeffnungen'] as List? ?? const []);
+    einstellungSetzen('wandmodell_vorher_$geschossId', null);
+    einstellungSetzen('wandmodell_aus_$geschossId', true);
+    _raeumeAbgleichen(geschossId);
+    return true;
+  }
+
   /// Wand an der Stelle [t] (mm ab Anfang) in zwei Wände teilen. Beide behalten
   /// alle Eigenschaften; Öffnungen wandern auf das Stück, in dem sie liegen.
   /// Liefert die ID des neuen (hinteren) Stücks oder null.
@@ -847,8 +979,17 @@ class ProjectStore {
 
   void wandWandtypSetzen(String id, String? wandtypId) {
     final typ = wandtypId == null ? null : wandtyp(wandtypId);
+    final r = db.select('SELECT eigenschaften FROM wand WHERE id = ?', [id]).firstOrNull;
+    final alt = r == null ? <String, dynamic>{} : Map<String, dynamic>.from(jsonDecode(r['eigenschaften'] as String? ?? '{}') as Map);
     if (typ == null) {
       db.execute('UPDATE wand SET wandtyp_id = NULL WHERE id = ?', [id]);
+    } else if (alt['kern'] is Map && typ.schichten.isNotEmpty) {
+      // Kern + Aufbau aus dem Wandtyp; die gezeichnete Achse bleibt Kernmitte
+      final a = ausWandtyp(typ.schichten);
+      final neu = {...alt, ...a.eigenschaften}..removeWhere((k, v) => v == null);
+      if (a.eigenschaften['aufbau_l'] == null) neu.remove('aufbau_l');
+      if (a.eigenschaften['aufbau_r'] == null) neu.remove('aufbau_r');
+      db.execute('UPDATE wand SET wandtyp_id = ?, dicke_mm = ?, eigenschaften = ? WHERE id = ?', [typ.id, a.kern, jsonEncode(neu), id]);
     } else {
       db.execute('UPDATE wand SET wandtyp_id = ?, dicke_mm = ? WHERE id = ?', [typ.id, typ.dicke, id]);
     }
@@ -1211,7 +1352,17 @@ class ProjectStore {
           .select('SELECT DISTINCT geschoss_id FROM wand WHERE wandtyp_id = ? AND geloescht IS NULL', [id])
           .map((r) => r['geschoss_id'] as String)
           .toList();
-      db.execute('UPDATE wand SET dicke_mm = ? WHERE wandtyp_id = ? AND geloescht IS NULL', [dicke, id]);
+      db.execute('UPDATE wand SET dicke_mm = ? WHERE wandtyp_id = ? AND geloescht IS NULL AND eigenschaften NOT LIKE ?', [dicke, id, '%"kern"%']);
+      // Wände im Modell „Kern + Aufbau“: Kern und Seiten aus dem geänderten Typ
+      if (schichten.isNotEmpty) {
+        final a = ausWandtyp(schichten);
+        for (final r in db.select('SELECT id, eigenschaften FROM wand WHERE wandtyp_id = ? AND geloescht IS NULL AND eigenschaften LIKE ?', [id, '%"kern"%'])) {
+          final e = {...Map<String, dynamic>.from(jsonDecode(r['eigenschaften'] as String? ?? '{}') as Map), ...a.eigenschaften}..removeWhere((k, v) => v == null);
+          if (a.eigenschaften['aufbau_l'] == null) e.remove('aufbau_l');
+          if (a.eigenschaften['aufbau_r'] == null) e.remove('aufbau_r');
+          db.execute('UPDATE wand SET dicke_mm = ?, eigenschaften = ? WHERE id = ?', [a.kern, jsonEncode(e), r['id']]);
+        }
+      }
       geschosse.forEach(_raeumeAbgleichen);
       db.execute('COMMIT');
     } catch (_) {

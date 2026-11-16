@@ -66,12 +66,14 @@ void main() {
     final (s, g) = neu();
     final typ = s.wandtypen().firstWhere((t) => t.name.startsWith('Innenwand Ziegel'));
     final w = s.wandAnlegen(geschossId: g, x1: 0, y1: 0, x2: 3000, y2: 0, dicke: 240, wandtypId: typ.id);
-    expect(s.waende(g).single.dicke, 145);
+    // Wandmodell Kern + Aufbau: Dicke = Kern (dickste Schicht), Putz als Aufbau je Seite
+    expect(s.waende(g).single.dicke, s.wandtyp(typ.id)!.schichten.map((x) => x.dicke).reduce((a, b) => a > b ? a : b));
 
     final ziegel = s.materialien().firstWhere((m) => m.name == 'Hochlochziegel').id;
     final gips = s.materialien().firstWhere((m) => m.name == 'Gipsputz').id;
     s.wandtypSchichtenSetzen(typ.id, [Schicht(gips, 10), Schicht(ziegel, 175), Schicht(gips, 10)]);
-    expect(s.waende(g).single.dicke, 195);
+    expect(s.waende(g).single.dicke, 175);
+    expect((s.waende(g).single.eigenschaften['aufbau_l'] as List).single['s'], [{'m': gips, 'd': 10}]);
     expect(s.wandtyp(typ.id)!.schichten.map((e) => e.dicke), [10, 175, 10]);
     // alte Schichten sind nur weich gelöscht
     expect(s.db.select('SELECT COUNT(*) AS n FROM wandtyp_schicht WHERE wandtyp_id = ?', [typ.id]).first['n'], 6);

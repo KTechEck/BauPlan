@@ -807,3 +807,16 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   bzw. dickste Schicht = Kern), rückgängig machbar. Maße innen/außen/Rohbau aus Kern bzw. Oberfläche wählbar.
   Seitenschichten abschnittsweise: je Wandseite mehrere Bereiche (von–bis entlang der Wand, optional von–bis in der Höhe, z. B. Fliese nur im
   Duschbereich bis 2,10 m, daneben Putz); innerhalb eines Raums frei variierend, in Plan, Wandansicht, 3D und Mengen berücksichtigt.
+
+## Build 36 (16.11.) – Wandmodell „Kern + Aufbau je Seite“
+- lib/core/wandaufbau.dart: Kern (`kern` {m,d}, Wanddicke = Kern), Aufbau je Seite (`aufbau_l/_r` Bereiche von/bis/z_von/z_bis mit Schichten vom
+  Kern nach außen), ausWandtyp (Kern = dickste Schicht), aufbauBaender (Konturen je Schicht mit Gehrung über Nachbarflächen, Absatz an Wechseln,
+  an Öffnungen ausgespart), schichtenQuer.
+- Umstellung beim Öffnen je Geschoss (store.wandmodellUmstellen): Achse rückt auf die Kernmitte, Wandenden folgen den Nachbarachsen, Öffnungen
+  bleiben an ihrer Stelle; Sicherung `wandmodell_vorher_<g>`, Grundriss › Optionen › „Wandmodell: alten Stand wiederherstellen“.
+  Bei Tims Projekt verschwinden damit die 55-mm-Versätze, alle Räume (auch Balkon) sind geschlossen.
+- Neue Wände/Wandtyp zuweisen: Kern + Aufbau aus dem Typ, die gezeichnete Linie ist die Kernmitte; Wandtyp-Änderung zieht Kern und Aufbau nach.
+- Wand-Eigenschaften: Kern (Baustoff, Dicke), Aufbau je Seite (Dialog mit Bereichen, „Aus Wandtyp …“). Plan, PDF-Export und 3D zeichnen Kern +
+  Schichten. Raumflächen gelten jetzt zwischen den Kernen (Rohbaumaß).
+- Stolperfalle: wandUmriss erkennt die eigene Wand an der Objekt-Identität der WandAchse – immer dieselben Achsen-Objekte übergeben.
+- Tests test/build36_test.dart; 315 Tests grün.

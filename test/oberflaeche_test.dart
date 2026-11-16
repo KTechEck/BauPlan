@@ -55,16 +55,16 @@ void main() {
 
   testWidgets('Grundriss zeigt Raum mit Fläche im Baum und Wandtyp-Auswahl', (tester) async {
     await zeigen(tester, () => FloorplanPage(state: state));
-    // Außenwand 400 mm: licht 4000 × 3000
+    // Raum zwischen den Kernen (Wandmodell Kern + Aufbau)
     expect(find.text('Wohnen'), findsOneWidget);
-    expect(find.text('12,00 m²'), findsOneWidget);
+    expect(find.textContaining((store.raeume(state.geschossId!).single.flaeche! / 1e6).toStringAsFixed(2).replaceAll('.', ',')), findsWidgets);
     expect(find.text('Wandtyp '), findsOneWidget);
     expect(find.text('Maße (Voreinstellung) '), findsOneWidget);
 
     state.raumWaehlen(store.raeume(state.geschossId!).single.id);
     await tester.pump();
     expect(find.text('Fläche (licht)'), findsOneWidget);
-    expect(find.text('14,00 m'), findsOneWidget);
+    expect(find.textContaining((store.raeume(state.geschossId!).single.umfang! / 1000).toStringAsFixed(2).replaceAll('.', ',')), findsWidgets);
   });
 
   testWidgets('Bibliothek: Wandaufbauten und Baustoffe öffnen', (tester) async {
@@ -84,6 +84,7 @@ void main() {
   testWidgets('Grundriss: Strg+A wählt alles, Pfeiltaste verschiebt, Strg+Z macht rückgängig', (tester) async {
     await zeigen(tester, () => FloorplanPage(state: state));
     final g = state.geschossId!;
+    final flaeche0 = store.raeume(g).single.flaeche!;
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -94,7 +95,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     expect(store.waende(g).map((w) => w.y1).reduce((a, b) => a < b ? a : b), -50);
-    expect(store.raeume(g).single.flaeche, closeTo(12e6, 1));
+    expect(store.raeume(g).single.flaeche, closeTo(flaeche0, 1));
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
@@ -266,7 +267,7 @@ void main() {
     final seiten = [true, false].map((l) => WandSeite.berechnen(oben, store.waende(g), store.raeume(g), true, l)).toList();
     final innen = seiten.firstWhere((s) => s.raum != null);
     expect(innen.raum!.name, 'Wohnen');
-    expect(innen.laenge, closeTo(4000, 1));
+    expect(innen.laenge, closeTo(4400 - oben.dicke, 1));
     await zeigen(tester, () => WandansichtPage(state: state, wandId: oben.id, links: innen.links));
     expect(find.textContaining('Wandansicht · Wohnen'), findsOneWidget);
     expect(find.textContaining('1 Objekte'), findsOneWidget);
