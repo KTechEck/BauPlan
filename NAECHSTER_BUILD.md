@@ -820,3 +820,10 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Schichten. Raumflächen gelten jetzt zwischen den Kernen (Rohbaumaß).
 - Stolperfalle: wandUmriss erkennt die eigene Wand an der Objekt-Identität der WandAchse – immer dieselben Achsen-Objekte übergeben.
 - Tests test/build36_test.dart; 315 Tests grün.
+
+## Vorgemerkt für Build 37 (noch nicht bauen)
+- Wandanschluss je Knoten einstellbar: Klick auf eine Ecke/einen T-Stoß im Grundriss → Art (Gehrung, stumpf, eingebunden/eingreifend, durchlaufend),
+  welche Wand durchläuft, Einbindetiefe (z. B. Ständerwand greift x mm in die Ziegelwand), ob die Schichten (Putz/WDVS) durchziehen oder an der
+  Fuge enden; Anzeige des Knotens im Plan, Vorgabe aus den Baustoffen (Leichtbau stößt stumpf an Massivwand).
+- Bibliothek: Wandtypen werden zu „Kern“ (tragender Baustoff + Dicke) und „Aufbau-Vorlagen“ je Seite (innen/außen) umgestellt; bestehende Wandtypen
+  bleiben als Vorlage nutzbar.
