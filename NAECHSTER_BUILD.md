@@ -805,3 +805,5 @@ Gesamt-Roadmap vom 14.11. (Tim freigegeben) steht im Projektgedächtnis; Reihenf
   Bekleidung je Seite getrennt (innen: Putz/GK/Fliese …, außen: WDVS/Putz/Klinker …) als Schichten, die je Seite als zusammenhängende Kontur um
   Ecken, Versprünge und Teilstücke laufen (Außenwandkontur). Bestehende Wandtypen werden beim Öffnen in Kern + Seitenschichten zerlegt (tragende
   bzw. dickste Schicht = Kern), rückgängig machbar. Maße innen/außen/Rohbau aus Kern bzw. Oberfläche wählbar.
+  Seitenschichten abschnittsweise: je Wandseite mehrere Bereiche (von–bis entlang der Wand, optional von–bis in der Höhe, z. B. Fliese nur im
+  Duschbereich bis 2,10 m, daneben Putz); innerhalb eines Raums frei variierend, in Plan, Wandansicht, 3D und Mengen berücksichtigt.
